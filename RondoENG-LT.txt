@@ -1,0 +1,27 @@
+Frame:RĖMAS
+Fork:ŠAKĖ
+Handlebar:VAIRAS
+Grips:VAIRO RANKENĖLĖS / JUOSTA
+Stem:VAIRO IŠKYŠA
+Headset:VAIRO KOLONĖLĖS GUOLIAI
+Saddle:BALNELIS
+Seatpost:BALNAKOTIS
+Front Brakes:Priekiniai stabdžiai
+Rear Brakes:Galiniai stabdžiai
+Front Rotors:Priekinis stabdžių diskas (mm)
+Rear Rotors:Galinis stabdžių diskas (mm)
+Shifters:PAVARŲ PERJUNGIMO RANKENĖLĖS
+Crankset:Švaistikliai
+Bottom bracket:CENTRINĖS AŠIES GUOLIAI
+Deraileur front:PRIEKINIS PAVARŲ PERJUNGĖJAS
+Deraileur rear:GALINIS PAVARŲ PERJUNGEJAS
+Cassette:GALINIS ŽVAIGŽDŽIŲ BLOKAS
+Chain:GRANDINĖ
+Front Hub:Priekinė stebulė
+Rear Hub:Galinė stebulė
+Rims:RATLANKIS
+Tyres:PADANGOS
+Tires:Padangos
+Tyre Clearance:
+Fenders:Purvasargiai
+Weight:Svoris

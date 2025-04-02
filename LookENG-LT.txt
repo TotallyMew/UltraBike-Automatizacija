@@ -1,0 +1,16 @@
+Frame:Rėmas
+Seatpost:Balnakotis
+Saddle:Balnelis
+Stem:Vairo iškyša
+Handlebar:Vairas
+Wheels:Ratai
+Tires:Padangos
+Fixed gear:Pavarų skaičius
+Crankset:Švaistikliai
+Chain:Grandinė
+Weight:Svoris
+Bottom bracket:Centrinės ašies guoliai
+Shifters:PAVARŲ PERJUNGIMO RANKENĖLĖS
+Derailleurs:pavarų perjungėjai
+Rotors:stabdžių diskai
+Cassette:galinis žvaigždžių blokas

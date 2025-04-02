@@ -1,0 +1,26 @@
+Wheel Size:Rato dydis
+Child's Height:Dydis
+Inseam Length:
+Colourways:Pagrindinė spalva
+Frame:Rėmas
+Headset:Vairo kolonėlės guoliai
+Fork:Šakė
+Handlebars:Vairas
+Stem:Vairo iškyša
+Seatpost:Balnakotis
+Saddle:Balnelis
+Crankset:Švaistikliai
+Brakes:
+Belt:
+Wheelset:Ratlankis
+Tires:Padangos
+Pedals:Pedalai
+Weight:Svoris
+Front Brakes:Priekiniai stabdžiai
+Rear Brakes:Galiniai stabdžiai
+Rear Derailleur:Galinis pavarų perjungejas
+Front Derailleru:Priekinis pavarų perjungejas
+Shifters:Pavarų perjungimo rankenėlės
+Front Rotors:Priekinis stabdžių diskas (mm)
+Rear Rotors:Galinis stabdžių diskas (mm)
+Cassette:Galinis žvaigždžių blokas
