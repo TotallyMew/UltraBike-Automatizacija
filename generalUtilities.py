@@ -9,8 +9,8 @@ from selenium.common.exceptions import (
     TimeoutException,
     ElementClickInterceptedException,
 )
-from scrapeUtilities import *
-from config import settings, resizeWindow, resource_path
+from Utilities.scrapeUtilities import *
+from Config.config import settings, resizeWindow, resource_path
 import pypandoc
 
 

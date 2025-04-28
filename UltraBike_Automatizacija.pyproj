@@ -1,0 +1,76 @@
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>d4485259-c953-4b94-b49f-1299d5b5e936</ProjectGuid>
+    <ProjectHome>.</ProjectHome>
+    <StartupFile>main.py</StartupFile>
+    <SearchPath>
+    </SearchPath>
+    <WorkingDirectory>.</WorkingDirectory>
+    <OutputPath>.</OutputPath>
+    <Name>UltraBike_Automatizacija</Name>
+    <RootNamespace>UltraBike_Automatizacija</RootNamespace>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <DebugSymbols>true</DebugSymbols>
+    <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
+    <DebugSymbols>true</DebugSymbols>
+    <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Config\config.py" />
+    <Compile Include="Config\configLogin.py" />
+    <Compile Include="generalUtilities.py" />
+    <Compile Include="KROSS.py" />
+    <Compile Include="LentelesVertimas.py" />
+    <Compile Include="main.py" />
+    <Compile Include="Managers\FeatureUploader\featureUploader.py" />
+    <Compile Include="Managers\FeatureUploader\fieldWriter.py" />
+    <Compile Include="Managers\FeatureUploader\languageSwitcher.py" />
+    <Compile Include="Managers\imageUploader.py" />
+    <Compile Include="Managers\translationManager.py" />
+    <Compile Include="octane.py" />
+    <Compile Include="Pinarello.py" />
+    <Compile Include="rascal.py" />
+    <Compile Include="Rondo.py" />
+    <Compile Include="Scrapers\KROSSScraper.py" />
+    <Compile Include="uploaderFactory.py" />
+    <Compile Include="Uploaders\baseUploader.py" />
+    <Compile Include="Utilities\scrapeUtilities.py" />
+    <Compile Include="TREK.py" />
+    <Compile Include="Uploaders\KROSS.py" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Managers\" />
+    <Folder Include="Config\" />
+    <Folder Include="Managers\FeatureUploader\" />
+    <Folder Include="Resources\" />
+    <Folder Include="Scrapers\" />
+    <Folder Include="Utilities\" />
+    <Folder Include="Uploaders\" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Config\settings.txt" />
+    <Content Include="Resources\LookENG-LT.txt" />
+    <Content Include="Resources\OctaneENG-LT.txt" />
+    <Content Include="Resources\PinarelloENG-LT.txt" />
+    <Content Include="Resources\RascalENG-LT.txt" />
+    <Content Include="Resources\RondoENG-LT.txt" />
+    <Content Include="Resources\vertimasDetalesPL-LT.txt" />
+    <Content Include="Resources\vertimasSavybesENG-LT.txt" />
+    <Content Include="Resources\vertimasSavybesLT-ENG.txt" />
+    <Content Include="Resources\vertimasSavybesPL-LT.txt" />
+  </ItemGroup>
+  <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
+  <!-- Uncomment the CoreCompile target to enable the Build command in
+       Visual Studio and specify your pre- and post-build commands in
+       the BeforeBuild and AfterBuild targets below. -->
+  <!--<Target Name="CoreCompile" />-->
+  <Target Name="BeforeBuild">
+  </Target>
+  <Target Name="AfterBuild">
+  </Target>
+</Project>
