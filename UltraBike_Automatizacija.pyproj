@@ -24,7 +24,6 @@
     <Compile Include="Config\config.py" />
     <Compile Include="Config\configLogin.py" />
     <Compile Include="generalUtilities.py" />
-    <Compile Include="KROSS.py" />
     <Compile Include="LentelesVertimas.py" />
     <Compile Include="main.py" />
     <Compile Include="Managers\FeatureUploader\featureUploader.py" />
@@ -32,15 +31,20 @@
     <Compile Include="Managers\FeatureUploader\languageSwitcher.py" />
     <Compile Include="Managers\imageUploader.py" />
     <Compile Include="Managers\translationManager.py" />
-    <Compile Include="octane.py" />
-    <Compile Include="Pinarello.py" />
-    <Compile Include="rascal.py" />
-    <Compile Include="Rondo.py" />
     <Compile Include="Scrapers\KROSSScraper.py" />
+    <Compile Include="Scrapers\OctaneScraper.py" />
+    <Compile Include="Scrapers\PinarelloScraper.py" />
+    <Compile Include="Scrapers\RascalScraper.py" />
+    <Compile Include="Scrapers\RondoScraper.py" />
+    <Compile Include="Scrapers\TREKScraper.py" />
     <Compile Include="uploaderFactory.py" />
     <Compile Include="Uploaders\baseUploader.py" />
+    <Compile Include="Uploaders\Octane.py" />
+    <Compile Include="Uploaders\Pinarello.py" />
+    <Compile Include="Uploaders\Rascal.py" />
+    <Compile Include="Uploaders\Rondo.py" />
+    <Compile Include="Uploaders\TREK.py" />
     <Compile Include="Utilities\scrapeUtilities.py" />
-    <Compile Include="TREK.py" />
     <Compile Include="Uploaders\KROSS.py" />
   </ItemGroup>
   <ItemGroup>

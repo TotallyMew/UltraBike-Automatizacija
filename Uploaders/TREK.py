@@ -101,3 +101,4 @@ def mainKrossFunction(driver, brandName):
     automatizacija(
             pirminisVertimas_I_Lietuviu, galutinisVertimas_I_ANGLU, driver, brandName, description
         )
+

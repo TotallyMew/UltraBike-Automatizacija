@@ -10,7 +10,7 @@ class FeatureFieldWriter:
         self.driver = driver
 
     def fillFields(self, tablesData, lang, first_language=False):
-        index = 0  # RESET index when starting
+        index = 0 
         for table in tablesData:
             for key, value in table.items():
                 if first_language:
@@ -41,7 +41,7 @@ class FeatureFieldWriter:
 
                         if tikrintiArSavybeRasta(self.driver):
                             dropdown.click()
-                            self._fillFeatureValue(index, lang, value)
+                            self.fillFeatureValue(index, lang, value)
                             index += 1
                             continue
 
@@ -59,11 +59,10 @@ class FeatureFieldWriter:
                         print(f"Nerasta '{featureKey}'.")
                         continue
 
-                # Always fill the value (for all languages)
-                self._fillFeatureValue(index, lang, value)
+                self.fillFeatureValue(index, lang, value)
                 index += 1
 
-    def _fillFeatureValue(self, index, lang, value):
+    def fillFeatureValue(self, index, lang, value):
         fieldId = f"form_step1_features_{index}_custom_value_"
         fieldId += "2" if lang == "lt" else "1" if lang == "en" else "3"
 

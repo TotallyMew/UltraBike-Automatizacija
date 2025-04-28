@@ -300,20 +300,3 @@ def sukeltiNuotraukasKROSS(driver):
         print("Nuotraukos sukeltos.")
     except Exception as e:
         print(f"Error: {e}")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
