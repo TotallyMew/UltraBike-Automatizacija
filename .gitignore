@@ -1,0 +1,19 @@
+# Ignore Python bytecode files
+*.pyc
+*.pyo
+__pycache__/
+
+# Ignore Visual Studio solution files
+*.sln
+
+# Ignore Visual Studio user files (optional)
+.vs/
+.vscode/
+
+# Ignore loginInfo.json file
+loginInfo.json
+
+# Ignore .txt files starting with 'pabaigta'
+pabaigta*.txt
+
+ 
