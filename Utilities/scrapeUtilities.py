@@ -17,7 +17,7 @@ from selenium.common.exceptions import NoSuchElementException
 from pywinauto.application import Application
 from pywinauto.keyboard import send_keys
 
-from config import settings, resource_path, resizeWindow
+from Config.config import settings, resource_path, resizeWindow
 import urllib3
 import certifi
 from urllib.parse import urlparse, urljoin
@@ -300,20 +300,3 @@ def sukeltiNuotraukasKROSS(driver):
         print("Nuotraukos sukeltos.")
     except Exception as e:
         print(f"Error: {e}")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

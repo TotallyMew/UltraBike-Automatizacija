@@ -74,8 +74,8 @@ def resizeWindow(driver, element_id, max_width, max_height):
         print(f"An error occurred: {e}")
  
 def resource_path(relative_path):
-   
-    base_path = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+
+    base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     return os.path.join(base_path, relative_path)
 
 

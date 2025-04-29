@@ -1,4 +1,4 @@
-from docx import Document
+﻿from docx import Document
 import os
 from config import settings, resource_path
 
@@ -31,6 +31,8 @@ def sukonstruotiDirectory():
     return download_directory
 
 def lentelesVertimas():
+    import time
+
     dictionary_path = resource_path("dictionary.txt")
     mapping = load_mapping(dictionary_path)
     
@@ -39,5 +41,26 @@ def lentelesVertimas():
     
     process_tables(doc, mapping)
     
-    doc.save(doc_path)
-    print("Document updated in place.")
+    while True:
+        try:
+            doc.save(doc_path)
+            print("Document updated in place.")
+            break
+        except PermissionError:
+            print("⚠️ Unable to save the document. Please close the file if it's open.")
+            user_input = input("Have you closed the document? (y/n): ").strip().lower()
+            if user_input == 'y':
+                print("Retrying save...")
+                time.sleep(1)  # short delay before retry
+                continue
+            elif user_input == 'n':
+                end = input("Do you want to end the program? (y/n): ").strip().lower()
+                if end == 'y':
+                    print("Exiting without saving changes.")
+                    break
+                else:
+                    print("Okay, let's try again in a moment.")
+                    time.sleep(2)
+            else:
+                print("Invalid input. Please type 'y' or 'n'.")
+
