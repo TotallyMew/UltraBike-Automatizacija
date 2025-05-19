@@ -1,6 +1,6 @@
-﻿import requests
+import requests
 from bs4 import BeautifulSoup
-from scrapeUtilities import loadTranslations, loadValueTranslations, verstTikPirmaZodi
+from Utilities.scrapeUtilities import loadTranslations, loadValueTranslations, verstTikPirmaZodi
 from config import resource_path
 
 def scrapeAndTranslateToFileTREK(url, output_file):

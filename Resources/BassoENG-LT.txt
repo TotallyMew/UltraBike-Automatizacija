@@ -1,0 +1,47 @@
+﻿//FrameSet//8
+Frame:Rėmas
+Fork:Šakė
+Seat post clamp:Balnakočio užspaustukas
+Front Thru Axle:Priekinė "Thru-Axle" ašis
+Rear Thru Axle:Galinė "Thru-Axle" ašis"
+Headset:Vairo kolonėlės guoliai
+Hanger:
+Components:
+
+//Groupset//13
+Groupset:Perjungimo sistema?
+Crank:Švaistikliai?
+Crank arm:
+Chain rings:Dantukų skaičius/priekiniai dantračiai?
+Chain:Grandinė
+Bottom bracket:Centrinės ašies guoliai
+Cassette:Galinis žvaigždžių blokas
+Cassette gears:Galinio žvaigždžių bloko diapazonas
+Rear derailleur:Galinis pavarų perjungejas
+Front derailleur:Priekinis pavarų perjungėjas
+Shifters:PAVARŲ PERJUNGIMO RANKENĖLĖS
+Front Brakes:Priekiniai stabdžiai
+Rear Brakes:Galiniai stabdžiai
+Front Rotors:Priekinis stabdžių diskas (mm)
+Rear Rotors:Galinis stabdžių diskas (mm)
+
+//Cockpit//4
+Stem:Vairo iškyša
+Handlebar:Vairas
+Spacers:
+Handlebar tape:Vairo rankenėlės / juosta
+
+//Seatpost&Saddle//2
+Seatpost:Balnakotis
+Saddle:Balnelis
+
+//Wheels&Tires//2
+Wheels:Ratlankis
+Tires:Padangos
+Wheelset:Ratlankis
+
+//PowerUnit//3
+Motor:Variklis
+Display:Kompiuteriukas
+Battery:Akumuliatorius
+

@@ -1,4 +1,4 @@
-﻿from docx import Document
+from docx import Document
 import os
 from config import settings, resource_path
 

@@ -1,4 +1,4 @@
-﻿from abc import ABC, abstractmethod
+from abc import ABC, abstractmethod
 from Managers.translationManager import TranslationManager
 from Managers.imageUploader import ImageUploader
 from Managers.FeatureUploader.featureUploader import FeatureUploader

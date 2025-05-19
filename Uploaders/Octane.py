@@ -1,5 +1,5 @@
-﻿from unittest import skip
-from scrapeUtilities import *
+from unittest import skip
+from Utilities.scrapeUtilities import *
 from generalUtilities import *
 import requests
 from bs4 import BeautifulSoup

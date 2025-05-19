@@ -1,5 +1,5 @@
-﻿from selenium.webdriver.common import keys
-from scrapeUtilities import *
+from selenium.webdriver.common import keys
+from Utilities.scrapeUtilities import *
 from generalUtilities import *
 import requests
 from bs4 import BeautifulSoup

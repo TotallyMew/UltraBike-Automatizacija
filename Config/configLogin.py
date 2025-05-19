@@ -1,4 +1,4 @@
-﻿import json
+import json
 import stdiomask
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait

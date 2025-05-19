@@ -1,10 +1,9 @@
 import requests
 from bs4 import BeautifulSoup
-from scrapeUtilities import *
+from Utilities.scrapeUtilities import *
 from generalUtilities import *
 import urllib3
 import certifi
-from bs4 import BeautifulSoup
 import requests
 import urllib3
 from selenium import webdriver

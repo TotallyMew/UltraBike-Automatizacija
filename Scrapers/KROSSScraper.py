@@ -1,4 +1,4 @@
-﻿# scrapers/KROSSScraper.py
+# scrapers/KROSSScraper.py
 
 import requests
 from bs4 import BeautifulSoup
@@ -39,9 +39,9 @@ def scrapeAndTranslateToFileKROSS(url, outputFile):
                     key = cells[0].get_text(strip=True).title()
                     value = cells[1].get_text(strip=True)
 
-                    if value.upper() == "BRAK":
+                    if value.upper() == "BRAK" or value.upper() == "NIE" or value.upper() == "TAK":
                         continue
-                    if key.upper() == "KOLOR BAZOWY":
+                    if key.upper() == "KOLOR BAZOWY" or key.upper() == "PRODUCENT" or key.upper() == "OSOBA ODPOWIEDZIALNA W UE":
                         continue
 
                     translatedKey = keyTranslations.get(key, key)

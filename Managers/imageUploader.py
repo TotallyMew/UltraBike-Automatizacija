@@ -9,8 +9,8 @@ class ImageUploader:
 
     def uploadAll(self, url):
         if self.brandName.upper() == "KROSS":
-            #siustiNuotraukasKROSS(url, self.driver)
-            #sukeltiNuotraukasKROSS(self.driver)
+            siustiNuotraukasKROSS(url, self.driver)
+            sukeltiNuotraukasKROSS(self.driver)
             print("sukelta")
         else:
             print(f"Image uploading not implemented for {self.brandName}")

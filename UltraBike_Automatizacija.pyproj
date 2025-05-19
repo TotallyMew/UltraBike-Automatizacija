@@ -31,7 +31,9 @@
     <Compile Include="Managers\FeatureUploader\languageSwitcher.py" />
     <Compile Include="Managers\imageUploader.py" />
     <Compile Include="Managers\translationManager.py" />
+    <Compile Include="Scrapers\BassoScraper.py" />
     <Compile Include="Scrapers\KROSSScraper.py" />
+    <Compile Include="Scrapers\LeeCouganScraper.py" />
     <Compile Include="Scrapers\OctaneScraper.py" />
     <Compile Include="Scrapers\PinarelloScraper.py" />
     <Compile Include="Scrapers\RascalScraper.py" />
@@ -39,6 +41,8 @@
     <Compile Include="Scrapers\TREKScraper.py" />
     <Compile Include="uploaderFactory.py" />
     <Compile Include="Uploaders\baseUploader.py" />
+    <Compile Include="Uploaders\Basso.py" />
+    <Compile Include="Uploaders\LeeCougan.py" />
     <Compile Include="Uploaders\Octane.py" />
     <Compile Include="Uploaders\Pinarello.py" />
     <Compile Include="Uploaders\Rascal.py" />

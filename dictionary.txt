@@ -19,3 +19,4 @@ Waga (kg) = WEIGHT (KG)
 OK. = APPROX.
 Waga = WEIGHT (KG)
 ROZMIAR KÓŁ = WHEEL SIZE
+Przekrok: FRAME HEIGHT

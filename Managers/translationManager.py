@@ -14,8 +14,8 @@ class TranslationManager:
         self.enPath = resource_path(f"pabaigta{brandName[:1]}ENG.txt")
         self.engDictPath = resource_path("vertimasSavybesLT-ENG.txt")
 
-    def prepareTranslationFiles(self, scrape_func, url):
-        scrape_func(url, self.ltPath)
+    def prepareTranslationFiles(self, scrape_func, url, *args, **kwargs):
+        scrape_func(url, self.ltPath, *args, **kwargs)
         versti_I_Anglu(self.ltPath, self.enPath, self.engDictPath)
 
     def translateAll(self):

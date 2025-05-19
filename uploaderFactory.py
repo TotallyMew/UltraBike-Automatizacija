@@ -1,19 +1,23 @@
 # uploaderFactory.py
 
 from Uploaders.KROSS import KROSS
-# from uploaders.Rondo import Rondo
-# from uploaders.Pinarello import Pinarello
-# from uploaders.Octane import Octane
-# from uploaders.Rascal import Rascal
+# from Uploaders.Rondo import Rondo
+# from Uploaders.Pinarello import Pinarello
+# from Uploaders.Octane import Octane
+# from Uploaders.Rascal import Rascal
+from Uploaders.Basso import Basso
+from Uploaders.LeeCougan import LeeCougan
 
 def getUploaderClass(brandName):
-    name = brandName.strip().lower()
+    name = brandName.strip().lower().replace(" ", "")
     return {
         "kross": KROSS,
         "le grand": KROSS,  # Alias handled here
         # "rondo": Rondo,
         # "pinarello": Pinarello,
         # "octane": Octane,
-        # "rascal": Rascal
+        # "rascal": Rascal,
+        "basso": Basso,
+        "leecougan":LeeCougan
     }.get(name)
 

@@ -1,4 +1,4 @@
-﻿from distutils.command import upload
+from setuptools import Command
 import re
 import os
 import json
@@ -54,17 +54,22 @@ def is_website_accessible(url):
         return False
 
 
+
 def getURL(brandName):
+    name =brandName.strip().lower().replace(" ", "")
     while True:
-        url = input("Įveskite "+brandName.title()+" url: ")
-        if not is_valid_url(url):
-            print("Neteisingas URL formatas. Prašome įvesti tinkamą URL.")
-        elif not is_website_accessible(url):
-            print(
-                "Svetainė nepasiekiama. Prašome patikrinti URL arba jūsų interneto ryšį."
-            )
+        if(name == "leecougan" or name== "basso"):
+            code = input("Įveskite " + brandName.title() + " kodą: ")
+            return code
         else:
-            return url
+            url = input("Įveskite " + brandName.title() + " url: ")
+            if not is_valid_url(url):
+                print("Neteisingas URL formatas. Prašome įvesti tinkamą URL.")
+            elif not is_website_accessible(url):
+                print("Svetainė nepasiekiama. Prašome patikrinti URL arba jūsų interneto ryšį.")
+            else:
+                return url
+
 
 
 

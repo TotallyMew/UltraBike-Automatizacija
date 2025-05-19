@@ -1,6 +1,6 @@
 import requests
 from bs4 import BeautifulSoup
-from scrapeUtilities import *
+from Utilities.scrapeUtilities import *
 from generalUtilities import *
 
 
