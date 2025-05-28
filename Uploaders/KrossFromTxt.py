@@ -1,16 +1,16 @@
 # uploaders/KROSS.py
 
 from Uploaders.baseUploader import ProductUploader
-from Scrapers.KROSSScraper import scrapeAndTranslateToFileKROSS
+from Scrapers.KrossFromTxtScraper import scrapeAndTranslateToFileKROSSTXT
 from Managers.translationManager import TranslationManager
 from Managers.imageUploader import ImageUploader
-from generalUtilities import addBrandName, addDescription
+from generalUtilities import addBrandName
 
-class KROSS(ProductUploader):
+class KROSSTXT(ProductUploader):
     def scrape(self):
         # Performs scraping and writes to temporary files
         self.translationManager.prepareTranslationFiles(
-            scrape_func=scrapeAndTranslateToFileKROSS,
+            scrape_func=scrapeAndTranslateToFileKROSSTXT,
             url=self.url
         )
 
@@ -18,6 +18,7 @@ class KROSS(ProductUploader):
         addBrandName(self.driver, self.brandName)
 
     def uploadDescription(self):
-        #addDescription(self.driver, self.translationManager.getDescriptionFile())
+        # Optional: implement description logic using addDescriptionFromWord
         pass
+
 

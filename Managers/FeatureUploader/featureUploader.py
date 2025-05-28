@@ -7,7 +7,7 @@ class FeatureUploader:
         self.languageSwitcher = LanguageSwitcher(driver)
         self.writer = FeatureFieldWriter(driver)
 
-    def uploadAllLanguages(self, ltData, enData):
+    def uploadAllLanguages(self, ltData, enData, lvData):
         self.languageSwitcher.switchTo("lt")
         self.writer.fillFields(ltData, lang="lt", first_language=True)
 
@@ -15,5 +15,5 @@ class FeatureUploader:
         self.writer.fillFields(enData, lang="en", first_language=False)
 
         self.languageSwitcher.switchTo("lv")
-        self.writer.fillFields(enData, lang="lv", first_language=False)
+        self.writer.fillFields(lvData, lang="lv", first_language=False)
 

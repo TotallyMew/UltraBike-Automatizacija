@@ -10,8 +10,8 @@ from Utilities.scrapeUtilities import (
 )
 
 def scrapeAndTranslateToFileKROSS(url, outputFile):
-    keyTranslations = loadTranslations(resource_path("Resources\\vertimasDetalesPL-LT.txt"))
-    valueTranslations = loadValueTranslations(resource_path("Resources\\vertimasSavybesPL-LT.txt"))
+    keyTranslations = loadTranslations(resource_path("Assets/Translations\\vertimasDetalesPL-LT.txt"))
+    valueTranslations = loadValueTranslations(resource_path("Assets/Translations\\vertimasSavybesPL-LT.txt"))
 
     allData = []
     uniqueKeys = set()

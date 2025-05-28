@@ -87,19 +87,20 @@ def loadTranslations(translation_file):
 
 def loadValueTranslations(translation_file):
     value_translations = {}
-    with open(translation_file, "r", encoding="utf-8") as file:
+    with open(translation_file, "r", encoding="utf-8-sig") as file:  # also handles BOM
         for line in file:
             parts = line.strip().split(":", 1)
             if len(parts) == 2:
-                original_value = parts[0].strip()
+                original_value = parts[0].strip().upper()  # <--- this is critical
                 translated_value = parts[1].strip()
                 value_translations[original_value] = translated_value
     return value_translations
 
 
+
 def verstTikPirmaZodi(value, value_translations):
     value_parts = value.split()
-    if not value_parts:
+    if not value_parts: #man atrodo kad sitas niekad neveikia
         return value
 
     first_word = value_parts[0].upper()
@@ -116,20 +117,20 @@ def verstTikPirmaZodi(value, value_translations):
         "SU AMORTIZATORIUMI"
     ):  # pridet zodzius kuriuos kai verciam turi but isversti tik pradzioj, kad KROSS ALUMINIUM ... liktu aluminium, bet jeigu zodis butu pries KROSS tada isverstu
         value_parts[0] = value_translations.get(first_word, value_parts[0])
-
     return " ".join(value_parts)
 
 
 def loadAngluVertimas(translation_file):
     english_translations = {}
-    with open(translation_file, "r", encoding="utf-8") as file:
+    with open(translation_file, "r", encoding="utf-8-sig") as file:
         for line in file:
             parts = line.strip().split(":", 1)
             if len(parts) == 2:
-                lithuanian_value = parts[0].strip()
-                english_value = parts[1].strip()
+                lithuanian_value = parts[0].strip().upper()
+                english_value = parts[1].strip().upper()
                 english_translations[lithuanian_value] = english_value
     return english_translations
+
 
 
 def versti_I_Anglu(input_file, output_file, angluVertimoFailas):
@@ -143,7 +144,7 @@ def versti_I_Anglu(input_file, output_file, angluVertimoFailas):
                 try:
                     key, lithuanian_value = line.strip().split(": ", 1)
                     english_value = english_translations.get(
-                        lithuanian_value, lithuanian_value
+                        lithuanian_value.upper(), lithuanian_value
                     )
                     english_value = verstTikPirmaZodi(english_value, english_translations)
                     outfile.write(f"{key}: {english_value}\n")

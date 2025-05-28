@@ -41,7 +41,8 @@ class ProductUploader(ABC):
     def uploadFeatures(self):
         ltData = self.translationManager.loadLT()
         enData = self.translationManager.loadEN()
-        self.featureUploader.uploadAllLanguages(ltData, enData)
+        lvData = self.translationManager.loadLV()
+        self.featureUploader.uploadAllLanguages(ltData, enData, lvData)
 
     def uploadBrand(self):
         pass  # Optional override in brand-specific class

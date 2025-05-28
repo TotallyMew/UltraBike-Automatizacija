@@ -3,23 +3,22 @@ Frame:Rėmas
 Fork:Šakė
 Seat post clamp:Balnakočio užspaustukas
 Front Thru Axle:Priekinė "Thru-Axle" ašis
-Rear Thru Axle:Galinė "Thru-Axle" ašis"
+Rear Thru Axle:Galinė "Thru-Axle" ašis
 Headset:Vairo kolonėlės guoliai
-Hanger:
-Components:
+Hanger:Auselė
+Components:Komponuotė
 
 //Groupset//13
-Groupset:Perjungimo sistema?
-Crank:Švaistikliai?
-Crank arm:
-Chain rings:Dantukų skaičius/priekiniai dantračiai?
+Groupset:Pavarų sistema
+Crank:Švaistikliai
+Chain rings:Dantračiai
 Chain:Grandinė
 Bottom bracket:Centrinės ašies guoliai
 Cassette:Galinis žvaigždžių blokas
 Cassette gears:Galinio žvaigždžių bloko diapazonas
 Rear derailleur:Galinis pavarų perjungejas
 Front derailleur:Priekinis pavarų perjungėjas
-Shifters:PAVARŲ PERJUNGIMO RANKENĖLĖS
+Shifters:Pavarų perjungimo rankenėlės
 Front Brakes:Priekiniai stabdžiai
 Rear Brakes:Galiniai stabdžiai
 Front Rotors:Priekinis stabdžių diskas (mm)
@@ -28,7 +27,7 @@ Rear Rotors:Galinis stabdžių diskas (mm)
 //Cockpit//4
 Stem:Vairo iškyša
 Handlebar:Vairas
-Spacers:
+Spacers:Tarpikliai
 Handlebar tape:Vairo rankenėlės / juosta
 
 //Seatpost&Saddle//2

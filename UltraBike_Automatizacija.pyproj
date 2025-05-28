@@ -31,7 +31,10 @@
     <Compile Include="Managers\FeatureUploader\languageSwitcher.py" />
     <Compile Include="Managers\imageUploader.py" />
     <Compile Include="Managers\translationManager.py" />
+    <Compile Include="NewFolder1\authService.py" />
+    <Compile Include="NewFolder1\browserService.py" />
     <Compile Include="Scrapers\BassoScraper.py" />
+    <Compile Include="Scrapers\KrossFromTxtScraper.py" />
     <Compile Include="Scrapers\KROSSScraper.py" />
     <Compile Include="Scrapers\LeeCouganScraper.py" />
     <Compile Include="Scrapers\OctaneScraper.py" />
@@ -42,6 +45,7 @@
     <Compile Include="uploaderFactory.py" />
     <Compile Include="Uploaders\baseUploader.py" />
     <Compile Include="Uploaders\Basso.py" />
+    <Compile Include="Uploaders\KrossFromTxt.py" />
     <Compile Include="Uploaders\LeeCougan.py" />
     <Compile Include="Uploaders\Octane.py" />
     <Compile Include="Uploaders\Pinarello.py" />
@@ -52,8 +56,10 @@
     <Compile Include="Uploaders\KROSS.py" />
   </ItemGroup>
   <ItemGroup>
-    <Folder Include="Managers\" />
     <Folder Include="Config\" />
+    <Folder Include="Managers\" />
+    <Folder Include="NewFolder1\" />
+    <Folder Include="Services\" />
     <Folder Include="Managers\FeatureUploader\" />
     <Folder Include="Resources\" />
     <Folder Include="Scrapers\" />
@@ -62,11 +68,15 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="Config\settings.txt" />
+    <Content Include="Resources\BassoENG-LT.txt" />
+    <Content Include="Resources\credentials.txt" />
+    <Content Include="Resources\LeeCouganENG-LT.txt" />
     <Content Include="Resources\LookENG-LT.txt" />
     <Content Include="Resources\OctaneENG-LT.txt" />
     <Content Include="Resources\PinarelloENG-LT.txt" />
     <Content Include="Resources\RascalENG-LT.txt" />
     <Content Include="Resources\RondoENG-LT.txt" />
+    <Content Include="Resources\vertimasDetalesENG-LT.txt" />
     <Content Include="Resources\vertimasDetalesPL-LT.txt" />
     <Content Include="Resources\vertimasSavybesENG-LT.txt" />
     <Content Include="Resources\vertimasSavybesLT-ENG.txt" />

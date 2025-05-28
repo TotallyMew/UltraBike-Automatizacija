@@ -1,0 +1,61 @@
+﻿Materiał Ramy:Rėmas
+WIDELEC: Šakė
+Skok widelca:Šakės eiga
+TYLNY AMORTYZATOR:Galinis amortizatorius
+SKOK TYLNEGO AMORTYZATORA:Galinio amortizatoriaus eiga
+Wykończenie lakieru:Lako užbaigimas
+Kolor ramy:Pagrindinė spalva
+
+PRZERZUTKA PRZÓD:Priekinis pavarų perjungėjas
+PRZERZUTKA TYŁ:Galinis pavarų perjungejas
+MANETKI:Pavarų perjungimo rankenėlės
+KORONKI:Priekiniai dantračiai
+KORBA:Švaistikliai
+KASETA / WOLNOBIEG:Galinis žvaigždžių blokas
+ZAKRES KASETY/WOLNOBIEGU:Galinio žvaigždžių bloko diapazonas
+ILOŚĆ PRZEŁOŻEŃ: Pavarų skaičius
+SUPORT:Centrinės ašies guoliai
+ŁAŃCUCH:Grandinė
+
+
+PIASTA PRZÓD:Priekinė stebulė
+PIASTA TYŁ:Galinė stebulė
+OBRĘCZE:Ratlankis
+OPONY:Padangos
+
+HAMULEC PRZÓD:Priekiniai stabdžiai
+HAMULEC TYŁ:Galiniai stabdžiai
+DŹWIGNIE HAMULCA:Stabdžių rankenėlės
+TARCZE HAMULCOWE:Priekinis stabdžių diskas (mm)
+Tarcze hamulcowe tył:Galinis stabdžių diskas (mm)
+
+//NAUJA
+Tarcza Hamulcowa Przód:Priekinis stabdžių diskas (mm)
+Tarcza Hamulcowa Tył:Galinis stabdžių diskas (mm)
+Amortyzator / Widelec: Šakė
+//FIX PRIEKINIO AMORTIZATORIAUS EIGA vertimas turetu but
+Skok Amortyzatora Przód:Šakės eiga
+Kolor Bazowy:Pagrindinė spalva
+Rama:Rėmas
+Ilość Biegów:Pavarų skaičius
+Zakres Kasety:Galinio žvaigdžių bloko diapazonas
+Wkład Suportu:Centrinės ašies guoliai
+
+KIEROWNICA:Vairas
+WSPORNIK KIEROWNICY:Vairo iškyša
+SIODŁO:Balnelis
+WSPORNIK SIODŁA:Balnakotis
+STERY:Vairo kolonėlės guoliai
+CHWYTY:Vairo rankenėlės / juosta
+PEDAŁY:Pedalai
+
+SILNIK:Variklis
+BATERIA:Akumuliatorius
+WYŚWIETLACZ:Kompiuteriukas
+Waga:Svoris
+DŁUGOŚĆ:Ilgis
+KOLOR:Pagrindinė spalva
+MATERIAŁ:Medžiaga
+Waga [kg]:Svoris
+
+

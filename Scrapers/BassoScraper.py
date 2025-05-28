@@ -9,50 +9,69 @@ from Utilities.scrapeUtilities import (
     loadTranslations,
     loadValueTranslations,
     verstTikPirmaZodi,
-    resource_path
+    resource_path,
 )
+from generalUtilities import loadCredentials
+
+
+internalCounter = 0
+username, password = loadCredentials(resource_path("Assets/credentials.txt"))
 
 def scrapeAndTranslateToFileBasso(target_code, outputFile, driver):
-    keyTranslations = loadTranslations(resource_path("Resources/PinarelloENG-LT.txt"))
-    valueTranslations = loadValueTranslations(resource_path("Resources/vertimasSavybesENG-LT.txt"))
+    global internalCounter, username, password
+
+    keyTranslations = loadTranslations(resource_path("Assets/Translations/BassoENG-LT.txt"))
+    valueTranslations = loadValueTranslations(resource_path("Assets/Translations/vertimasSavybesENG-LT.txt"))
     
-    
+
+
+
+
     wait = WebDriverWait(driver, 15)
     original_tab = driver.current_window_handle
-    
+
+
+
+
     try:
+
+
+
         # STEP 1: Open a new tab
         driver.execute_script("window.open('');")
         driver.switch_to.window(driver.window_handles[-1])  # Switch to new tab
         
+
+
         # STEP 2: Navigate to the login page
         driver.get("https://bassobikes.com/en/login")
-        wait.until(EC.presence_of_element_located((By.ID, "basic_username")))
+        if(internalCounter == 0):
+            wait.until(EC.presence_of_element_located((By.ID, "basic_username")))
+        if(internalCounter == 0):
+            internalCounter+=1
+            # STEP 3: Login with credentials
+            username_field = driver.find_element(By.ID, "basic_username")
+            password_field = driver.find_element(By.ID, "basic_password")
         
-        # STEP 3: Login with credentials
-        username_field = driver.find_element(By.ID, "basic_username")
-        password_field = driver.find_element(By.ID, "basic_password")
+            username_field.send_keys(username) 
+            password_field.send_keys(password) 
         
-        username_field.send_keys("augustas.koko@gmail.com") 
-        password_field.send_keys("spanguole10") 
+            login_button = driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
+            login_button.click()
         
-        login_button = driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
-        login_button.click()
+            # Wait for login to complete
+            wait.until(EC.presence_of_element_located((By.CLASS_NAME, "account")))
         
-        # Wait for login to complete
-        wait.until(EC.presence_of_element_located((By.CLASS_NAME, "account")))
+            # STEP 4: Navigate to the account dashboard
+            account_link = driver.find_element(By.CSS_SELECTOR, "div.account a")
+            account_link.click()
         
-        # STEP 4: Navigate to the account dashboard
-        account_link = driver.find_element(By.CSS_SELECTOR, "div.account a")
-        account_link.click()
-        
-        # Handle cookie consent banner if present
-        try:
-            cookie_button = wait.until(EC.element_to_be_clickable((By.ID, "rcc-confirm-button")))
-            cookie_button.click()
-        except (TimeoutException, NoSuchElementException):
-            # Cookie banner may not appear if cookies are already accepted
-            pass
+            # Handle cookie consent banner if present
+            try:
+                cookie_button = wait.until(EC.element_to_be_clickable((By.ID, "rcc-confirm-button")))
+                cookie_button.click()
+            except (TimeoutException, NoSuchElementException):
+                pass
         
         # STEP 5: Navigate to saved configurations
         saved_configs_link = wait.until(EC.element_to_be_clickable(
@@ -96,37 +115,65 @@ def scrapeAndTranslateToFileBasso(target_code, outputFile, driver):
         allData = []
         uniqueKeys = set()
         
-        # Find all section rows using BeautifulSoup parsing
         soup = BeautifulSoup(driver.page_source, "html.parser")
         modal_body = soup.select_one(".ant-modal-body")
         sections = modal_body.select(".Config-del-row")
         
+        specialKeys = {
+            "brakes": ["Front Brakes", "Rear Brakes"],
+            "rotors": ["Front Rotors", "Rear Rotors"],
+            "hubs": ["Front Hub", "Rear Hub"]
+        }
+
         for section in sections:
             tableData = {}
+            rawTable = {}
             entries = section.select(".ant-col")
-            
+
             for entry in entries:
                 keyElem = entry.find("h3")
                 valElem = entry.find("span")
-                
+
                 if not keyElem or not valElem:
                     continue
-                    
+
                 rawKey = keyElem.get_text(strip=True).replace(":", "").title()
                 rawVal = valElem.get_text(strip=True)
-                
+
                 if not rawKey or not rawVal:
                     continue
-                    
-                translatedKey = keyTranslations.get(rawKey, rawKey)
-                translatedVal = valueTranslations.get(rawVal, rawVal)
-                translatedVal = verstTikPirmaZodi(translatedVal, valueTranslations)
-                
-                tableData[translatedKey] = translatedVal
-                uniqueKeys.add(translatedKey)
-            
+
+                rawTable[rawKey] = rawVal
+
+            # Merge Crank and Crank Arm before translation
+            if "Crank" in rawTable and "Crank Arm" in rawTable:
+                combined_val = f"{rawTable['Crank']} + {rawTable['Crank Arm']}"
+                rawTable["Crank"] = combined_val
+                del rawTable["Crank Arm"]
+            elif "Crank Arm" in rawTable:
+                rawTable["Crank"] = rawTable.pop("Crank Arm")
+
+            for rawKey, rawVal in rawTable.items():
+                keyLower = rawKey.lower()
+
+                if keyLower in specialKeys:
+                    for subKey in specialKeys[keyLower]:
+                        translatedKey = keyTranslations.get(subKey, subKey)
+                        translatedRawVal = valueTranslations.get(rawVal, rawVal)
+                        translatedValue = verstTikPirmaZodi(translatedRawVal, valueTranslations)
+                        tableData[translatedKey] = translatedValue
+                        uniqueKeys.add(translatedKey)
+                else:
+                    translatedKey = keyTranslations.get(rawKey, rawKey)
+                    translatedRawVal = valueTranslations.get(rawVal, rawVal)
+                    translatedVal = verstTikPirmaZodi(translatedRawVal, valueTranslations)
+
+                    tableData[translatedKey] = translatedVal
+                    uniqueKeys.add(translatedKey)
+
             if tableData:
                 allData.append(tableData)
+
         
         # STEP 10: Write to file
         with open(outputFile, "w", encoding="utf-8") as f:
@@ -144,4 +191,3 @@ def scrapeAndTranslateToFileBasso(target_code, outputFile, driver):
         # STEP 11: Close the current tab and return to the original
         driver.close()
         driver.switch_to.window(original_tab)
-        

@@ -1,4 +1,4 @@
-Frame:RĖMAS
+﻿Frame:RĖMAS
 Fork:ŠAKĖ
 Handlebar:VAIRAS
 Grips:VAIRO RANKENĖLĖS / JUOSTA
@@ -25,3 +25,4 @@ Tires:Padangos
 Tyre Clearance:
 Fenders:Purvasargiai
 Weight:Svoris
+

@@ -14,6 +14,12 @@ from Config.config import settings, resizeWindow, resource_path
 import pypandoc
 
 
+def loadCredentials(file_path):
+    with open(file_path, "r", encoding="utf-8") as f:
+        lines = f.read().splitlines()
+        if len(lines) < 2:
+            raise ValueError("Credentials file must have at least 2 lines (username and password)")
+        return lines[0], lines[1]
 
 
 def getCode():
@@ -31,28 +37,40 @@ def convert_docx_to_html(file_path):
     return html
 
 
-def addDescriptionFromWord(driver, file_path):
+def addDescription(driver, file_path):
     try:
-        # Convert Word document to HTML
-        html_content = convert_docx_to_html(file_path)
-
-        # Wait for the iframe to load and switch to it
-        iframe = WebDriverWait(driver, 10).until(
-            EC.frame_to_be_available_and_switch_to_it((By.ID, "form_step1_description_2_ifr"))
+        # Step 1: Click the code button
+        code_button = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.ID, "mceu_105-button"))
         )
+        code_button.click()
+        print("Clicked code button")
 
-        # Inject the HTML content into the body of the TinyMCE editor
-        script = """
-        var body = document.body;
-        body.innerHTML = arguments[0];
-        """
-        driver.execute_script(script, html_content)
+        # Step 2: Find the textarea and paste text from .txt file
+        textarea = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.ID, "mceu_235"))
+        )
+        
+        # Read the text file
+        with open(file_path, 'r', encoding='utf-8') as file:
+            text_content = file.read()
+        
+        # Clear any existing content and paste the new text
+        textarea.clear()
+        textarea.send_keys(text_content)
+        print("Text pasted into textarea")
 
-        # Switch back to the main document after finishing interaction
-        driver.switch_to.default_content()
+        # Step 3: Press the confirmation button (Gerai)
+        confirm_button = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.ID, "mceu_237-button"))
+        )
+        confirm_button.click()
+        print("Clicked confirmation button")
 
+    except FileNotFoundError:
+        print(f"File not found: {file_path}")
     except Exception as e:
-        print(f"Failed to add description from Word file: {e}")
+        print(f"Failed to add description from text file: {e}")
 
 
 def addBrandName(driver, brandName):  
@@ -99,6 +117,8 @@ def spaustiSuPilnuKodu(unique_code, driver, brandName):
         print(f"Ivyko klaida: {e}")
 
 def spausPrekesLink(unique_code, driver, brandName):
+    if brandName.lower() == "krosstxt":
+        brandName = "KROSS"
     try:
         code_element = WebDriverWait(driver, 2).until(
             EC.presence_of_element_located(

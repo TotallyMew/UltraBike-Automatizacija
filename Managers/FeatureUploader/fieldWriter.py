@@ -1,4 +1,4 @@
-from selenium.webdriver.common.by import By
+﻿from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.support import expected_conditions as EC
@@ -14,21 +14,41 @@ class FeatureFieldWriter:
         for table in tablesData:
             for key, value in table.items():
                 if first_language:
-                    featureKey = key.capitalize()
-
+                    print("Prieš: " + key)
+                    featureKey = key
+                    print("Po: " + featureKey)
+                    # Try to click the "add feature" button with center-scroll fallback
                     try:
                         addButton = WebDriverWait(self.driver, 10).until(
                             EC.element_to_be_clickable((By.ID, "add_feature_button"))
                         )
-                        self.driver.execute_script("arguments[0].click();", addButton)
+                        try:
+                            self.driver.execute_script("arguments[0].click();", addButton)
+                        except Exception:
+                            self.driver.execute_script(
+                                "arguments[0].scrollIntoView({ behavior: 'auto', block: 'center' });",
+                                addButton
+                            )
+                            self.driver.execute_script("arguments[0].click();", addButton)
                     except Exception as e:
                         print(f"Error clicking add button: {e}")
                         continue
 
                     try:
                         dropdown = self.driver.find_element(By.ID, f"select2-form_step1_features_{index}_feature-container")
-                        self.driver.execute_script("arguments[0].scrollIntoView();", dropdown)
-                        dropdown.click()
+                        try:
+                            self.driver.execute_script(
+                                "arguments[0].scrollIntoView({ behavior: 'auto', block: 'center' });",
+                                dropdown
+                            )
+                            dropdown.click()
+                        except Exception:
+                            # Retry after scrolling again
+                            self.driver.execute_script(
+                                "arguments[0].scrollIntoView({ behavior: 'auto', block: 'center' });",
+                                dropdown
+                            )
+                            dropdown.click()
 
                         inputField = WebDriverWait(self.driver, 10).until(
                             EC.element_to_be_clickable((By.CLASS_NAME, "select2-search__field"))
@@ -61,6 +81,7 @@ class FeatureFieldWriter:
 
                 self.fillFeatureValue(index, lang, value)
                 index += 1
+
 
     def fillFeatureValue(self, index, lang, value):
         fieldId = f"form_step1_features_{index}_custom_value_"

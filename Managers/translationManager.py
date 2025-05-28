@@ -10,9 +10,10 @@ from Utilities.scrapeUtilities import (
 class TranslationManager:
     def __init__(self, brandName):
         self.brandName = brandName
-        self.ltPath = resource_path(f"pabaigta{brandName[:1]}LT.txt")
-        self.enPath = resource_path(f"pabaigta{brandName[:1]}ENG.txt")
-        self.engDictPath = resource_path("vertimasSavybesLT-ENG.txt")
+        self.ltPath = resource_path(f"pabaigta{brandName}LT.txt")
+        self.enPath = resource_path(f"pabaigta{brandName}ENG.txt")
+        self.engDictPath = resource_path("Assets/Translations/vertimasSavybesLT-ENG.txt")
+        self.descriptionPath = resource_path(f"Assets/Translations/aprasas{brandName}.txt")
 
     def prepareTranslationFiles(self, scrape_func, url, *args, **kwargs):
         scrape_func(url, self.ltPath, *args, **kwargs)
@@ -26,4 +27,7 @@ class TranslationManager:
 
     def loadEN(self):
         return nuskaitytIsverstasFailasAnglu(self.enPath)
+
+    def loadLV(self):
+        return nuskaitytIsverstasFailasAnglu(self.enPath)  # Assuming LV is the same as EN for now
 
