@@ -4,12 +4,11 @@ from Utilities.scrapeUtilities import (
     loadTranslations,
     loadValueTranslations,
     verstTikPirmaZodi,
-    resource_path
 )
 
 def scrapeAndTranslateToFileOctaneOne(url, outputFile):
-    keyTranslations = loadTranslations(resource_path("OctaneENG-LT.txt"))
-    valueTranslations = loadValueTranslations(resource_path("vertimasSavybesENG-LT.txt"))
+    keyTranslations = loadTranslations("Assets/Translations/OctaneENG-LT.txt")
+    valueTranslations = loadValueTranslations("Assets/Translations/vertimasSavybesENG-LT.txt")
 
     allData = []
     uniqueKeys = set()

@@ -6,18 +6,17 @@ from Utilities.scrapeUtilities import (
     loadTranslations,
     loadValueTranslations,
     verstTikPirmaZodi,
-    resource_path
 )
 
-def scrapeAndTranslateToFileKROSS(url, outputFile):
-    keyTranslations = loadTranslations(resource_path("Assets/Translations\\vertimasDetalesPL-LT.txt"))
-    valueTranslations = loadValueTranslations(resource_path("Assets/Translations\\vertimasSavybesPL-LT.txt"))
+def scrapeAndTranslateToFileKROSS(bicycleUrlOrCode, outputFile):
+    keyTranslations = loadTranslations("Assets/Translations\\vertimasDetalesPL-LT.txt")
+    valueTranslations = loadValueTranslations("Assets/Translations\\vertimasSavybesPL-LT.txt")
 
     allData = []
     uniqueKeys = set()
 
     try:
-        response = requests.get(url)
+        response = requests.get(bicycleUrlOrCode)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
 

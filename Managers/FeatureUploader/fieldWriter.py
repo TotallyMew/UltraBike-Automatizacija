@@ -14,9 +14,7 @@ class FeatureFieldWriter:
         for table in tablesData:
             for key, value in table.items():
                 if first_language:
-                    print("Prieš: " + key)
                     featureKey = key
-                    print("Po: " + featureKey)
                     # Try to click the "add feature" button with center-scroll fallback
                     try:
                         addButton = WebDriverWait(self.driver, 10).until(

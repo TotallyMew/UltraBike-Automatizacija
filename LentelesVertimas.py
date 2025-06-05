@@ -1,6 +1,5 @@
 from docx import Document
 import os
-from config import settings, resource_path
 
 def load_mapping(file_path):
     mapping = {}
@@ -26,14 +25,14 @@ def process_tables(document, mapping):
 
 def sukonstruotiDirectory(): 
     global settings
-    base_directory = resource_path(settings[3])
-    download_directory = os.path.join(base_directory, "lenteles.docx")
-    return download_directory
+    #base_directory = resource_path(settings[3])
+    #download_directory = os.path.join(base_directory, "lenteles.docx")
+    #return download_directory
 
 def lentelesVertimas():
     import time
 
-    dictionary_path = resource_path("dictionary.txt")
+    dictionary_path = "dictionary.txt"
     mapping = load_mapping(dictionary_path)
     
     doc_path = sukonstruotiDirectory()

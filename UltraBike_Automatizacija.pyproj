@@ -21,8 +21,12 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Config\BrowserConfig\BrowserManager.py" />
+    <Compile Include="Config\BrowserConfig\WindowManager.py" />
     <Compile Include="Config\config.py" />
-    <Compile Include="Config\configLogin.py" />
+    <Compile Include="Config\LoginConfig\CredentialManager.py" />
+    <Compile Include="Config\LoginConfig\LoginHandler.py" />
+    <Compile Include="Config\Settings\SettingsManager.py" />
     <Compile Include="generalUtilities.py" />
     <Compile Include="LentelesVertimas.py" />
     <Compile Include="main.py" />
@@ -31,8 +35,6 @@
     <Compile Include="Managers\FeatureUploader\languageSwitcher.py" />
     <Compile Include="Managers\imageUploader.py" />
     <Compile Include="Managers\translationManager.py" />
-    <Compile Include="NewFolder1\authService.py" />
-    <Compile Include="NewFolder1\browserService.py" />
     <Compile Include="Scrapers\BassoScraper.py" />
     <Compile Include="Scrapers\KrossFromTxtScraper.py" />
     <Compile Include="Scrapers\KROSSScraper.py" />
@@ -42,6 +44,7 @@
     <Compile Include="Scrapers\RascalScraper.py" />
     <Compile Include="Scrapers\RondoScraper.py" />
     <Compile Include="Scrapers\TREKScraper.py" />
+    <Compile Include="secondaryInput.py" />
     <Compile Include="uploaderFactory.py" />
     <Compile Include="Uploaders\baseUploader.py" />
     <Compile Include="Uploaders\Basso.py" />
@@ -57,30 +60,34 @@
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Config\" />
+    <Folder Include="Config\LoginConfig\" />
+    <Folder Include="Config\BrowserConfig\" />
+    <Folder Include="Config\Settings\" />
     <Folder Include="Managers\" />
-    <Folder Include="NewFolder1\" />
-    <Folder Include="Services\" />
+    <Folder Include="Assets\Translations\" />
     <Folder Include="Managers\FeatureUploader\" />
-    <Folder Include="Resources\" />
+    <Folder Include="Assets\" />
     <Folder Include="Scrapers\" />
     <Folder Include="Utilities\" />
     <Folder Include="Uploaders\" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="Config\settings.txt" />
-    <Content Include="Resources\BassoENG-LT.txt" />
-    <Content Include="Resources\credentials.txt" />
-    <Content Include="Resources\LeeCouganENG-LT.txt" />
-    <Content Include="Resources\LookENG-LT.txt" />
-    <Content Include="Resources\OctaneENG-LT.txt" />
-    <Content Include="Resources\PinarelloENG-LT.txt" />
-    <Content Include="Resources\RascalENG-LT.txt" />
-    <Content Include="Resources\RondoENG-LT.txt" />
-    <Content Include="Resources\vertimasDetalesENG-LT.txt" />
-    <Content Include="Resources\vertimasDetalesPL-LT.txt" />
-    <Content Include="Resources\vertimasSavybesENG-LT.txt" />
-    <Content Include="Resources\vertimasSavybesLT-ENG.txt" />
-    <Content Include="Resources\vertimasSavybesPL-LT.txt" />
+    <Content Include="Assets\PaltaIIENG.txt" />
+    <Content Include="Config\LoginConfig\loginInfo.json" />
+    <Content Include="Assets\Translations\BassoENG-LT.txt" />
+    <Content Include="Assets\credentials.txt" />
+    <Content Include="Assets\Translations\LeeCouganENG-LT.txt" />
+    <Content Include="Assets\Translations\LookENG-LT.txt" />
+    <Content Include="Assets\Translations\OctaneENG-LT.txt" />
+    <Content Include="Assets\Translations\PinarelloENG-LT.txt" />
+    <Content Include="Assets\Translations\RascalENG-LT.txt" />
+    <Content Include="Assets\Translations\RondoENG-LT.txt" />
+    <Content Include="Assets\Translations\vertimasDetalesENG-LT.txt" />
+    <Content Include="Assets\Translations\vertimasDetalesPL-LT.txt" />
+    <Content Include="Assets\Translations\vertimasSavybesENG-LT.txt" />
+    <Content Include="Assets\Translations\vertimasSavybesLT-ENG.txt" />
+    <Content Include="Assets\Translations\vertimasSavybesPL-LT.txt" />
+    <Content Include="Config\Settings\settings.txt" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
   <!-- Uncomment the CoreCompile target to enable the Build command in

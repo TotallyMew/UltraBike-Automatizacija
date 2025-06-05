@@ -3,7 +3,6 @@ from Utilities.scrapeUtilities import (
     loadTranslations,
     loadValueTranslations,
     verstTikPirmaZodi,
-    resource_path
 )
 
 internalCounter = 0
@@ -14,8 +13,8 @@ def scrapeAndTranslateToFileKROSSTXT(url, outputFile):
     """
     Store predefined KROSS LIFTIE 16" bike specifications instead of scraping
     """
-    keyTranslations = loadTranslations(resource_path("Assets/Translations\\vertimasDetalesENG-LT.txt"))
-    valueTranslations = loadValueTranslations(resource_path("Assets/Translations\\vertimasSavybesENG-LT.txt"))
+    keyTranslations = loadTranslations("Assets/Translations\\vertimasDetalesENG-LT.txt")
+    valueTranslations = loadValueTranslations("Assets/Translations\\vertimasSavybesENG-LT.txt")
     
     # Static bike specifications from KROSS LIFTIE 16"
     bikeData = {

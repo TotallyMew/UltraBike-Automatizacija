@@ -11,7 +11,7 @@ class Rondo(ProductUploader):
         # Performs scraping and writes to temporary files
         self.translationManager.prepareTranslationFiles(
             scrape_func=scrapeAndTranslateToFileKROSS,
-            url=self.url
+            url=self.self.bicycleUrlOrCode
         )
 
     def uploadBrand(self):

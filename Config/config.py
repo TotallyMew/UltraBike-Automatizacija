@@ -73,10 +73,7 @@ def resizeWindow(driver, element_id, max_width, max_height):
     except Exception as e:
         print(f"An error occurred: {e}")
  
-def resource_path(relative_path):
 
-    base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    return os.path.join(base_path, relative_path)
 
 
 def setupBrowser(browser_choice):

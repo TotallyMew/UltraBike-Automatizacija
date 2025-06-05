@@ -17,11 +17,16 @@ from selenium.common.exceptions import NoSuchElementException
 from pywinauto.application import Application
 from pywinauto.keyboard import send_keys
 
-from Config.config import settings, resource_path, resizeWindow
 import urllib3
 import certifi
 from urllib.parse import urlparse, urljoin
 
+from Config.Settings.SettingsManager import SettingsManager
+from Config.BrowserConfig.WindowManager import WindowManager
+
+
+settings_manager = SettingsManager()
+window_manager = WindowManager()
 
 
 def is_valid_url(url):
@@ -134,7 +139,7 @@ def loadAngluVertimas(translation_file):
 
 
 def versti_I_Anglu(input_file, output_file, angluVertimoFailas):
-    english_translations = loadAngluVertimas(angluVertimoFailas)
+    english_translations = loadAngluVertimas(angluVertimoFailas) 
 
     with open(input_file, "r", encoding="utf-8") as infile, open(
         output_file, "w", encoding="utf-8"
@@ -155,7 +160,7 @@ def versti_I_Anglu(input_file, output_file, angluVertimoFailas):
 
 
 # I table viska sumetam
-def nuskaitytIsverstasFailasLietuviu(file_path):
+def nuskaitytIsverstasFailasLietuviu(file_path): #nx uzpiso su tai txt dirbt, pakeist
     tables = []
     table_data = {}
 
@@ -259,18 +264,18 @@ def siustiNuotraukasKROSS(url, driver):
 
     print('Nuotraukos parsiųstos.')
 
-def sukonstruotiDirectory(driver): 
-    global settings
+def sukonstruotiDirectory(driver):
     input_element = driver.find_element(By.ID, 'form_step1_name_2')
     value = input_element.get_attribute('value')
-    base_directory = resource_path(settings[1])
+    base_directory = settings_manager.get_kross_path()  # Changed here
     sanitized_value = pasalintiNeleistinusSimbolius(value)
     download_directory = os.path.join(base_directory, sanitized_value)
     os.makedirs(download_directory, exist_ok=True)
     return download_directory
 
 def sukeltiNuotraukasKROSS(driver):
-    resizeWindow(driver, 'add_feature_button', 160.07, 39.14)
+    window_manager.resize_window(driver, 'add_feature_button', 160.07, 39.14)
+    #resizeWindow(driver, 'add_feature_button', 160.07, 39.14)
     try:
         element = driver.find_element(By.CLASS_NAME, 'dz-preview.disabled.openfilemanager.dz-clickable')
         if element.is_displayed() and element.is_enabled():

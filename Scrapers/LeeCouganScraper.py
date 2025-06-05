@@ -9,15 +9,14 @@ from Utilities.scrapeUtilities import (
     loadTranslations,
     loadValueTranslations,
     verstTikPirmaZodi,
-    resource_path
 )
 from generalUtilities import loadCredentials
 
-username, password = loadCredentials(resource_path("Assets/credentials.txt"))
+username, password = loadCredentials("Assets/credentials.txt")
 
 def scrapeAndTranslateToFileLeeCougan(target_code, outputFile, driver):
-    keyTranslations = loadTranslations(resource_path("Assets/Translations/LeeCouganENG-LT-LT.txt"))
-    valueTranslations = loadValueTranslations(resource_path("Assets/Translations/vertimasSavybesENG-LT.txt"))
+    keyTranslations = loadTranslations("Assets/Translations/LeeCouganENG-LT-LT.txt")
+    valueTranslations = loadValueTranslations("Assets/Translations/vertimasSavybesENG-LT.txt")
 
     close_driver_at_end = False
     if driver is None:

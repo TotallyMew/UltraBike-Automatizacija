@@ -11,7 +11,7 @@ class LeeCougan(ProductUploader):
         # Performs scraping and writes to temporary files
         self.translationManager.prepareTranslationFiles(
             scrape_func=scrapeAndTranslateToFileLeeCougan,
-            url=self.url, driver=self.driver
+            url=self.self.bicycleUrlOrCode, driver=self.driver
         )
 
     def uploadBrand(self):

@@ -10,7 +10,6 @@ from selenium.common.exceptions import (
     ElementClickInterceptedException,
 )
 from Utilities.scrapeUtilities import *
-from Config.config import settings, resizeWindow, resource_path
 import pypandoc
 
 
@@ -43,6 +42,11 @@ def addDescription(driver, file_path):
         code_button = WebDriverWait(driver, 10).until(
             EC.element_to_be_clickable((By.ID, "mceu_105-button"))
         )
+
+        # Scroll into center view before clicking
+        driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", code_button)
+        WebDriverWait(driver, 2).until(EC.visibility_of(code_button))  # brief wait after scrolling
+
         code_button.click()
         print("Clicked code button")
 
@@ -50,12 +54,12 @@ def addDescription(driver, file_path):
         textarea = WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.ID, "mceu_235"))
         )
-        
+
         # Read the text file
         with open(file_path, 'r', encoding='utf-8') as file:
             text_content = file.read()
-        
-        # Clear any existing content and paste the new text
+
+        # Clear and paste
         textarea.clear()
         textarea.send_keys(text_content)
         print("Text pasted into textarea")
@@ -71,6 +75,7 @@ def addDescription(driver, file_path):
         print(f"File not found: {file_path}")
     except Exception as e:
         print(f"Failed to add description from text file: {e}")
+
 
 
 def addBrandName(driver, brandName):  
@@ -95,10 +100,29 @@ def addBrandName(driver, brandName):
         driver.execute_script("arguments[0].scrollIntoView();", brandNameTopMatch)
         brandNameTopMatch.click()
         print("Prekės ženklas pridėtas")
+       
+        try:
+            saveUpload = WebDriverWait(driver, 10).until(  
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "input.btn.btn-primary.save.uppercase.ml-3"))
+            )
+            driver.execute_script("arguments[0].click();", saveUpload)
+            print("Prekės pakeitimai išsaugoti.")
+        except:
+            print("Prekės atnaujinimai nebuvo išsaugoti!")
+        time.sleep(3)
     except:
-        print("Prekės žėnklas jau yra pridėtas")
+            try:
+                saveUpload = WebDriverWait(driver, 10).until(  
+                    EC.element_to_be_clickable((By.CSS_SELECTOR, "input.btn.btn-primary.save.uppercase.ml-3"))
+                )
+                driver.execute_script("arguments[0].click();", saveUpload)
+                print("Prekės pakeitimai išsaugoti.")
+            except:
+                print("Prekės atnaujinimai nebuvo išsaugoti!")
+            time.sleep(3)
+            print("Prekės žėnklas jau yra pridėtas")
 
-def spaustiSuPilnuKodu(unique_code, driver, brandName):
+def spaustiSuPilnuKodu(unique_code, driver, brandName): #nx cia brandname? - isimt
     
     try:
         paspaustiPreke = WebDriverWait(driver, 2).until(
@@ -213,66 +237,6 @@ def perSkydeliPrekesNematomos(driver):
                     print("Nepavyko rasti PrestaShop logo, tikslinkit programos kodą")
     print("Problema sutvarkyta, darbas tęsiamas")
     
-
-
-filteriuSkaicius = 0
-
-def filteriuPridejimas(driver):
-    global settings
-    if settings and settings[2] is False:
-        with open(resource_path("filtrai.txt"), 'r', encoding='utf-8') as file:
-            filteriuMasyvas = [line.strip() for line in file.readlines()]
-        kelintaSavybe = 0
-        global filteriuSkaicius 
-        filteriuSkaicius = len(filteriuMasyvas)
-        time.sleep(1)
-
-        for feature_key in filteriuMasyvas:
-            pridetiSavybe = WebDriverWait(driver, 10).until(
-                EC.element_to_be_clickable((By.ID, "add_feature_button"))
-            )
-            driver.execute_script("arguments[0].scrollIntoView();", pridetiSavybe)
-           # time.sleep(0.5)  # Small delay to ensure element is fully interactable
-
-            try:
-                # Attempt to click using JavaScript
-                driver.execute_script("arguments[0].click();", pridetiSavybe)
-            except Exception as e:
-                print(f"JavaScript click failed: {e}")
-                # Fall back to normal click
-                pridetiSavybe.click()
-
-            pasirinktiSavybe = driver.find_element(
-                By.ID,
-                "select2-form_step1_features_" + str(kelintaSavybe) + "_feature-container"
-            )
-            pasirinktiSavybe.click()
-
-            ieskotiSavybes = WebDriverWait(driver, 10).until(
-                EC.element_to_be_clickable((By.CLASS_NAME, "select2-search__field"))
-            )
-            ieskotiSavybes.send_keys(feature_key)
-
-            try:
-                WebDriverWait(driver, 2).until(EC.presence_of_element_located((By.CLASS_NAME, "select2-results__option")))
-                if tikrintiArSavybeRasta(driver):
-                    pasirinktiSavybe.click()
-                    kelintaSavybe += 1
-                    continue
-
-                xpath_expression = f"//li[. = '{feature_key}']" 
-                poPaieskosVirstutinisElementas = WebDriverWait(driver, 10).until(
-                    EC.presence_of_element_located((By.XPATH, xpath_expression))
-                )
-                poPaieskosVirstutinisElementas.click()
-
-            except TimeoutException:
-                print(f"Nerasta '{feature_key}'.")
-                continue
-
-            kelintaSavybe += 1
-
-
 def prekesPaspaudimas(driver, brandName, unique_code):
     
 

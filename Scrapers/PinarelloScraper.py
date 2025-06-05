@@ -4,12 +4,11 @@ from Utilities.scrapeUtilities import (
     loadTranslations,
     loadValueTranslations,
     verstTikPirmaZodi,
-    resource_path
 )
 
 def scrapeAndTranslateToFilePinarello(url, outputFile):
-    keyTranslations = loadTranslations(resource_path("PinarelloENG-LT.txt"))
-    valueTranslations = loadValueTranslations(resource_path("vertimasSavybesENG-LT.txt"))
+    keyTranslations = loadTranslations("Assets/Translations/PinarelloENG-LT.txt")
+    valueTranslations = loadValueTranslations("Assets/Translations/vertimasSavybesENG-LT.txt")
 
     allData = []
     uniqueKeys = set()

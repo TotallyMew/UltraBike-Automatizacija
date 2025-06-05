@@ -1,4 +1,4 @@
-# managers/imageUploader.py
+﻿# managers/imageUploader.py
 
 from Utilities.scrapeUtilities import siustiNuotraukasKROSS, sukeltiNuotraukasKROSS
 
@@ -13,5 +13,5 @@ class ImageUploader:
             sukeltiNuotraukasKROSS(self.driver)
             print("sukelta")
         else:
-            print(f"Image uploading not implemented for {self.brandName}")
+            print(f"Nuotraukų siuntimas nėra sukurtas {self.brandName}")
 

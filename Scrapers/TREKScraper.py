@@ -7,7 +7,6 @@ from Utilities.scrapeUtilities import (
     loadTranslations,
     loadValueTranslations,
     verstTikPirmaZodi,
-    resource_path
 )
 
 def extract_size_specific_data(row_data: Dict[str, List[Tuple[str, str]]]) -> Dict[str, Dict[str, str]]:
@@ -41,8 +40,8 @@ def extract_size_specific_data(row_data: Dict[str, List[Tuple[str, str]]]) -> Di
     return size_specific_data
 
 def scrapeAndTranslateToFileTREK(url: str, outputFile: str, preferred_size: Optional[str] = None):
-    keyTranslations = loadTranslations(resource_path("Assets/Translations\\vertimasDetalesEN-LT.txt"))
-    valueTranslations = loadValueTranslations(resource_path("Assets/Translations\\vertimasSavybesEN-LT.txt"))
+    keyTranslations = loadTranslations("Assets/Translations\\vertimasDetalesEN-LT.txt")
+    valueTranslations = loadValueTranslations("Assets/Translations\\vertimasSavybesEN-LT.txt")
     
     try:
         # Get HTML content from URL

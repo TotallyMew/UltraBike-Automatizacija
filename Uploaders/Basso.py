@@ -8,10 +8,11 @@ from generalUtilities import addBrandName
 
 class Basso(ProductUploader):
     def scrape(self):
-        # Performs scraping and writes to temporary files
+        # Pass both ultraBikeCode and bassoConfigurationCode to the scrape function
         self.translationManager.prepareTranslationFiles(
             scrape_func=scrapeAndTranslateToFileBasso,
-            url=self.url, driver=self.driver
+            url=self.bicycleUrlOrCode,
+            driver=self.driver
         )
 
     def uploadBrand(self):

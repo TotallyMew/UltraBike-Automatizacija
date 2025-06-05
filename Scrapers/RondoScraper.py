@@ -4,12 +4,11 @@ from Utilities.scrapeUtilities import (
     loadTranslations,
     loadValueTranslations,
     verstTikPirmaZodi,
-    resource_path
 )
 
 def scrapeAndTranslateToFileRondo(url, outputFile):
-    keyTranslations = loadTranslations(resource_path("RondoENG-LT.txt"))
-    valueTranslations = loadValueTranslations(resource_path("vertimasSavybesENG-LT.txt"))
+    keyTranslations = loadTranslations("Assets/Translations/RondoENG-LT.txt")
+    valueTranslations = loadValueTranslations("Assets/Translations/vertimasSavybesENG-LT.txt")
     allData = []
     tableData = {}
     uniqueKeys = set()
@@ -57,7 +56,7 @@ def scrapeAndTranslateToFileRondo(url, outputFile):
 
         allData.append(tableData)
 
-        with open(resource_path(outputFile), "w", encoding="utf-8") as file:
+        with open((outputFile), "w", encoding="utf-8") as file:
             for table in allData:
                 for key, val in table.items():
                     if key and val:
