@@ -23,7 +23,6 @@
   <ItemGroup>
     <Compile Include="Config\BrowserConfig\BrowserManager.py" />
     <Compile Include="Config\BrowserConfig\WindowManager.py" />
-    <Compile Include="Config\config.py" />
     <Compile Include="Config\LoginConfig\CredentialManager.py" />
     <Compile Include="Config\LoginConfig\LoginHandler.py" />
     <Compile Include="Config\Settings\SettingsManager.py" />
