@@ -34,7 +34,7 @@ class FeatureFieldWriter:
                         continue
 
                     try:
-                        dropdown = self.driver.find_element(By.ID, f"select2-form_step1_features_{index}_feature-container")
+                        dropdown = self.driver.find_element(By.ID, f"select2-form_step1_features_{index}_feature-container") #Pasirinkti ypatybe dropdownas
                         try:
                             self.driver.execute_script(
                                 "arguments[0].scrollIntoView({ behavior: 'auto', block: 'center' });",
@@ -50,29 +50,26 @@ class FeatureFieldWriter:
                             dropdown.click()
 
                         inputField = WebDriverWait(self.driver, 10).until(
-                            EC.element_to_be_clickable((By.CLASS_NAME, "select2-search__field"))
+                            EC.element_to_be_clickable((By.CLASS_NAME, "select2-search__field")) #Paieskos laukas
                         )
                         inputField.send_keys(featureKey)
 
                         WebDriverWait(self.driver, 2).until(
-                            EC.presence_of_element_located((By.CLASS_NAME, "select2-results__option"))
+                            EC.presence_of_element_located((By.CLASS_NAME, "select2-results__option")) #Visi optionai po searcho
                         )
 
                         if self.web_handler.is_feature_found:
-                            dropdown.click()
                             self.fillFeatureValue(index, lang, value)
                             index += 1
-                            continue
 
                         if featureKey == "Padangos - padangos plotis (mm / col.)":
-                            print("PAKEICIAU")
                             featureKey = "Padangos - Padangos plotis (mm / col.)"
 
                         xpath = f"//li[normalize-space(text()) = '{featureKey}']"
                         option = WebDriverWait(self.driver, 1).until(
                             EC.presence_of_element_located((By.XPATH, xpath))
                         )
-                        option.click()
+                        option.click() #Galutinis pasirinkimas
 
                     except TimeoutException:
                         print(f"Nerasta '{featureKey}'.")
