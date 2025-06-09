@@ -2,15 +2,12 @@
 
 import requests
 from bs4 import BeautifulSoup
-from Utilities.scrapeUtilities import (
-    loadTranslations,
-    loadValueTranslations,
-    verstTikPirmaZodi,
-)
+from Utilities.TranslationHandler import TranslationHandler
 
 def scrapeAndTranslateToFileKROSS(bicycleUrlOrCode, outputFile):
-    keyTranslations = loadTranslations("Assets/Translations\\vertimasDetalesPL-LT.txt")
-    valueTranslations = loadValueTranslations("Assets/Translations\\vertimasSavybesPL-LT.txt")
+    translation_handler = TranslationHandler()
+    keyTranslations = translation_handler.load_translations("Assets/Translations\\vertimasDetalesPL-LT.txt")
+    valueTranslations = translation_handler.load_value_translations("Assets/Translations\\vertimasSavybesPL-LT.txt")
 
     allData = []
     uniqueKeys = set()
@@ -45,7 +42,7 @@ def scrapeAndTranslateToFileKROSS(bicycleUrlOrCode, outputFile):
 
                     translatedKey = keyTranslations.get(key, key)
                     translatedValue = valueTranslations.get(value, value)
-                    translatedValue = verstTikPirmaZodi(translatedValue, valueTranslations)
+                    translatedValue = translation_handler.translate_first_word(translatedValue, valueTranslations)
 
                     tableData[translatedKey] = translatedValue
                     uniqueKeys.add(translatedKey)
@@ -60,13 +57,13 @@ def scrapeAndTranslateToFileKROSS(bicycleUrlOrCode, outputFile):
 
             if len(colors) >= 1:
                 mainColor = colors[0]
-                translated = verstTikPirmaZodi(valueTranslations.get(mainColor, mainColor), valueTranslations)
+                translated = translation_handler.translate_first_word(valueTranslations.get(mainColor, mainColor), valueTranslations)
                 allData[0]["Pagrindinė spalva"] = translated
                 uniqueKeys.add("Pagrindinė spalva")
 
             if len(colors) >= 2:
                 secondaryColor = colors[1]
-                translated = verstTikPirmaZodi(valueTranslations.get(secondaryColor, secondaryColor), valueTranslations)
+                translated = translation_handler.translate_first_word(valueTranslations.get(secondaryColor, secondaryColor), valueTranslations)
                 allData[0]["Papildoma spalva (antra)"] = translated
                 uniqueKeys.add("Papildoma spalva (antra)")
 

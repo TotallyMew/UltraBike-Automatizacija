@@ -4,7 +4,6 @@ from Uploaders.baseUploader import ProductUploader
 from Scrapers.KROSSScraper import scrapeAndTranslateToFileKROSS
 from Managers.translationManager import TranslationManager
 from Managers.imageUploader import ImageUploader
-from generalUtilities import addBrandName
 
 class Rondo(ProductUploader):
     def scrape(self):
@@ -15,7 +14,7 @@ class Rondo(ProductUploader):
         )
 
     def uploadBrand(self):
-        addBrandName(self.driver, self.brandName)
+        self.web_handler.add_brand_name(self.brandName)
 
     def uploadDescription(self):
         # Optional: implement description logic using addDescriptionFromWord

@@ -26,7 +26,6 @@
     <Compile Include="Config\LoginConfig\CredentialManager.py" />
     <Compile Include="Config\LoginConfig\LoginHandler.py" />
     <Compile Include="Config\Settings\SettingsManager.py" />
-    <Compile Include="generalUtilities.py" />
     <Compile Include="LentelesVertimas.py" />
     <Compile Include="main.py" />
     <Compile Include="Managers\FeatureUploader\featureUploader.py" />
@@ -54,8 +53,13 @@
     <Compile Include="Uploaders\Rascal.py" />
     <Compile Include="Uploaders\Rondo.py" />
     <Compile Include="Uploaders\TREK.py" />
-    <Compile Include="Utilities\scrapeUtilities.py" />
+    <Compile Include="Utilities\FileHandler.py" />
+    <Compile Include="Utilities\ImageHandler.py" />
+    <Compile Include="Utilities\ProductNavigationHandler.py" />
     <Compile Include="Uploaders\KROSS.py" />
+    <Compile Include="Utilities\TranslationHandler.py" />
+    <Compile Include="Utilities\URLHandler.py" />
+    <Compile Include="Utilities\WebIntercationHandler.py" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Config\" />

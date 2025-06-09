@@ -1,14 +1,11 @@
 ﻿import requests
 from bs4 import BeautifulSoup
-from Utilities.scrapeUtilities import (
-    loadTranslations,
-    loadValueTranslations,
-    verstTikPirmaZodi,
-)
+from Utilities.TranslationHandler import TranslationHandler
 
 def scrapeAndTranslateToFileOctaneOne(url, outputFile):
-    keyTranslations = loadTranslations("Assets/Translations/OctaneENG-LT.txt")
-    valueTranslations = loadValueTranslations("Assets/Translations/vertimasSavybesENG-LT.txt")
+    translation_handler = TranslationHandler()
+    keyTranslations = translation_handler.load_translations("Assets/Translations/OctaneENG-LT.txt")
+    valueTranslations = translation_handler.load_value_translations("Assets/Translations/vertimasSavybesENG-LT.txt")
 
     allData = []
     uniqueKeys = set()
@@ -37,7 +34,7 @@ def scrapeAndTranslateToFileOctaneOne(url, outputFile):
                 rearKey = "Rear Derailleur"
                 frontTranslated = "Priekinis pavarų perjungėjas"
                 rearTranslated = "Galinis pavarų perjungejas"
-                translatedValue = verstTikPirmaZodi(value, valueTranslations)
+                translatedValue = translation_handler.translate_first_word(value, valueTranslations)
 
                 tableData[frontTranslated] = translatedValue
                 tableData[rearTranslated] = translatedValue
@@ -49,7 +46,7 @@ def scrapeAndTranslateToFileOctaneOne(url, outputFile):
                 shiftersKey = "Shifters"
                 leversTranslated = "Stabdžių rankenėlės"
                 shiftersTranslated = "Pavarų perjungimo rankenėlės"
-                translatedValue = verstTikPirmaZodi(value, valueTranslations)
+                translatedValue = translation_handler.translate_first_word(value, valueTranslations)
 
                 tableData[leversTranslated] = translatedValue
                 tableData[shiftersTranslated] = translatedValue
@@ -57,7 +54,7 @@ def scrapeAndTranslateToFileOctaneOne(url, outputFile):
                 continue
 
             translatedKey = keyTranslations.get(key, key)
-            translatedValue = verstTikPirmaZodi(value, valueTranslations)
+            translatedValue = translation_handler.translate_first_word(value, valueTranslations)
 
             tableData[translatedKey] = translatedValue
             uniqueKeys.add(translatedKey)

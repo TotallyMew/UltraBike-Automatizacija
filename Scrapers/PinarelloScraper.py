@@ -1,14 +1,11 @@
 ﻿import requests
 from bs4 import BeautifulSoup
-from Utilities.scrapeUtilities import (
-    loadTranslations,
-    loadValueTranslations,
-    verstTikPirmaZodi,
-)
+from Utilities.TranslationHandler import TranslationHandler
 
 def scrapeAndTranslateToFilePinarello(url, outputFile):
-    keyTranslations = loadTranslations("Assets/Translations/PinarelloENG-LT.txt")
-    valueTranslations = loadValueTranslations("Assets/Translations/vertimasSavybesENG-LT.txt")
+    translation_handler = TranslationHandler()
+    keyTranslations = translation_handler.load_translations("Assets/Translations/PinarelloENG-LT.txt")
+    valueTranslations = translation_handler.load_value_translations("Assets/Translations/vertimasSavybesENG-LT.txt")
 
     allData = []
     uniqueKeys = set()
@@ -41,13 +38,13 @@ def scrapeAndTranslateToFilePinarello(url, outputFile):
             if title.lower() == "axles disc":
                 for subTitle in ["Front Hub", "Rear Hub"]:
                     translatedKey = keyTranslations.get(subTitle, subTitle)
-                    translatedValue = verstTikPirmaZodi(valueTranslations.get(spec, spec), valueTranslations)
+                    translatedValue = translation_handler.translate_first_word(valueTranslations.get(spec, spec), valueTranslations)
                     tableData[translatedKey] = translatedValue
                     uniqueKeys.add(translatedKey)
                 continue
 
             translatedKey = keyTranslations.get(title, title)
-            translatedValue = verstTikPirmaZodi(valueTranslations.get(spec, spec), valueTranslations)
+            translatedValue = translation_handler.translate_first_word(valueTranslations.get(spec, spec), valueTranslations)
 
             tableData[translatedKey] = translatedValue
             uniqueKeys.add(translatedKey)

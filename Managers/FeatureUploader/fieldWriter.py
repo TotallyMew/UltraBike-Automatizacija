@@ -1,13 +1,14 @@
 ﻿from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support.ui import WebDriverWait, Select
+from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
-from generalUtilities import tikrintiArSavybeRasta
+from Utilities.WebIntercationHandler import WebInteractionHandler
 
 class FeatureFieldWriter:
     def __init__(self, driver):
         self.driver = driver
+        self.web_handler = WebInteractionHandler(driver)
 
     def fillFields(self, tablesData, lang, first_language=False):
         index = 0 
@@ -57,7 +58,7 @@ class FeatureFieldWriter:
                             EC.presence_of_element_located((By.CLASS_NAME, "select2-results__option"))
                         )
 
-                        if tikrintiArSavybeRasta(self.driver):
+                        if self.web_handler.is_feature_found:
                             dropdown.click()
                             self.fillFeatureValue(index, lang, value)
                             index += 1

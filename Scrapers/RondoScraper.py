@@ -1,14 +1,11 @@
 import requests
 from bs4 import BeautifulSoup
-from Utilities.scrapeUtilities import (
-    loadTranslations,
-    loadValueTranslations,
-    verstTikPirmaZodi,
-)
+from Utilities.TranslationHandler import TranslationHandler
 
 def scrapeAndTranslateToFileRondo(url, outputFile):
-    keyTranslations = loadTranslations("Assets/Translations/RondoENG-LT.txt")
-    valueTranslations = loadValueTranslations("Assets/Translations/vertimasSavybesENG-LT.txt")
+    translation_handler = TranslationHandler()
+    keyTranslations = translation_handler.load_translations("Assets/Translations/RondoENG-LT.txt")
+    valueTranslations = translation_handler.load_value_translations("Assets/Translations/vertimasSavybesENG-LT.txt")
     allData = []
     tableData = {}
     uniqueKeys = set()
@@ -45,12 +42,12 @@ def scrapeAndTranslateToFileRondo(url, outputFile):
             if keyLower in specialKeys:
                 for subKey in specialKeys[keyLower]:
                     translatedKey = keyTranslations.get(subKey, subKey)
-                    translatedValue = verstTikPirmaZodi(valueTranslations.get(value, value), valueTranslations)
+                    translatedValue = translation_handler.translate_first_word(valueTranslations.get(value, value), valueTranslations)
                     tableData[translatedKey] = translatedValue
                     uniqueKeys.add(translatedKey)
             else:
                 translatedKey = keyTranslations.get(key, key)
-                translatedValue = verstTikPirmaZodi(valueTranslations.get(value, value), valueTranslations)
+                translatedValue = translation_handler.translate_first_word(valueTranslations.get(value, value), valueTranslations)
                 tableData[translatedKey] = translatedValue
                 uniqueKeys.add(translatedKey)
 

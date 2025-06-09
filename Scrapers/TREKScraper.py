@@ -3,11 +3,7 @@
 import requests
 from bs4 import BeautifulSoup
 from typing import Dict, List, Set, Tuple, Optional
-from Utilities.scrapeUtilities import (
-    loadTranslations,
-    loadValueTranslations,
-    verstTikPirmaZodi,
-)
+from Utilities.TranslationHandler import TranslationHandler
 
 def extract_size_specific_data(row_data: Dict[str, List[Tuple[str, str]]]) -> Dict[str, Dict[str, str]]:
 
@@ -40,8 +36,9 @@ def extract_size_specific_data(row_data: Dict[str, List[Tuple[str, str]]]) -> Di
     return size_specific_data
 
 def scrapeAndTranslateToFileTREK(url: str, outputFile: str, preferred_size: Optional[str] = None):
-    keyTranslations = loadTranslations("Assets/Translations\\vertimasDetalesEN-LT.txt")
-    valueTranslations = loadValueTranslations("Assets/Translations\\vertimasSavybesEN-LT.txt")
+    translation_handler = TranslationHandler()
+    keyTranslations = translation_handler.load_translations("Assets/Translations\\vertimasDetalesEN-LT.txt")
+    valueTranslations = translation_handler.load_value_translations("Assets/Translations\\vertimasSavybesEN-LT.txt")
     
     try:
         # Get HTML content from URL
@@ -109,7 +106,7 @@ def scrapeAndTranslateToFileTREK(url: str, outputFile: str, preferred_size: Opti
                                       keyTranslations.get(component_name, component_name))
                 
                 # Translate component value 
-                translated_value = verstTikPirmaZodi(component_value, valueTranslations)
+                translated_value = translation_handler.translate_first_word(component_value, valueTranslations)
                 
                 # Add to data dictionary with size variants
                 if translated_component not in all_data_with_variants:

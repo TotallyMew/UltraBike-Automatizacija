@@ -5,16 +5,19 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, StaleElementReferenceException
 from bs4 import BeautifulSoup
-from Utilities.scrapeUtilities import (
-    loadTranslations,
-    loadValueTranslations,
-    verstTikPirmaZodi,
-)
-from generalUtilities import loadCredentials
 import re
+from Utilities.WebIntercationHandler import WebInteractionHandler
+from Utilities.TranslationHandler import TranslationHandler
 
 internalCounter = 0
-username, password = loadCredentials("Assets/credentials.txt")
+
+
+
+
+def loadCredentials(driver):
+    web_handler = WebInteractionHandler(driver)
+    username, password = web_handler.load_credentials("Assets/credentials.txt")
+    return username, password
 
 def process_special_values(raw_key: str, raw_val: str, target_language: str = 'lt') -> str:
     """Process special value cases with language-specific handling"""
@@ -42,10 +45,14 @@ def process_special_values(raw_key: str, raw_val: str, target_language: str = 'l
     return processed_val
 
 def scrapeAndTranslateToFileBasso(bicycleUrlOrCode, outputFile, driver):
-    global internalCounter, username, password
+    username, password = loadCredentials(driver)
 
-    keyTranslations = loadTranslations("Assets/Translations/BassoENG-LT.txt")
-    valueTranslations = loadValueTranslations("Assets/Translations/vertimasSavybesENG-LT.txt")
+    translation_handler = TranslationHandler()
+
+
+   
+    keyTranslations = translation_handler.load_translations("Assets/Translations/BassoENG-LT.txt")
+    valueTranslations = translation_handler.load_value_translations("Assets/Translations/vertimasSavybesENG-LT.txt")
     
     wait = WebDriverWait(driver, 15)
     original_tab = driver.current_window_handle
@@ -166,14 +173,14 @@ def scrapeAndTranslateToFileBasso(bicycleUrlOrCode, outputFile, driver):
                         translatedKey = keyTranslations.get(subKey, subKey)
                         translatedRawVal = valueTranslations.get(rawVal, rawVal)
                         translatedRawVal = process_special_values(subKey, translatedRawVal, 'lt')
-                        translatedValue = verstTikPirmaZodi(translatedRawVal, valueTranslations)
+                        translatedValue = translation_handler.translate_first_word(translatedRawVal, valueTranslations)
                         tableData[translatedKey] = translatedValue
                         uniqueKeys.add(translatedKey)
                 else:
                     translatedKey = keyTranslations.get(rawKey, rawKey)
                     translatedRawVal = valueTranslations.get(rawVal, rawVal)
                     translatedRawVal = process_special_values(rawKey, translatedRawVal, 'lt')
-                    translatedVal = verstTikPirmaZodi(translatedRawVal, valueTranslations)
+                    translatedVal = translation_handler.translate_first_word(translatedRawVal, valueTranslations)
                     tableData[translatedKey] = translatedVal
                     uniqueKeys.add(translatedKey)
 

@@ -5,18 +5,23 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, StaleElementReferenceException
 from bs4 import BeautifulSoup
-from Utilities.scrapeUtilities import (
-    loadTranslations,
-    loadValueTranslations,
-    verstTikPirmaZodi,
-)
-from generalUtilities import loadCredentials
+from Utilities.TranslationHandler import TranslationHandler
+from Utilities.WebIntercationHandler import WebInteractionHandler
 
-username, password = loadCredentials("Assets/credentials.txt")
+
+def loadCredentials(driver):
+    web_handler = WebInteractionHandler(driver)
+    username, password = web_handler.load_credentials("Assets/credentials.txt")
+    return username, password
+
 
 def scrapeAndTranslateToFileLeeCougan(target_code, outputFile, driver):
-    keyTranslations = loadTranslations("Assets/Translations/LeeCouganENG-LT-LT.txt")
-    valueTranslations = loadValueTranslations("Assets/Translations/vertimasSavybesENG-LT.txt")
+    translation_handler = TranslationHandler()
+    keyTranslations = translation_handler.load_translations("Assets/Translations/LeeCouganENG-LT-LT.txt")
+    valueTranslations = translation_handler.load_value_translations("Assets/Translations/vertimasSavybesENG-LT.txt")
+
+    username, password = loadCredentials(driver)
+
 
     close_driver_at_end = False
     if driver is None:
@@ -141,13 +146,13 @@ def scrapeAndTranslateToFileLeeCougan(target_code, outputFile, driver):
                     for subKey in specialKeys[keyLower]:
                         translatedKey = keyTranslations.get(subKey, subKey)
                         translatedVal = valueTranslations.get(rawVal, rawVal)
-                        translatedVal = verstTikPirmaZodi(translatedVal, valueTranslations)
+                        translatedVal = translation_handler.translate_first_word(translatedVal, valueTranslations)
                         tableData[translatedKey] = translatedVal
                         uniqueKeys.add(translatedKey)
                 else:
                     translatedKey = keyTranslations.get(rawKey, rawKey)
                     translatedVal = valueTranslations.get(rawVal, rawVal)
-                    translatedVal = verstTikPirmaZodi(translatedVal, valueTranslations)
+                    translatedVal = translation_handler.translate_first_word(translatedVal, valueTranslations)
                     tableData[translatedKey] = translatedVal
                     uniqueKeys.add(translatedKey)
 

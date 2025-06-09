@@ -1,14 +1,11 @@
 ﻿import requests
 from bs4 import BeautifulSoup
-from Utilities.scrapeUtilities import (
-    loadTranslations,
-    loadValueTranslations,
-    verstTikPirmaZodi,
-)
+from Utilities.TranslationHandler import TranslationHandler
 
 def scrapeAndTranslateToFileRascal(url, outputFile):
-    keyTranslations = loadTranslations("Assets/Translations/RascalENG-LT.txt")
-    valueTranslations = loadValueTranslations("Assets/Translations/vertimasSavybesENG-LT.txt")
+    translation_handler = TranslationHandler()
+    keyTranslations = translation_handler.load_translations("Assets/Translations/RascalENG-LT.txt")
+    valueTranslations = translation_handler.load_value_translations("Assets/Translations/vertimasSavybesENG-LT.txt")
 
     allData = []
     uniqueKeys = set()
@@ -59,12 +56,12 @@ def scrapeAndTranslateToFileRascal(url, outputFile):
             if key.lower() == "brakes":
                 for subKey in ["Front Brakes", "Rear Brakes"]:
                     translatedKey = keyTranslations.get(subKey, subKey)
-                    translatedValue = verstTikPirmaZodi(valueTranslations.get(selectedValue, selectedValue), valueTranslations)
+                    translatedValue = translation_handler.translate_first_word(valueTranslations.get(selectedValue, selectedValue), valueTranslations)
                     tableData[translatedKey] = translatedValue
                     uniqueKeys.add(translatedKey)
             else:
                 translatedKey = keyTranslations.get(key, key)
-                translatedValue = verstTikPirmaZodi(valueTranslations.get(selectedValue, selectedValue), valueTranslations)
+                translatedValue = translation_handler.translate_first_word(valueTranslations.get(selectedValue, selectedValue), valueTranslations)
                 tableData[translatedKey] = translatedValue
                 uniqueKeys.add(translatedKey)
 

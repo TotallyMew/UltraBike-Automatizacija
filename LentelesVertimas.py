@@ -1,5 +1,4 @@
 from docx import Document
-import os
 
 def load_mapping(file_path):
     mapping = {}
@@ -23,11 +22,6 @@ def process_tables(document, mapping):
                 for paragraph in cell.paragraphs:
                     replace_text_in_paragraph(paragraph, mapping)
 
-def sukonstruotiDirectory(): 
-    global settings
-    #base_directory = resource_path(settings[3])
-    #download_directory = os.path.join(base_directory, "lenteles.docx")
-    #return download_directory
 
 def lentelesVertimas():
     import time
@@ -35,7 +29,7 @@ def lentelesVertimas():
     dictionary_path = "dictionary.txt"
     mapping = load_mapping(dictionary_path)
     
-    doc_path = sukonstruotiDirectory()
+    doc_path = "asdasdasdasasdasdasdasd" #Is settingu paimt
     doc = Document(doc_path)
     
     process_tables(doc, mapping)

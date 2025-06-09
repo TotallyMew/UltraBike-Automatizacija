@@ -1,11 +1,7 @@
 from Config.LoginConfig.LoginHandler import LoginHandler
 from Config.LoginConfig.CredentialManager import CredentialManager
 from uploaderFactory import getUploaderClass
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException
-from generalUtilities import perSkydeliPrekesNematomos
+from Utilities.ProductNavigationHandler import ProductNavigationHandler
 from secondaryInput import process_codes_from_excel
 from Config.BrowserConfig.BrowserManager import BrowserManager
 from Config.Settings.SettingsManager import SettingsManager
@@ -17,15 +13,15 @@ def main():
 
 
     browser_manager = BrowserManager()
-    settings_manager = SettingsManager()
-    
+    settings_manager = SettingsManager() #Add default browser choice and settings in SettingsManager.py
+
     # Read settings
 
     
     # Setup browser
     browserChoice = input("Pasirinkite naršyklę (Firefox (lėtai veikia!), Chrome, Edge): ")
     driver = browser_manager.setup_browser(browserChoice)
-
+    navigation_manager = ProductNavigationHandler(driver)
 
     credential_manager = CredentialManager()
     login_handler = LoginHandler(driver, credential_manager)
@@ -78,12 +74,7 @@ def main():
         while True:
             continueInput = input("Darbas baigtas. Ar norite tęsti? (taip/ne): ").lower()
             if continueInput == "taip":
-                try:
-                    WebDriverWait(driver, 1).until(
-                        EC.element_to_be_clickable((By.ID, "subtab-AdminProducts"))
-                    ).click()
-                except TimeoutException:
-                    perSkydeliPrekesNematomos(driver)
+                navigation_manager.fix_invisible_products()
                 break
             elif continueInput == "ne":
                 driver.quit()
