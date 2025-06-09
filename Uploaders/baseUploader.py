@@ -1,29 +1,48 @@
-﻿from abc import ABC, abstractmethod
+﻿# Uploaders/baseUploader.py
+
+from abc import ABC, abstractmethod
 from Managers.translationManager import TranslationManager
 from Managers.imageUploader import ImageUploader
 from Managers.FeatureUploader.featureUploader import FeatureUploader
-from Utilities.scrapeUtilities import getURL
-from generalUtilities import getCode
-from generalUtilities import prekesPaspaudimas
+from Config.Settings.SettingsManager import SettingsManager
+from Utilities.ProductNavigationHandler import ProductNavigationHandler
+from Utilities.URLHandler import URLHandler
+from Utilities.TranslationHandler import TranslationHandler
+from Utilities.WebIntercationHandler import WebInteractionHandler
 
+settings_manager = SettingsManager()
+
+def getCode():
+    code = input("Iveskite koda")
+    return code
 class ProductUploader(ABC):
-    def __init__(self, driver, brandName):
+    def __init__(self, driver, brandName, ultraBikeCode=None, bicycleUrlOrCode=None):
+
         self.driver = driver
+
+        self.navigation_manager = ProductNavigationHandler(driver)
+        self.url_handler = URLHandler()
+        self.web_handler = WebInteractionHandler(driver)
+        self.translation_handler = TranslationHandler()
+
         self.brandName = brandName
-        self.code = getCode()
-        self.url = getURL(brandName)
+        self.ultraBikeCode = ultraBikeCode if ultraBikeCode is not None else getCode()
+        self.bicycleUrlOrCode = bicycleUrlOrCode if bicycleUrlOrCode is not None else self.url_handler.get_brand_url(brandName)
+
         self.translationManager = TranslationManager(brandName)
         self.imageUploader = ImageUploader(driver, brandName)
         self.featureUploader = FeatureUploader(driver)
 
-    def run(self):
+    def run(self): #Čia settings sumest
         self.scrape()
         self.translate()
         self.openProduct()
-        self.uploadImages()
+        if(settings_manager.download_pictures_and_upload()):
+            self.uploadImages()
         self.uploadFeatures()
         self.uploadBrand()
         self.uploadDescription()
+        self.saveUpdate()
 
     @abstractmethod
     def scrape(self):
@@ -33,18 +52,22 @@ class ProductUploader(ABC):
         self.translationManager.translateAll()
 
     def openProduct(self):
-        prekesPaspaudimas(self.driver, self.brandName, self.code)
+        self.navigation_manager.navigate_to_product(self.brandName, self.ultraBikeCode)
 
     def uploadImages(self):
-        self.imageUploader.uploadAll(self.url)
+        self.imageUploader.uploadAll(self.bicycleUrlOrCode)
 
     def uploadFeatures(self):
         ltData = self.translationManager.loadLT()
         enData = self.translationManager.loadEN()
-        self.featureUploader.uploadAllLanguages(ltData, enData)
+        lvData = self.translationManager.loadLV()
+        self.featureUploader.uploadAllLanguages(ltData, enData, lvData)
 
     def uploadBrand(self):
-        pass  # Optional override in brand-specific class
+        pass
 
     def uploadDescription(self):
-        pass  # Optional override in brand-specific class
+        pass
+
+    def saveUpdate(self):
+       self.web_handler.save_information()

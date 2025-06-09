@@ -14,3 +14,4 @@ class LanguageSwitcher:
         self.driver.execute_script("arguments[0].click();", dropdown)
 
         Select(dropdown).select_by_value(langCode)
+       

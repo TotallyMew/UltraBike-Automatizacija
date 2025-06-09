@@ -1,59 +1,75 @@
 ﻿from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support.ui import WebDriverWait, Select
+from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
-from generalUtilities import tikrintiArSavybeRasta
+from Utilities.WebIntercationHandler import WebInteractionHandler
 
 class FeatureFieldWriter:
     def __init__(self, driver):
         self.driver = driver
+        self.web_handler = WebInteractionHandler(driver)
 
     def fillFields(self, tablesData, lang, first_language=False):
         index = 0 
         for table in tablesData:
             for key, value in table.items():
                 if first_language:
-                    featureKey = key.capitalize()
-
+                    featureKey = key
+                    # Try to click the "add feature" button with center-scroll fallback
                     try:
                         addButton = WebDriverWait(self.driver, 10).until(
                             EC.element_to_be_clickable((By.ID, "add_feature_button"))
                         )
-                        self.driver.execute_script("arguments[0].click();", addButton)
+                        try:
+                            self.driver.execute_script("arguments[0].click();", addButton)
+                        except Exception:
+                            self.driver.execute_script(
+                                "arguments[0].scrollIntoView({ behavior: 'auto', block: 'center' });",
+                                addButton
+                            )
+                            self.driver.execute_script("arguments[0].click();", addButton)
                     except Exception as e:
                         print(f"Error clicking add button: {e}")
                         continue
 
                     try:
-                        dropdown = self.driver.find_element(By.ID, f"select2-form_step1_features_{index}_feature-container")
-                        self.driver.execute_script("arguments[0].scrollIntoView();", dropdown)
-                        dropdown.click()
+                        dropdown = self.driver.find_element(By.ID, f"select2-form_step1_features_{index}_feature-container") #Pasirinkti ypatybe dropdownas
+                        try:
+                            self.driver.execute_script(
+                                "arguments[0].scrollIntoView({ behavior: 'auto', block: 'center' });",
+                                dropdown
+                            )
+                            dropdown.click()
+                        except Exception:
+                            # Retry after scrolling again
+                            self.driver.execute_script(
+                                "arguments[0].scrollIntoView({ behavior: 'auto', block: 'center' });",
+                                dropdown
+                            )
+                            dropdown.click()
 
                         inputField = WebDriverWait(self.driver, 10).until(
-                            EC.element_to_be_clickable((By.CLASS_NAME, "select2-search__field"))
+                            EC.element_to_be_clickable((By.CLASS_NAME, "select2-search__field")) #Paieskos laukas
                         )
                         inputField.send_keys(featureKey)
 
                         WebDriverWait(self.driver, 2).until(
-                            EC.presence_of_element_located((By.CLASS_NAME, "select2-results__option"))
+                            EC.presence_of_element_located((By.CLASS_NAME, "select2-results__option")) #Visi optionai po searcho
                         )
 
-                        if tikrintiArSavybeRasta(self.driver):
-                            dropdown.click()
+                        if self.web_handler.is_feature_found:
                             self.fillFeatureValue(index, lang, value)
                             index += 1
-                            continue
 
                         if featureKey == "Padangos - padangos plotis (mm / col.)":
-                            print("PAKEICIAU")
                             featureKey = "Padangos - Padangos plotis (mm / col.)"
 
                         xpath = f"//li[normalize-space(text()) = '{featureKey}']"
                         option = WebDriverWait(self.driver, 1).until(
                             EC.presence_of_element_located((By.XPATH, xpath))
                         )
-                        option.click()
+                        option.click() #Galutinis pasirinkimas
 
                     except TimeoutException:
                         print(f"Nerasta '{featureKey}'.")
@@ -61,6 +77,7 @@ class FeatureFieldWriter:
 
                 self.fillFeatureValue(index, lang, value)
                 index += 1
+
 
     def fillFeatureValue(self, index, lang, value):
         fieldId = f"form_step1_features_{index}_custom_value_"

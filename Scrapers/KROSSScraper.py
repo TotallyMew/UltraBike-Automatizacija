@@ -1,23 +1,19 @@
-﻿# scrapers/KROSSScraper.py
+# scrapers/KROSSScraper.py
 
 import requests
 from bs4 import BeautifulSoup
-from Utilities.scrapeUtilities import (
-    loadTranslations,
-    loadValueTranslations,
-    verstTikPirmaZodi,
-    resource_path
-)
+from Utilities.TranslationHandler import TranslationHandler
 
-def scrapeAndTranslateToFileKROSS(url, outputFile):
-    keyTranslations = loadTranslations(resource_path("Resources\\vertimasDetalesPL-LT.txt"))
-    valueTranslations = loadValueTranslations(resource_path("Resources\\vertimasSavybesPL-LT.txt"))
+def scrapeAndTranslateToFileKROSS(bicycleUrlOrCode, outputFile):
+    translation_handler = TranslationHandler()
+    keyTranslations = translation_handler.load_translations("Assets/Translations\\vertimasDetalesPL-LT.txt")
+    valueTranslations = translation_handler.load_value_translations("Assets/Translations\\vertimasSavybesPL-LT.txt")
 
     allData = []
     uniqueKeys = set()
 
     try:
-        response = requests.get(url)
+        response = requests.get(bicycleUrlOrCode)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
 
@@ -39,14 +35,14 @@ def scrapeAndTranslateToFileKROSS(url, outputFile):
                     key = cells[0].get_text(strip=True).title()
                     value = cells[1].get_text(strip=True)
 
-                    if value.upper() == "BRAK":
+                    if value.upper() == "BRAK" or value.upper() == "NIE" or value.upper() == "TAK":
                         continue
-                    if key.upper() == "KOLOR BAZOWY":
+                    if key.upper() == "KOLOR BAZOWY" or key.upper() == "PRODUCENT" or key.upper() == "OSOBA ODPOWIEDZIALNA W UE":
                         continue
 
                     translatedKey = keyTranslations.get(key, key)
                     translatedValue = valueTranslations.get(value, value)
-                    translatedValue = verstTikPirmaZodi(translatedValue, valueTranslations)
+                    translatedValue = translation_handler.translate_first_word(translatedValue, valueTranslations)
 
                     tableData[translatedKey] = translatedValue
                     uniqueKeys.add(translatedKey)
@@ -61,13 +57,13 @@ def scrapeAndTranslateToFileKROSS(url, outputFile):
 
             if len(colors) >= 1:
                 mainColor = colors[0]
-                translated = verstTikPirmaZodi(valueTranslations.get(mainColor, mainColor), valueTranslations)
+                translated = translation_handler.translate_first_word(valueTranslations.get(mainColor, mainColor), valueTranslations)
                 allData[0]["Pagrindinė spalva"] = translated
                 uniqueKeys.add("Pagrindinė spalva")
 
             if len(colors) >= 2:
                 secondaryColor = colors[1]
-                translated = verstTikPirmaZodi(valueTranslations.get(secondaryColor, secondaryColor), valueTranslations)
+                translated = translation_handler.translate_first_word(valueTranslations.get(secondaryColor, secondaryColor), valueTranslations)
                 allData[0]["Papildoma spalva (antra)"] = translated
                 uniqueKeys.add("Papildoma spalva (antra)")
 

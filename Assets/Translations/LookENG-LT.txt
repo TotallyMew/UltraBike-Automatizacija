@@ -1,4 +1,4 @@
-Frame:Rėmas
+﻿Frame:Rėmas
 Seatpost:Balnakotis
 Saddle:Balnelis
 Stem:Vairo iškyša

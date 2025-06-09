@@ -1,16 +1,17 @@
-# uploaders/KROSS.py
+# uploaders/LeeCougan.py
 
 from Uploaders.baseUploader import ProductUploader
-from Scrapers.KROSSScraper import scrapeAndTranslateToFileKROSS
+from Scrapers.LeeCouganScraper import scrapeAndTranslateToFileLeeCougan
 from Managers.translationManager import TranslationManager
-from Managers.imageUploader import ImageUploader
+#from Managers.imageUploader import ImageUploader
 
-class Rascal(ProductUploader):
+
+class LeeCougan(ProductUploader):
     def scrape(self):
         # Performs scraping and writes to temporary files
         self.translationManager.prepareTranslationFiles(
-            scrape_func=scrapeAndTranslateToFileKROSS,
-            url=self.self.bicycleUrlOrCode
+            scrape_func=scrapeAndTranslateToFileLeeCougan,
+            url=self.self.bicycleUrlOrCode, driver=self.driver
         )
 
     def uploadBrand(self):
@@ -19,4 +20,5 @@ class Rascal(ProductUploader):
     def uploadDescription(self):
         # Optional: implement description logic using addDescriptionFromWord
         pass
+
 

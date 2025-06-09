@@ -1,4 +1,4 @@
-frame:rėmas
+﻿frame:rėmas
 rear shock:galinis amortizatorius
 headset:vairo kolonėlės guoliai
 handlebar:vairas
@@ -30,4 +30,5 @@ cassette/cog:galinis žvaigždžių blokas
 cassette:galinis žvaigždžių blokas
 spokes:stipinai
 rims:ratlankis
+
 

@@ -1,111 +1,34 @@
-﻿# from KROSS import mainKrossFunction
-# from Rondo import mainRondoFunction
-# from Pinarello import mainPinarelloFunction
-# from octane import mainOctaneFunction
-# from selenium.webdriver.support.ui import WebDriverWait
-# from selenium.common.exceptions import TimeoutException
-# from selenium.webdriver.support import expected_conditions as EC
-# from generalUtilities import perSkydeliPrekesNematomos
-# from config import setupBrowser
-# from selenium.webdriver.common.by import By
-# from config import read_settings, settings, resource_path
-# from configLogin import login
-# from rascal import mainRascalFunction
-
-# def prekesVedimas(driver):
-#     while True:
-#         preke = input("Įveskite tiekėja (KROSS, Rondo, Pinarello, Le Grand, Octane, Rascal): ")
-        
-#         if preke.lower() == "kross" or preke.lower() == "le grand":
-#             mainKrossFunction(driver, preke.upper())
-#             break
-#         elif preke.lower() == "rondo":
-#             mainRondoFunction(driver, preke.upper())
-#             break
-#         elif preke.lower() == "pinarello":
-#             mainPinarelloFunction(driver, preke.title())
-#             break
-#         elif preke.lower() == "octane":
-#             mainOctaneFunction(driver, preke.title())
-#             break
-#         elif preke.lower() == "rascal":
-#             mainRascalFunction(driver, preke.title())
-#             break
-#         else:
-#             while True:
-#                 retry = input("Neteisingas įvedimas. Ar norite bandyti dar kartą? (T/N): ")
-#                 if retry.lower() == "t":
-#                     break
-#                 elif retry.lower() == "n":
-#                     print("Darbas baigiamas")
-#                     driver.quit()
-#                     exit()
-#                 else:
-#                     print("Prašome įvesti T arba N")
-                    
-# def main():
-
-#     global settings
-
-#     read_settings(resource_path("settings.txt"))
-    
-#     browser_choice = input(
-#         "Pasirinkite naršyklę (Firefox (lėtai veikia!), Chrome, Edge):  "
-#     )
-
-#     driver = setupBrowser(browser_choice)
-
-#     login(driver)
-
-#     while True:
-#         prekesVedimas(driver)
-
-#         while True:
-#             testiDarba = input(
-#                 "Darbas baigtas (pasitikrinkit ar išsaugojot), ar norite tęsti? (taip/ne): "
-#             )
-#             if testiDarba.lower() == "taip":
-#                 try:
-#                     prekesMygtukas = WebDriverWait(driver, 1).until(EC.element_to_be_clickable((By.ID, "subtab-AdminProducts")))
-#                     prekesMygtukas.click()
-#                 except TimeoutException:      
-#                     perSkydeliPrekesNematomos(driver)
-#                 break  
-#             elif testiDarba.lower() == "ne":
-#                 break 
-#             else:
-#                 print("Prašome įvesti 'taip' arba 'ne'.")
-
-#         if testiDarba.lower() == "ne":
-#             break  
-
-
-#     driver.quit()
-#     print("Darbas baigtas.")
-
-
-# if __name__ == "__main__":
-#     main()
-# main.py
-
-from Config.config import read_settings, resource_path, setupBrowser
-from Config.configLogin import login
+from Config.LoginConfig.LoginHandler import LoginHandler
+from Config.LoginConfig.CredentialManager import CredentialManager
 from uploaderFactory import getUploaderClass
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException
-from generalUtilities import perSkydeliPrekesNematomos
+from Utilities.ProductNavigationHandler import ProductNavigationHandler
+from secondaryInput import process_codes_from_excel
+from Config.BrowserConfig.BrowserManager import BrowserManager
+from Config.Settings.SettingsManager import SettingsManager
 
 def main():
-    read_settings(resource_path("settings.txt"))
+
+
+
+
+
+    browser_manager = BrowserManager()
+    settings_manager = SettingsManager() #Add default browser choice and settings in SettingsManager.py
+
+    # Read settings
+
     
+    # Setup browser
     browserChoice = input("Pasirinkite naršyklę (Firefox (lėtai veikia!), Chrome, Edge): ")
-    driver = setupBrowser(browserChoice)
-    login(driver)
+    driver = browser_manager.setup_browser(browserChoice)
+    navigation_manager = ProductNavigationHandler(driver)
+
+    credential_manager = CredentialManager()
+    login_handler = LoginHandler(driver, credential_manager)
+    login_handler.login()
 
     while True:
-        brandInput = input("Įveskite tiekėją (KROSS, Rondo, Pinarello, Le Grand, Octane, Rascal): ").strip()
+        brandInput = input("Įveskite tiekėją (KROSS, Rondo, Pinarello, Le Grand, Octane, Rascal, Basso, Lee Cougan): ").strip()
         uploaderClass = getUploaderClass(brandInput)
 
         if uploaderClass is None:
@@ -115,18 +38,43 @@ def main():
                 return
             continue
 
-        uploader = uploaderClass(driver, brandInput.upper())
-        uploader.run()
+        input_mode = input("Pasirinkite įvedimo būdą: Rankinis (R) arba Excel (E): ").strip().upper()
+
+        if input_mode == "R":
+            # Manual input loop
+            while True:
+                code = input("Įveskite prekės kodą (arba 'exit' išeiti): ").strip()
+                if code.lower() == 'exit':
+                    break
+                uploader = uploaderClass(driver, brandInput.upper(), code)
+                uploader.run()
+
+        elif input_mode == "E":
+            file_path = "asdasdasdddd.xlsx" #is settings.txt paskui padaryt
+            sheet_name = input("Įveskite Excel lapo pavadinimą: ").strip()
+            result = process_codes_from_excel(file_path, sheet_name, uploaderClass, driver, brandInput.upper())
+
+            # if result == "manual":
+            #     while True:
+            #         code = input("Įveskite prekės kodą (arba 'exit' išeiti): ").strip()
+            #         if code.lower() == 'exit':
+            #             break
+            #         uploader = uploaderClass(driver, brandInput.upper(), code)
+            #         uploader.run()
+            # elif result == "quit":
+            #     driver.quit()
+            #     print("Darbas baigtas.")
+            #     return
+
+
+        else:
+            print("Neteisingas įvedimo būdas. Bandykite dar kartą.")
+            continue
 
         while True:
             continueInput = input("Darbas baigtas. Ar norite tęsti? (taip/ne): ").lower()
             if continueInput == "taip":
-                try:
-                    WebDriverWait(driver, 1).until(
-                        EC.element_to_be_clickable((By.ID, "subtab-AdminProducts"))
-                    ).click()
-                except TimeoutException:
-                    perSkydeliPrekesNematomos(driver)
+                navigation_manager.fix_invisible_products()
                 break
             elif continueInput == "ne":
                 driver.quit()
@@ -137,4 +85,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

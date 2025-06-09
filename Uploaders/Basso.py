@@ -1,16 +1,16 @@
-# uploaders/KROSS.py
+# uploaders/Basso.py
 
 from Uploaders.baseUploader import ProductUploader
-from Scrapers.KROSSScraper import scrapeAndTranslateToFileKROSS
+from Scrapers.BassoScraper import scrapeAndTranslateToFileBasso
 from Managers.translationManager import TranslationManager
-from Managers.imageUploader import ImageUploader
 
-class Rascal(ProductUploader):
+class Basso(ProductUploader):
     def scrape(self):
-        # Performs scraping and writes to temporary files
+        # Pass both ultraBikeCode and bassoConfigurationCode to the scrape function
         self.translationManager.prepareTranslationFiles(
-            scrape_func=scrapeAndTranslateToFileKROSS,
-            url=self.self.bicycleUrlOrCode
+            scrape_func=scrapeAndTranslateToFileBasso,
+            url=self.bicycleUrlOrCode,
+            driver=self.driver
         )
 
     def uploadBrand(self):
@@ -19,4 +19,5 @@ class Rascal(ProductUploader):
     def uploadDescription(self):
         # Optional: implement description logic using addDescriptionFromWord
         pass
+
 
