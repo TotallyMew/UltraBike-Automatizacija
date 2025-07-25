@@ -1,4 +1,4 @@
-false
+true
 C:\Users\User\Desktop\Darbas\Dviraciai\KROSS
 true
 C:\Users\User\Desktop

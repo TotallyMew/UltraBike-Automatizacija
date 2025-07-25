@@ -1,4 +1,4 @@
-class TranslationHandler:
+﻿class TranslationHandler:
     @staticmethod
     def load_translations(translation_file):
         translations = {}
@@ -24,16 +24,40 @@ class TranslationHandler:
         return value_translations
 
     @staticmethod
-    def translate_first_word(value, value_translations):
+    def translate_first_word(value, value_translations): #spalvos neturetu eiti pro sita funkcija
         value_parts = value.split()
         if not value_parts:
             return value
 
         first_word = value_parts[0].upper()
         if first_word in (
-            "ALUMINIUM", "OK.", "CARBON", "ALIUMINIS", "APIE",
-            "STEEL", "PLIENINIS", "STAL", "WITH SHOCK ABSORBER",
-            "SU AMORTIZATORIUMI"
+            "ALUMINIUM", "ALIUMINIS",
+            "OK.", "APIE",
+            "CARBON", "ANGLIES PLUOŠTAS",
+            "ALIUMINIS", "ALIUMINIS",
+            "APIE", "APIE",
+            "STEEL", "PLIENINIS",
+            "PLIENINIS", "PLIENINIS",
+            "STAL", "PLIENINIS",
+            "WITH SHOCK ABSORBER", "SU AMORTIZATORIUMI",
+            "SU AMORTIZATORIUMI", "SU AMORTIZATORIUMI",
+
+            # Colors
+            "CZARNY", "JUODA",
+            "POŁYSK", "BLIZGUS",
+            "MATOWY", "MATINIS",
+            "ŻÓŁTY", "GELTONA",
+            "SZARY", "PILKA",
+            "CIEMNY", "TAMSIAI",
+            "SREBRNY", "SIDABRINĖ",
+            "GRANATOWY", "TAMSIAI MĖLYNA",
+            "MIĘTOWY", "MĖTINĖ",
+            "RÓŻOWY", "ROŽINĖ",
+            "BIAŁY", "BALTA",
+            "NIEBIESKI", "MĖLYNA",
+            "CZERWONY", "RAUDONA",
+            "FIOLETOWY", "VIOLETINĖ",
+            "ZIELONY", "ŽALIA"
         ):
             value_parts[0] = value_translations.get(first_word, value_parts[0])
         return " ".join(value_parts)

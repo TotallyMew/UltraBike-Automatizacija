@@ -1,4 +1,5 @@
-﻿from selenium.webdriver.common.by import By
+﻿from pickle import FALSE
+from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -10,7 +11,7 @@ class FeatureFieldWriter:
         self.driver = driver
         self.web_handler = WebInteractionHandler(driver)
 
-    def fillFields(self, tablesData, lang, first_language=False):
+    def fillFields(self, tablesData, lang, first_language):
         index = 0 
         for table in tablesData:
             for key, value in table.items():
@@ -59,24 +60,26 @@ class FeatureFieldWriter:
                         )
 
                         if self.web_handler.is_feature_found:
+                            if featureKey == "Padangos - padangos plotis (mm / col.)":
+                                featureKey = "Padangos - Padangos plotis (mm / col.)"
+
+                            xpath = f"//li[normalize-space(text()) = '{featureKey}']"
+                            option = WebDriverWait(self.driver, 1).until(
+                                EC.presence_of_element_located((By.XPATH, xpath))
+                            )
+                            option.click() #Galutinis pasirinkimas
                             self.fillFeatureValue(index, lang, value)
                             index += 1
 
-                        if featureKey == "Padangos - padangos plotis (mm / col.)":
-                            featureKey = "Padangos - Padangos plotis (mm / col.)"
-
-                        xpath = f"//li[normalize-space(text()) = '{featureKey}']"
-                        option = WebDriverWait(self.driver, 1).until(
-                            EC.presence_of_element_located((By.XPATH, xpath))
-                        )
-                        option.click() #Galutinis pasirinkimas
+                        
 
                     except TimeoutException:
                         print(f"Nerasta '{featureKey}'.")
                         continue
-
-                self.fillFeatureValue(index, lang, value)
-                index += 1
+                #Kitom kalbom
+                if first_language is False: 
+                    self.fillFeatureValue(index, lang, value)
+                    index += 1
 
 
     def fillFeatureValue(self, index, lang, value):

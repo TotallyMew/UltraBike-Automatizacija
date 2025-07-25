@@ -42,7 +42,7 @@ class ProductUploader(ABC):
         self.uploadFeatures()
         self.uploadBrand()
         self.uploadDescription()
-        self.saveUpdate()
+        #self.saveUpdate()
 
     @abstractmethod
     def scrape(self):

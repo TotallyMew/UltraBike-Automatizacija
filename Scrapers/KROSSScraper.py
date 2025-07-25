@@ -36,9 +36,25 @@ def scrapeAndTranslateToFileKROSS(bicycleUrlOrCode, outputFile):
                     value = cells[1].get_text(strip=True)
 
                     if value.upper() == "BRAK" or value.upper() == "NIE" or value.upper() == "TAK":
+                        continue 
+                    if key.upper() in [ #Prideti vertimus ir naujas savybes ultrabike, reikia atsirinkti kurios svarbios
+                        "KOLOR BAZOWY",
+                        "PRODUCENT",
+                        "OSOBA ODPOWIEDZIALNA W UE",
+                        "MOMENT OBROTOWY SILNIKA",
+                        "MOC SILNIKA",
+                        "UMIEJSCOWIENIE SILNIKA",
+                        "POJEMNOŚĆ BATERII",
+                        "UMIEJSCOWIENIE BATERII",
+                        "MAKSYMALNY ZASIĘG (KM)",
+                        "NAPIĘCIE SILNIKA (V)",
+                        "ŁADOWARKA (NAPIĘCIE/NATĘŻENIE)",
+                        "CZAS ŁADOWANIA (H)",
+                        "MAKSYMALNA PRĘDKOŚĆ WSPOMAGANIA (KM/H)",
+                        "NUMER CERTYFIKATU"
+                    ]:
                         continue
-                    if key.upper() == "KOLOR BAZOWY" or key.upper() == "PRODUCENT" or key.upper() == "OSOBA ODPOWIEDZIALNA W UE":
-                        continue
+
 
                     translatedKey = keyTranslations.get(key, key)
                     translatedValue = valueTranslations.get(value, value)

@@ -38,8 +38,10 @@ Skok Amortyzatora Przód:Šakės eiga
 Kolor Bazowy:Pagrindinė spalva
 Rama:Rėmas
 Ilość Biegów:Pavarų skaičius
-Zakres Kasety:Galinio žvaigdžių bloko diapazonas
+Zakres Kasety:Galinio žvaigždžių bloko diapazonas
 Wkład Suportu:Centrinės ašies guoliai
+Maksymalna szerokość opony (mm):Maksimalus padangos plotis (mm)
+
 
 KIEROWNICA:Vairas
 WSPORNIK KIEROWNICY:Vairo iškyša
