@@ -18,6 +18,8 @@ granatowy:TAMSIAI MĖLYNA
 miętowy:MĖTINĖ
 różowy:ROŽINĖ
 biały:BALTA
+BRĄZOWY:RUDA
+ZŁOTY:AUKSINĖ
 niebieski:MĖLYNA
 czerwony:RAUDONA
 CZERWONY:RAUDONA

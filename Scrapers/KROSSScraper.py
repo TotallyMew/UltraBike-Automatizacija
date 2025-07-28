@@ -51,7 +51,8 @@ def scrapeAndTranslateToFileKROSS(bicycleUrlOrCode, outputFile):
                         "ŁADOWARKA (NAPIĘCIE/NATĘŻENIE)",
                         "CZAS ŁADOWANIA (H)",
                         "MAKSYMALNA PRĘDKOŚĆ WSPOMAGANIA (KM/H)",
-                        "NUMER CERTYFIKATU"
+                        "NUMER CERTYFIKATU",
+                        "TRYB WSPOMAGANIA"
                     ]:
                         continue
 
