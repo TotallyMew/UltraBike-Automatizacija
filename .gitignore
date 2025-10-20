@@ -1,22 +1,110 @@
-# Ignore Python bytecode files
+# ==========================================
+# Python
+# ==========================================
 *.pyc
 *.pyo
+*.pyd
 __pycache__/
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
 
-# Ignore Visual Studio solution files
+# ==========================================
+# Virtual Environments
+# ==========================================
+venv/
+env/
+ENV/
+.venv/
+
+# ==========================================
+# IDE & Editors
+# ==========================================
+# Visual Studio
 *.sln
-
-# Ignore Visual Studio user files (optional)
 .vs/
 .vscode/
 
-# Ignore loginInfo.json file
-loginInfo.json
+# PyCharm
+.idea/
 
-# Ignore .txt files starting with 'pabaigta'
+# Jupyter
+.ipynb_checkpoints/
+
+# ==========================================
+# SECURITY - CREDENTIALS & SECRETS
+# ==========================================
+# Credential files
+loginInfo.json
+credentials.txt
+*credentials*.txt
+*password*.txt
+*secret*.txt
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# API keys and tokens
+*apikey*.txt
+*token*.txt
+*.pem
+*.key
+*.cert
+
+# ==========================================
+# Application Specific
+# ==========================================
+# Temporary translation files
 pabaigta*.txt
 
+# PDFs
 *.pdf
 
- 
->>>>>>> develop
+# User-specific settings (contains file paths)
+Config/Settings/settings.txt
+settings.txt
+
+# Downloaded images (if temporary)
+# Uncomment if you don't want to track downloaded bike images
+# Assets/Downloads/
+# KROSS/
+
+# ==========================================
+# System Files
+# ==========================================
+# Windows
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Linux
+*~
+.directory
+
+# ==========================================
+# Logs & Databases
+# ==========================================
+*.log
+*.sql
+*.sqlite
+*.db
+
+# ==========================================
+# Temporary Files
+# ==========================================
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
