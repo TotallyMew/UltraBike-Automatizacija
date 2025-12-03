@@ -7,16 +7,10 @@ from Config.BrowserConfig.BrowserManager import BrowserManager
 from Config.Settings.SettingsManager import SettingsManager
 
 def main():
-
-
-
-
-
     browser_manager = BrowserManager()
     settings_manager = SettingsManager() #Add default browser choice and settings in SettingsManager.py
 
     # Read settings
-
     
     # Setup browser
     browserChoice = input("Pasirinkite naršyklę (Firefox (lėtai veikia!), Chrome, Edge): ")
@@ -28,7 +22,7 @@ def main():
     login_handler.login()
 
     while True:
-        brandInput = input("Įveskite tiekėją (KROSS, Rondo, Pinarello, Le Grand, Octane, Rascal, Basso, Lee Cougan): ").strip()
+        brandInput = input("Įveskite tiekėją (KROSS, Rondo, Pinarello, Le Grand, Octane, Rascal, Basso, Lee Cougan, Factor): ").strip()
         uploaderClass = getUploaderClass(brandInput)
 
         if uploaderClass is None:

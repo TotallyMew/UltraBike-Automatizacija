@@ -1,4 +1,4 @@
-﻿# Uploaders/baseUploader.py
+# Uploaders/baseUploader.py
 
 from abc import ABC, abstractmethod
 from Managers.translationManager import TranslationManager

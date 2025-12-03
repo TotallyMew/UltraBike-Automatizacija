@@ -1,4 +1,4 @@
-﻿class TranslationHandler:
+class TranslationHandler:
     @staticmethod
     def load_translations(translation_file):
         translations = {}

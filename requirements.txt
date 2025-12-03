@@ -1,0 +1,10 @@
+beautifulsoup4==4.14.2
+docx==0.2.4
+openpyxl==3.1.5
+python_docx==1.1.2
+pywinauto==0.6.9
+Requests==2.32.5
+selenium==4.37.0
+stdiomask==0.0.6
+urllib3==2.5.0
+webdriver_manager==4.0.2

@@ -11,6 +11,7 @@
     <OutputPath>.</OutputPath>
     <Name>UltraBike_Automatizacija</Name>
     <RootNamespace>UltraBike_Automatizacija</RootNamespace>
+    <SuppressEnvironmentCreationPrompt>True</SuppressEnvironmentCreationPrompt>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <DebugSymbols>true</DebugSymbols>
@@ -21,6 +22,7 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="remove_bom.py" />
     <Compile Include="Config\BrowserConfig\BrowserManager.py" />
     <Compile Include="Config\BrowserConfig\WindowManager.py" />
     <Compile Include="Config\LoginConfig\CredentialManager.py" />
@@ -34,6 +36,7 @@
     <Compile Include="Managers\imageUploader.py" />
     <Compile Include="Managers\translationManager.py" />
     <Compile Include="Scrapers\BassoScraper.py" />
+    <Compile Include="Scrapers\FactorScraper.py" />
     <Compile Include="Scrapers\KrossFromTxtScraper.py" />
     <Compile Include="Scrapers\KROSSScraper.py" />
     <Compile Include="Scrapers\LeeCouganScraper.py" />
@@ -46,6 +49,7 @@
     <Compile Include="uploaderFactory.py" />
     <Compile Include="Uploaders\baseUploader.py" />
     <Compile Include="Uploaders\Basso.py" />
+    <Compile Include="Uploaders\Factor.py" />
     <Compile Include="Uploaders\KrossFromTxt.py" />
     <Compile Include="Uploaders\LeeCougan.py" />
     <Compile Include="Uploaders\Octane.py" />
@@ -76,6 +80,7 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="Assets\PaltaIIENG.txt" />
+    <Content Include="Assets\Translations\FactorENG-LT.txt" />
     <Content Include="Config\LoginConfig\loginInfo.json" />
     <Content Include="Assets\Translations\BassoENG-LT.txt" />
     <Content Include="Assets\credentials.txt" />

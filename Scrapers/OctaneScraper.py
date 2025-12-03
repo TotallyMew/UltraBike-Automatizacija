@@ -1,4 +1,4 @@
-﻿import requests
+import requests
 from bs4 import BeautifulSoup
 from Utilities.TranslationHandler import TranslationHandler
 

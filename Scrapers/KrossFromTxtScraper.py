@@ -1,4 +1,4 @@
-﻿# # scrapers/KROSSScraper.py
+# # scrapers/KROSSScraper.py
 
 
 # internalCounter = 0

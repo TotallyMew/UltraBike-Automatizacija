@@ -1,4 +1,4 @@
-﻿# Standard library imports
+# Standard library imports
 import os
 import time
 from urllib.parse import urlparse, urljoin

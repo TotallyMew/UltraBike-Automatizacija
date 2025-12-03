@@ -1,4 +1,4 @@
-﻿# managers/imageUploader.py
+# managers/imageUploader.py
 
 from Utilities.ImageHandler import ImageHandler
 from Config.Settings.SettingsManager import SettingsManager

@@ -6,6 +6,7 @@ from Uploaders.Octane import Octane
 from Uploaders.Rascal import Rascal
 from Uploaders.Basso import Basso
 from Uploaders.LeeCougan import LeeCougan
+from Uploaders.Factor import Factor
 #from Uploaders.KrossFromTxt import KROSSTXT
 
 def getUploaderClass(brandName):
@@ -18,8 +19,8 @@ def getUploaderClass(brandName):
         "octane": Octane,
         "rascal": Rascal,
         "basso": Basso,
-        "leecougan":LeeCougan,
-        "trek": TREK
+        "leecougan": LeeCougan,
+        "trek": TREK,
+        "factor": Factor
        # "krosstxt": KROSSTXT
     }.get(name)
-
