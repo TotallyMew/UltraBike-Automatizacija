@@ -7,6 +7,13 @@ def scrapeAndTranslateToFileFactor(bicycleUrlOrCode, outputFile):
     keyTranslations = translation_handler.load_translations("Assets/Translations/FactorENG-LT.txt")
     valueTranslations = translation_handler.load_value_translations("Assets/Translations/vertimasSavybesENG-LT.txt")
 
+    # Skip these fields until translations are available
+    skip_fields = {
+        "barstem", "head tube diameter", "saddle rail clamps", 
+        "cable routing", "compatible components", "max chainring",
+        "wheel size", "manufacturer warranty"
+    }
+
     allData = []
     uniqueKeys = set()
 
@@ -38,6 +45,10 @@ def scrapeAndTranslateToFileFactor(bicycleUrlOrCode, outputFile):
                 
                 key = cells[0].get_text(strip=True)
                 value = cells[1].get_text(strip=True)
+                
+                # Skip fields we don't have translations for yet
+                if key.lower() in skip_fields:
+                    continue
                 
                 # Normalize special characters
                 # Replace inch symbol and similar characters
@@ -83,6 +94,17 @@ def scrapeAndTranslateToFileFactor(bicycleUrlOrCode, outputFile):
                 # If key is "Rotors" (from Groupset Specs), also duplicate to Front/Rear
                 if key.lower() == "rotors":
                     for subKey in ["Front Rotors", "Rear Rotors"]:
+                        translatedKey = keyTranslations.get(subKey, subKey)
+                        translatedValue = translation_handler.translate_first_word(
+                            valueTranslations.get(value.upper(), value), valueTranslations
+                        )
+                        tableData[translatedKey] = translatedValue
+                        uniqueKeys.add(translatedKey)
+                    continue
+
+                # If key is "Brake type", duplicate to Front/Rear Brakes
+                if key.lower() == "brake type":
+                    for subKey in ["Front Brakes", "Rear Brakes"]:
                         translatedKey = keyTranslations.get(subKey, subKey)
                         translatedValue = translation_handler.translate_first_word(
                             valueTranslations.get(value.upper(), value), valueTranslations

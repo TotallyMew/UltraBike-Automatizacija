@@ -2,17 +2,33 @@ import requests
 from bs4 import BeautifulSoup
 from Utilities.TranslationHandler import TranslationHandler
 
-def scrapeAndTranslateToFilePinarello(url, outputFile):
+def scrapeAndTranslateToFilePinarello(bicycleUrlOrCode, outputFile):
     translation_handler = TranslationHandler()
     keyTranslations = translation_handler.load_translations("Assets/Translations/PinarelloENG-LT.txt")
     valueTranslations = translation_handler.load_value_translations("Assets/Translations/vertimasSavybesENG-LT.txt")
+
+    # Ask user what to scrape
+    while True:
+        choice = input("Pasirinkite: (1) Frameset, (2) Pilnas dviratis: ").strip()
+        if choice == "1":
+            # Only frameset components
+            allowed_fields = {"frame", "fork", "seatpost", "seat clamp"}
+            filter_mode = True
+            break
+        elif choice == "2":
+            # All components
+            allowed_fields = set()
+            filter_mode = False
+            break
+        else:
+            print("Neteisingas pasirinkimas. Įveskite 1 arba 2.")
 
     allData = []
     uniqueKeys = set()
 
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(url, headers=headers, timeout=10)
+        response = requests.get(bicycleUrlOrCode, headers=headers, timeout=10)
         response.raise_for_status()
         soup = BeautifulSoup(response.content, 'html.parser')
 
@@ -35,12 +51,8 @@ def scrapeAndTranslateToFilePinarello(url, outputFile):
             if not title or not spec:
                 continue
 
-            if title.lower() == "axles disc":
-                for subTitle in ["Front Hub", "Rear Hub"]:
-                    translatedKey = keyTranslations.get(subTitle, subTitle)
-                    translatedValue = translation_handler.translate_first_word(valueTranslations.get(spec, spec), valueTranslations)
-                    tableData[translatedKey] = translatedValue
-                    uniqueKeys.add(translatedKey)
+            # Only process frameset fields if in frameset mode
+            if filter_mode and title.lower() not in allowed_fields:
                 continue
 
             translatedKey = keyTranslations.get(title, title)

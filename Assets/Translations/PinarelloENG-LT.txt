@@ -1,4 +1,5 @@
 Frame:Rėmas
+Frame:Rėmas
 Fork:Šakė
 Weight:Svoris
 Crankset and Chainrings:Švaistikliai
@@ -29,3 +30,7 @@ Tyres disc:Padangos - Padangos plotis (mm / col.)
 Motor:Variklis
 Battery:Akumuliatorius
 Display:Kompiuteriukas
+Frame:Rėmas
+Frame:Rėmas
+Frame:Rėmas
+Frame:Rėmas

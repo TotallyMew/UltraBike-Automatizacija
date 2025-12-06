@@ -6,7 +6,7 @@ REAR DERAILLEUR: Galinis pavarų perjungejas
 FRONT BRAKE: Priekiniai stabdžiai
 REAR BRAKE: Galiniai stabdžiai
 BRAKE LEVERS: Stabdžių rankenėlės
-DISCS: Stabdžių diskai (bendrinis terminas)
+DISCS: Stabdžių diskai
 SHIFTERS: Pavarų perjungimo rankenėlės
 CRANKS: Švaistikliai
 TEETHS: Priekiniai dantračiai
