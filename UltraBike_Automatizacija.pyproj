@@ -22,7 +22,6 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="remove_bom.py" />
     <Compile Include="Config\BrowserConfig\BrowserManager.py" />
     <Compile Include="Config\BrowserConfig\WindowManager.py" />
     <Compile Include="Config\LoginConfig\CredentialManager.py" />
@@ -58,6 +57,7 @@
     <Compile Include="Uploaders\Rondo.py" />
     <Compile Include="Uploaders\TREK.py" />
     <Compile Include="Utilities\FileHandler.py" />
+    <Compile Include="Utilities\FolderCreator.py" />
     <Compile Include="Utilities\ImageHandler.py" />
     <Compile Include="Utilities\ProductNavigationHandler.py" />
     <Compile Include="Uploaders\KROSS.py" />

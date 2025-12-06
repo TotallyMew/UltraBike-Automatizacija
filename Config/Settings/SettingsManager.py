@@ -1,5 +1,3 @@
-
-
 class SettingsManager:
     def __init__(self, settings_file="Config/Settings/settings.txt"):
         self.settings = []
@@ -24,7 +22,10 @@ class SettingsManager:
                 False,  # Setting 0
                 "C:\\Default\\Path\\To\\KROSS",  # Setting 1
                 True,   # Setting 2
-                "C:\\Default\\Desktop\\Path"  # Setting 3
+                "C:\\Default\\Desktop\\Path",  # Setting 3
+                True,   # Setting 4
+                False,  # Setting 5 - Extended mode
+                "C:\\Default\\Repository\\Path"  # Setting 6 - Repository path
             ]
     
     def get(self, index, default=None):
@@ -50,3 +51,11 @@ class SettingsManager:
     def get_desktop_path(self):
         """Returns desktop path (setting 3)"""
         return self.get(3, "C:\\Default\\Desktop\\Path")
+    
+    def is_extended_mode_enabled(self):
+        """Returns True/False for setting 5 - Extended mode toggle"""
+        return self.get(5, False)
+    
+    def get_repository_path(self):
+        """Returns repository path (setting 6)"""
+        return self.get(6, "C:\\Default\\Repository\\Path")
