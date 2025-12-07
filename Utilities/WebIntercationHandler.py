@@ -101,10 +101,9 @@ class WebInteractionHandler:
         return False
 
     def is_feature_found(self):
+        """Returns True if feature options are available, False if 'No results found'"""
         try:
-            no_results = self.driver.find_element(By.XPATH, "//*[contains(text(), 'No results found')]")
-            self.driver.execute_script("arguments[0].scrollIntoView();", no_results)
-            return True
+            self.driver.find_element(By.XPATH, "//*[contains(text(), 'No results found')]")
+            return False  # "No results found" exists = feature NOT found
         except NoSuchElementException:
-            print("NX")
-            return False
+            return True  # No "No results found" message = feature IS found
