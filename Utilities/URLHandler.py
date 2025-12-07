@@ -2,8 +2,6 @@ import re
 import requests
 import urllib3
 
-
-
 class URLHandler:
     @staticmethod
     def is_valid_url(url):
@@ -30,8 +28,7 @@ class URLHandler:
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
             response = requests.get(url, headers=headers, timeout=5, verify=False)
             return response.status_code == 200
-        except requests.RequestException as e:
-            print(f"Negalima pasiekti svetainės: {e}")
+        except requests.RequestException:
             return False
 
     @staticmethod
@@ -42,9 +39,13 @@ class URLHandler:
                 return input(f"Įveskite {brand_name.title()} kodą: ")
             else:
                 url = input(f"Įveskite {brand_name.title()} url: ")
+                
                 if not URLHandler.is_valid_url(url):
-                    print("Neteisingas URL formatas. Prašome įvesti tinkamą URL.")
-                elif not URLHandler.is_website_accessible(url):
-                    print("Svetainė nepasiekiama. Prašome patikrinti URL arba jūsų interneto ryšį.")
-                else:
-                    return url
+                    print("Neteisingas URL formatas arba svetainė nepasiekiama. Patikrinkite adresą ir bandykite dar kartą.")
+                    continue
+                
+                if not URLHandler.is_website_accessible(url):
+                    print("Svetainė nepasiekiama. Patikrinkite URL arba jūsų interneto ryšį.")
+                    continue
+                
+                return url

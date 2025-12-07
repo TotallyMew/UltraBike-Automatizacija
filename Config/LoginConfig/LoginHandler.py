@@ -1,4 +1,5 @@
 import stdiomask
+import re
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -21,6 +22,11 @@ class LoginHandler:
     def _log_error(self, message, exception=None, **context):
         if self.logger:
             self.logger.error("LoginHandler", message, exception=exception, **context)
+    
+    def _is_valid_email(self, email):
+        """Basic email validation"""
+        pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        return re.match(pattern, email) is not None
     
     def attempt_login(self, email: str, password: str) -> bool:
         self._log("Attempting login", email=email)
@@ -67,7 +73,13 @@ class LoginHandler:
                 self._log("Using saved credentials", email=self.saved_email)
                 return self.saved_email, self.saved_password
         
-        email = input("Įveskite el. paštą: ")
+        while True:
+            email = input("Įveskite el. paštą: ").strip()
+            if self._is_valid_email(email):
+                break
+            else:
+                ErrorManager.show_warning("Neteisingas el. pašto formatas. Bandykite dar kartą.")
+        
         password = stdiomask.getpass("Įveskite slaptažodį: ", mask="*")
         self.credential_manager.save_credentials(email, password)
         self._log("New credentials entered", email=email)
@@ -81,15 +93,25 @@ class LoginHandler:
         self.driver.maximize_window()
         self.driver.get("https://ultrabike.lt/admin-ultro/")
         
-        while True:
+        max_attempts = 3
+        attempts = 0
+        
+        while attempts < max_attempts:
             email, password = self.prompt_for_credentials()
             
             if self.attempt_login(email, password):
-                break
-                
+                return
+            
+            attempts += 1
             self.saved_email, self.saved_password = None, None
             
-            if not self.handle_login_retry():
-                self._log("Login cancelled by user")
+            if attempts < max_attempts:
+                if not self.handle_login_retry():
+                    self._log("Login cancelled by user")
+                    self.driver.quit()
+                    exit()
+            else:
+                ErrorManager.show_error("LOGIN_FAILED")
+                self._log("Max login attempts reached")
                 self.driver.quit()
                 exit()

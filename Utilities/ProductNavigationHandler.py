@@ -104,9 +104,10 @@ class ProductNavigationHandler:
                         ErrorManager.show_error("UPLOAD_PRODUCT_NOT_FOUND", code=unique_code)
                 except Exception as e:
                     self._log_error("Error during product navigation", exception=e, code=unique_code)
+                    ErrorManager.show_error("UPLOAD_PRODUCT_NOT_FOUND", code=unique_code)
 
                 if not self._retry_search():
-                    return
+                    raise ValueError(f"Product search cancelled for code: {unique_code}")
         else:
             while True:
                 try:
@@ -120,24 +121,45 @@ class ProductNavigationHandler:
                         ErrorManager.show_error("UPLOAD_PRODUCT_NOT_FOUND", code=unique_code)
                 except Exception as e:
                     self._log_error("Error during simple search", exception=e, code=unique_code)
+                    ErrorManager.show_error("UPLOAD_PRODUCT_NOT_FOUND", code=unique_code)
 
                 if not self._retry_search():
-                    return
+                    raise ValueError(f"Product search cancelled for code: {unique_code}")
 
     def _search_product(self, unique_code):
         self._log("Searching product (UB code)", code=unique_code)
+        
+        # Scroll to top to ensure all elements are visible
+        self.driver.execute_script("window.scrollTo(0, 0);")
+        time.sleep(0.5)
+        
         search_name = self.driver.find_element(By.NAME, "filter_column_name")
         search_name.clear()
         search_category = self.driver.find_element(By.NAME, "filter_column_name_category")
         search_category.clear()
         search_product = self.driver.find_element(By.NAME, "filter_column_reference")
-        search_product.clear() 
+        search_product.clear()
+        
+        # Scroll search field into view before entering code
+        self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", search_product)
+        time.sleep(0.3)
+        
         search_product.send_keys(unique_code + Keys.ENTER)
 
     def _search_product_simple(self, unique_code):
         self._log("Searching product (SKU)", code=unique_code)
+        
+        # Scroll to top
+        self.driver.execute_script("window.scrollTo(0, 0);")
+        time.sleep(0.5)
+        
         search_product = self.driver.find_element(By.ID, "bo_query")
-        search_product.clear() 
+        search_product.clear()
+        
+        # Scroll search field into view
+        self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", search_product)
+        time.sleep(0.3)
+        
         search_product.send_keys(unique_code + Keys.ENTER)
 
     def _retry_search(self):
