@@ -135,7 +135,7 @@ def main():
                     
                     logger.start_operation("Scrape Product", brand=brandInput, code=code)
                     try:
-                        uploader = uploaderClass(driver, brandInput.upper(), code, logger)
+                        uploader = uploaderClass(driver, brandInput.upper(), ultraBikeCode=code, logger=logger)
                         uploader.run()
                         logger.end_operation("Scrape Product", success=True)
                         ErrorManager.show_success("Dviratis sėkmingai apdorotas!")
