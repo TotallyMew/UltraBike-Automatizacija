@@ -1,4 +1,4 @@
-﻿GEARS: Pavarų skaičius
+GEARS: Pavarų skaičius
 FRAME: Rėmas
 FORK: Šakė
 FRONT DERAILLEUR: Priekinis pavarų perjungėjas

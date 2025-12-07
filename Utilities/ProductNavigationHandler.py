@@ -3,22 +3,26 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import (
-    TimeoutException,
-)
-import time
-
-from selenium.webdriver.common.by import By
+from selenium.common.exceptions import TimeoutException
 from Utilities.WebIntercationHandler import WebInteractionHandler
-
-
+from Utilities.ErrorManager import ErrorManager
 
 class ProductNavigationHandler:
-    def __init__(self, driver):
+    def __init__(self, driver, logger=None):
         self.driver = driver
+        self.logger = logger
         self.web_interaction = WebInteractionHandler(driver)
+    
+    def _log(self, message, **context):
+        if self.logger:
+            self.logger.log("ProductNavigation", message, **context)
+    
+    def _log_error(self, message, exception=None, **context):
+        if self.logger:
+            self.logger.error("ProductNavigation", message, exception=exception, **context)
 
     def fix_invisible_products(self):
+        self._log("Attempting to fix invisible products")
         prekesKodoElementID = "filter_column_name_category"
 
         try:
@@ -27,8 +31,9 @@ class ProductNavigationHandler:
             )
             self.driver.execute_script("arguments[0].scrollIntoView();", prekesElement)
             prekesElement.click()
+            self._log("Products filter clicked successfully")
         except TimeoutException:
-            print("Prekės mygtukas nerastas")
+            self._log("Products button not found, trying alternative methods")
             try:
                 self._navigate_via_products_button()
             except TimeoutException:
@@ -38,18 +43,23 @@ class ProductNavigationHandler:
                     try:
                         self._expand_menu_and_navigate()
                     except TimeoutException:
-                        print("Nepavyko rasti PrestaShop logo, tikslinkit programos kodą")
-        print("Problema sutvarkyta, darbas tęsiamas")
+                        self._log_error("All navigation methods failed")
+                        ErrorManager.show_error("BROWSER_ELEMENT_NOT_FOUND")
+                        return
+        
+        self._log("Products visibility fixed")
 
     def _navigate_via_products_button(self):
+        self._log("Navigating via products button")
         prekesMygtukasElement = WebDriverWait(self.driver, 3).until(
-            EC.element_to_be_clickable((By.ID, "subtab-AdminProducts")) #"Prekės" mygtukas PrestaShop administravimo skydelyje
+            EC.element_to_be_clickable((By.ID, "subtab-AdminProducts"))
         )
         self.driver.execute_script("arguments[0].scrollIntoView();", prekesMygtukasElement)
         prekesMygtukasElement.click()
 
     def _navigate_via_catalog_button(self):
-        katalogasMygtukasElement = WebDriverWait(self.driver, 3).until(#"Katalogas" mygtukas
+        self._log("Navigating via catalog button")
+        katalogasMygtukasElement = WebDriverWait(self.driver, 3).until(
             EC.element_to_be_clickable((By.ID, "subtab-AdminCatalog"))
         )
         self.driver.execute_script("arguments[0].scrollIntoView();", katalogasMygtukasElement)
@@ -61,8 +71,9 @@ class ProductNavigationHandler:
         prekesMygtukasElement.click()
 
     def _expand_menu_and_navigate(self):
+        self._log("Expanding menu and navigating")
         sutraukimoIsskleidimoMygtukasElement = WebDriverWait(self.driver, 3).until(
-            EC.element_to_be_clickable((By.CLASS_NAME, "menu-collapse"))#"<< arba >>" mygtukas kur sutrumpina arba išplečia meniu PrestaShop administravimo skydelyje
+            EC.element_to_be_clickable((By.CLASS_NAME, "menu-collapse"))
         )
         self.driver.execute_script("arguments[0].scrollIntoView();", sutraukimoIsskleidimoMygtukasElement)
         sutraukimoIsskleidimoMygtukasElement.click()
@@ -70,24 +81,29 @@ class ProductNavigationHandler:
         self._navigate_via_catalog_button()
 
     def navigate_to_product(self, brand_name, unique_code):
+        self._log("Navigating to product", brand=brand_name, code=unique_code)
+        
         if unique_code.startswith("UB-"):
             try:
                 WebDriverWait(self.driver, 3).until(
                     EC.element_to_be_clickable((By.NAME, "filter_column_name_category"))
                 )
-            except TimeoutException:      
+            except TimeoutException:
+                self._log("Filter not visible, fixing...")
                 self.fix_invisible_products()
 
             while True:
                 try:
                     self._search_product(unique_code)
                     if self.web_interaction.click_product_by_link(unique_code, brand_name):
-                        print("Prekė sėkmingai paspausta.")
-                        break  
+                        self._log("Product found and clicked", code=unique_code)
+                        ErrorManager.show_success("Prekė rasta!")
+                        break
                     else:
-                        print("Prekė su nurodytu kodu nerasta arba negali būti paspausta.")
+                        self._log_error("Product not found", code=unique_code)
+                        ErrorManager.show_error("UPLOAD_PRODUCT_NOT_FOUND", code=unique_code)
                 except Exception as e:
-                    print(f"Ivyko klaida: {e}")
+                    self._log_error("Error during product navigation", exception=e, code=unique_code)
 
                 if not self._retry_search():
                     return
@@ -96,17 +112,20 @@ class ProductNavigationHandler:
                 try:
                     self._search_product_simple(unique_code)
                     if self.web_interaction.click_product_by_code(unique_code):
-                        print("Prekė sėkmingai paspausta.")
+                        self._log("Product found and clicked (simple search)", code=unique_code)
+                        ErrorManager.show_success("Prekė rasta!")
                         break
                     else:
-                        print("Prekė su norodytu kodu nerasta")
+                        self._log_error("Product not found (simple search)", code=unique_code)
+                        ErrorManager.show_error("UPLOAD_PRODUCT_NOT_FOUND", code=unique_code)
                 except Exception as e:
-                    print(f"Ivyko klaida, prekė nerasta")
+                    self._log_error("Error during simple search", exception=e, code=unique_code)
 
                 if not self._retry_search():
                     return
 
-    def _search_product(self, unique_code): #UB code
+    def _search_product(self, unique_code):
+        self._log("Searching product (UB code)", code=unique_code)
         search_name = self.driver.find_element(By.NAME, "filter_column_name")
         search_name.clear()
         search_category = self.driver.find_element(By.NAME, "filter_column_name_category")
@@ -115,19 +134,11 @@ class ProductNavigationHandler:
         search_product.clear() 
         search_product.send_keys(unique_code + Keys.ENTER)
 
-    def _search_product_simple(self, unique_code): #SKU
+    def _search_product_simple(self, unique_code):
+        self._log("Searching product (SKU)", code=unique_code)
         search_product = self.driver.find_element(By.ID, "bo_query")
         search_product.clear() 
         search_product.send_keys(unique_code + Keys.ENTER)
 
     def _retry_search(self):
-        while True:
-            retry = input("Bandyti dar kartą? (t/n): ")
-            if retry.lower() == "t":
-                return True
-            elif retry.lower() == "n":
-                print("Darbas baigiamas.")
-                self.driver.quit()
-                exit()
-            else:
-                print("Įveskite T arba N")
+        return ErrorManager.prompt_retry("paiešką")

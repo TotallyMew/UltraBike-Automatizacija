@@ -6,8 +6,8 @@ from Utilities.TranslationHandler import TranslationHandler
 
 def scrapeAndTranslateToFileKROSS(bicycleUrlOrCode, outputFile):
     translation_handler = TranslationHandler()
-    keyTranslations = translation_handler.load_translations("Assets/Translations\\vertimasDetalesPL-LT.txt")
-    valueTranslations = translation_handler.load_value_translations("Assets/Translations\\vertimasSavybesPL-LT.txt")
+    keyTranslations = translation_handler.load_translations(r"D:\Iš desktop\Programavimas\Projects\Python\UltraBike_Automatizacija\Assets\Translations\vertimasSavybesPL-LT.txt")
+    valueTranslations = translation_handler.load_value_translations(r"D:\Iš desktop\Programavimas\Projects\Python\UltraBike_Automatizacija\Assets\Translations\vertimasSavybesLT-ENG.txt")
 
     allData = []
     uniqueKeys = set()

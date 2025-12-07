@@ -4,15 +4,26 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 from Config.LoginConfig.CredentialManager import CredentialManager
+from Utilities.ErrorManager import ErrorManager
 
 class LoginHandler:    
-    def __init__(self, driver, credential_manager: CredentialManager):
+    def __init__(self, driver, credential_manager: CredentialManager, logger=None):
         self.driver = driver
         self.credential_manager = credential_manager
+        self.logger = logger
         self.saved_email = None
         self.saved_password = None
     
+    def _log(self, message, **context):
+        if self.logger:
+            self.logger.log("LoginHandler", message, **context)
+    
+    def _log_error(self, message, exception=None, **context):
+        if self.logger:
+            self.logger.error("LoginHandler", message, exception=exception, **context)
+    
     def attempt_login(self, email: str, password: str) -> bool:
+        self._log("Attempting login", email=email)
         try:
             email_field = WebDriverWait(self.driver, 10).until(
                 EC.presence_of_element_located((By.ID, "email")))
@@ -26,16 +37,25 @@ class LoginHandler:
             password_field.send_keys(password)
             
             submit_button = self.driver.find_element(By.ID, "submit_login")
-            submit_button.click()            
-            print("Bandoma prisijungt...")
-            WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located((By.ID, "quick_select")))
+            submit_button.click()
             
-            print("Sėkmingai prisijungėt!")
+            self._log("Login form submitted")
+            
+            WebDriverWait(self.driver, 10).until(
+                EC.presence_of_element_located((By.ID, "quick_select"))
+            )
+            
+            self._log("Login successful", email=email)
+            ErrorManager.show_success("Sėkmingai prisijungėt!")
             return True
             
         except TimeoutException:
-            print("Prisijungti nepavyko.")
+            self._log_error("Login failed - timeout", email=email)
+            ErrorManager.show_error("LOGIN_FAILED")
+            return False
+        except Exception as e:
+            self._log_error("Login failed - unexpected error", exception=e, email=email)
+            ErrorManager.show_error("LOGIN_FAILED")
             return False
     
     def prompt_for_credentials(self) -> tuple:
@@ -44,25 +64,20 @@ class LoginHandler:
         if self.saved_email and self.saved_password:
             use_saved = input(f"Naudoti esamus duomenis prisijungimui ({self.saved_email})? (T/N): ").lower()
             if use_saved == 't':
+                self._log("Using saved credentials", email=self.saved_email)
                 return self.saved_email, self.saved_password
         
         email = input("Įveskite el. paštą: ")
         password = stdiomask.getpass("Įveskite slaptažodį: ", mask="*")
         self.credential_manager.save_credentials(email, password)
+        self._log("New credentials entered", email=email)
         return email, password
     
     def handle_login_retry(self) -> bool:
-        while True:
-            try_again = input("Bandyti dar kartą? (T/N): ").lower()
-            if try_again == "t":
-                return True
-            elif try_again == "n":
-                print("Darbas baigiamas...")
-                return False
-            else:
-                print("Įveskite 'T' arba 'N'.")
+        return ErrorManager.prompt_retry("prisijungimą")
     
     def login(self) -> None:
+        self._log("Starting login process")
         self.driver.maximize_window()
         self.driver.get("https://ultrabike.lt/admin-ultro/")
         
@@ -72,8 +87,9 @@ class LoginHandler:
             if self.attempt_login(email, password):
                 break
                 
-            self.saved_email, self.saved_password = None, None  # Reset on failure
+            self.saved_email, self.saved_password = None, None
             
             if not self.handle_login_retry():
+                self._log("Login cancelled by user")
                 self.driver.quit()
                 exit()

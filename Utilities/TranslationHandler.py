@@ -2,7 +2,7 @@ class TranslationHandler:
     @staticmethod
     def load_translations(translation_file):
         translations = {}
-        with open(translation_file, "r", encoding="utf-8") as file:
+        with open(translation_file, "r", encoding="utf-8") as file:  # FIXED
             for line in file:
                 parts = line.split(":", 1)
                 if len(parts) == 2:
@@ -14,7 +14,7 @@ class TranslationHandler:
     @staticmethod
     def load_value_translations(translation_file):
         value_translations = {}
-        with open(translation_file, "r", encoding="utf-8-sig") as file:
+        with open(translation_file, "r", encoding="utf-8") as file:  # FIXED: Changed from utf-8-sig
             for line in file:
                 parts = line.strip().split(":", 1)
                 if len(parts) == 2:
@@ -24,7 +24,7 @@ class TranslationHandler:
         return value_translations
 
     @staticmethod
-    def translate_first_word(value, value_translations): #spalvos neturetu eiti pro sita funkcija
+    def translate_first_word(value, value_translations):
         value_parts = value.split()
         if not value_parts:
             return value

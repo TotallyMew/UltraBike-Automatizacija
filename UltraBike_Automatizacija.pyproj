@@ -56,11 +56,14 @@
     <Compile Include="Uploaders\Rascal.py" />
     <Compile Include="Uploaders\Rondo.py" />
     <Compile Include="Uploaders\TREK.py" />
+    <Compile Include="Utilities\ErrorManager.py" />
     <Compile Include="Utilities\FileHandler.py" />
     <Compile Include="Utilities\FolderCreator.py" />
     <Compile Include="Utilities\ImageHandler.py" />
+    <Compile Include="Utilities\Logger.py" />
     <Compile Include="Utilities\ProductNavigationHandler.py" />
     <Compile Include="Uploaders\KROSS.py" />
+    <Compile Include="Utilities\SettingsMenu.py" />
     <Compile Include="Utilities\TranslationHandler.py" />
     <Compile Include="Utilities\URLHandler.py" />
     <Compile Include="Utilities\WebIntercationHandler.py" />

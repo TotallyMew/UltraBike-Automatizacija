@@ -1,35 +1,49 @@
-import os
+﻿import os
 import re
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from Config.Settings.SettingsManager import SettingsManager
+from Utilities.ErrorManager import ErrorManager
 
 class FolderCreator:
-    def __init__(self, driver):
+    def __init__(self, driver, logger=None):
         self.driver = driver
+        self.logger = logger
         self.settings_manager = SettingsManager()
         self.repository_path = self.settings_manager.get_repository_path()
     
+    def _log(self, message, **context):
+        if self.logger:
+            self.logger.log("FolderCreator", message, **context)
+    
+    def _log_error(self, message, exception=None, **context):
+        if self.logger:
+            self.logger.error("FolderCreator", message, exception=exception, **context)
+    
     def navigate_to_products(self):
         """Navigate to products page in PrestaShop admin"""
+        self._log("Navigating to products page")
         try:
             products_link = WebDriverWait(self.driver, 10).until(
                 EC.presence_of_element_located((By.ID, "subtab-AdminProducts"))
             )
             products_link.click()
-            print("Navigated to products page")
+            self._log("Clicked products link")
             
             WebDriverWait(self.driver, 10).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, "table.table"))
             )
+            self._log("Products page loaded")
+            return True
         except Exception as e:
-            print(f"Failed to navigate to products: {str(e)}")
+            self._log_error("Failed to navigate to products", exception=e)
+            ErrorManager.show_error("BROWSER_ELEMENT_NOT_FOUND")
             return False
-        return True
     
     def scrape_first_page(self):
         """Scrape products from first page only"""
+        self._log("Starting product scrape from first page")
         products = []
         
         try:
@@ -38,7 +52,7 @@ class FolderCreator:
             )
             
             rows = table.find_elements(By.CSS_SELECTOR, "tbody tr[data-product-id]")
-            print(f"Found {len(rows)} products on first page")
+            self._log("Found products on page", count=len(rows))
             
             for row in rows:
                 try:
@@ -51,11 +65,14 @@ class FolderCreator:
                     })
                         
                 except Exception as e:
-                    print(f"Error processing product: {str(e)}")
+                    self._log_error("Error processing product row", exception=e)
                     continue
+            
+            self._log("Product scraping completed", total=len(products))
         
         except Exception as e:
-            print(f"Error scraping products: {str(e)}")
+            self._log_error("Error scraping products", exception=e)
+            ErrorManager.show_error("SCRAPER_NO_DATA")
             return []
         
         return products
@@ -69,18 +86,19 @@ class FolderCreator:
     
     def sanitize_folder_name(self, name):
         """Remove invalid characters for folder names"""
-        # Replace invalid Windows folder characters
         invalid_chars = '<>:"/\\|?*'
         for char in invalid_chars:
             name = name.replace(char, '-')
-        # Remove trailing dots and spaces
         return name.strip('. ')
     
     def create_folder_structure(self, products):
         """Create parent (model) and child (full name) folder structure"""
         if not products:
-            print("No products to process")
+            self._log("No products to process")
+            ErrorManager.show_warning("Nerasta produktų apdorojimui")
             return
+        
+        self._log("Creating folder structure", product_count=len(products))
         
         # Group products by model
         model_groups = {}
@@ -95,18 +113,17 @@ class FolderCreator:
         # Create folders
         created_count = 0
         for model, full_names in model_groups.items():
-            # Create parent folder (model)
             model_folder = self.sanitize_folder_name(model)
             model_path = os.path.join(self.repository_path, model_folder)
             
             try:
                 os.makedirs(model_path, exist_ok=True)
-                print(f"Created model folder: {model_folder}")
+                self._log("Created model folder", model=model_folder)
             except Exception as e:
-                print(f"Error creating model folder '{model_folder}': {str(e)}")
+                self._log_error("Failed to create model folder", exception=e, model=model_folder)
+                ErrorManager.show_error("FOLDER_CREATE_ERROR", path=model_path)
                 continue
             
-            # Create child folders (full names)
             for full_name in full_names:
                 child_folder = self.sanitize_folder_name(full_name)
                 child_path = os.path.join(model_path, child_folder)
@@ -115,28 +132,22 @@ class FolderCreator:
                     os.makedirs(child_path, exist_ok=True)
                     created_count += 1
                 except Exception as e:
-                    print(f"Error creating child folder '{child_folder}': {str(e)}")
+                    self._log_error("Failed to create product folder", exception=e, folder=child_folder)
                     continue
         
-        print(f"\nFolder creation complete!")
-        print(f"Created {len(model_groups)} model folders")
-        print(f"Created {created_count} product folders")
-        print(f"Repository path: {self.repository_path}")
+        self._log("Folder creation complete", models=len(model_groups), products=created_count)
+        ErrorManager.show_success(f"Sukurta {len(model_groups)} modelių aplankų ir {created_count} produktų aplankų")
     
     def run(self):
         """Main execution flow"""
-        print("\n=== Folder Creator Mode ===")
-        print(f"Repository path: {self.repository_path}\n")
+        self._log("Starting folder creator", repository=self.repository_path)
         
         if not self.navigate_to_products():
-            print("Failed to navigate to products page")
             return
         
         products = self.scrape_first_page()
         
         if not products:
-            print("No products found")
             return
         
-        print(f"\nProcessing {len(products)} products...")
         self.create_folder_structure(products)

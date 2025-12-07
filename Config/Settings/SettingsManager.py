@@ -17,15 +17,12 @@ class SettingsManager:
                         self.settings.append(stripped_line)
         except FileNotFoundError:
             print(f"Warning: Settings file not found at {self.settings_file}")
-            # Initialize with default settings matching your structure
+            # Initialize with default settings
             self.settings = [
-                False,  # Setting 0
-                "C:\\Default\\Path\\To\\KROSS",  # Setting 1
-                True,   # Setting 2
-                "C:\\Default\\Desktop\\Path",  # Setting 3
-                True,   # Setting 4
-                False,  # Setting 5 - Extended mode
-                "C:\\Default\\Repository\\Path"  # Setting 6 - Repository path
+                False,  # Setting 0 - Download pictures and upload
+                "C:\\Default\\Path\\To\\KROSS",  # Setting 1 - KROSS path
+                False,  # Setting 2 - Extended mode
+                "C:\\Default\\Repository\\Path"  # Setting 3 - Repository path
             ]
     
     def get(self, index, default=None):
@@ -35,7 +32,20 @@ class SettingsManager:
         except IndexError:
             return default
     
-    # Specific getters for your known settings
+    def reload_settings(self):
+        """Reload settings from file - used after user edits settings"""
+        self.settings = []
+        self.load_settings()
+    
+    def save_settings(self):
+        """Save current settings back to file"""
+        with open(self.settings_file, 'w') as file:
+            for setting in self.settings:
+                if isinstance(setting, bool):
+                    file.write('true\n' if setting else 'false\n')
+                else:
+                    file.write(f"{setting}\n")
+    
     def download_pictures_and_upload(self):
         """Returns True/False for setting 0"""
         return self.get(0, False)
@@ -44,18 +54,10 @@ class SettingsManager:
         """Returns the KROSS path (setting 1)"""
         return self.get(1, "C:\\Default\\Path\\To\\KROSS")
     
-    def get_auto_download(self):
-        """Returns True/False for setting 2"""
-        return self.get(2, True)
-    
-    def get_desktop_path(self):
-        """Returns desktop path (setting 3)"""
-        return self.get(3, "C:\\Default\\Desktop\\Path")
-    
     def is_extended_mode_enabled(self):
-        """Returns True/False for setting 5 - Extended mode toggle"""
-        return self.get(5, False)
+        """Returns True/False for setting 2 - Extended mode toggle"""
+        return self.get(2, False)
     
     def get_repository_path(self):
-        """Returns repository path (setting 6)"""
-        return self.get(6, "C:\\Default\\Repository\\Path")
+        """Returns repository path (setting 3)"""
+        return self.get(3, "C:\\Default\\Repository\\Path")

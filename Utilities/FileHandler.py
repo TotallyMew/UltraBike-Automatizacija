@@ -11,7 +11,7 @@ class FileHandler:
         table_data = {}
 
         try:
-            with open(file_path, "r", encoding="utf-8") as file:
+            with open(file_path, "r", encoding="utf-8") as file:  # FIXED: Added encoding
                 for line in file:
                     if line.strip() == "":
                         if table_data:
@@ -30,9 +30,9 @@ class FileHandler:
 
         except FileNotFoundError:
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
-            with open(file_path, "w", encoding="utf-8") as file:
+            with open(file_path, "w", encoding="utf-8") as file:  # FIXED: Added encoding
                 file.write("")
-            return FileHandler.read_translated_file(file_path, "en")
+            return FileHandler.read_translated_file(file_path)
         except Exception as e:
             print(f"An error occurred: {e}")
 
