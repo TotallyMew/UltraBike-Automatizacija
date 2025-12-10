@@ -2,14 +2,22 @@ import requests
 from bs4 import BeautifulSoup
 from Utilities.TranslationHandler import TranslationHandler
 
-def scrapeAndTranslateToFileRascal(url, outputFile):
+def scrapeAndTranslateToFileRascal(url, outputFile, variant_index=None):
+    """
+    Scrape Rascal bicycle specifications
+    
+    Args:
+        url: URL to scrape
+        outputFile: Path to output file
+        variant_index: Which variant to use (0-based), None = prompt user (CLI)
+    """
     translation_handler = TranslationHandler()
     keyTranslations = translation_handler.load_translations("Assets/Translations/RascalENG-LT.txt")
     valueTranslations = translation_handler.load_value_translations("Assets/Translations/vertimasSavybesENG-LT.txt")
 
     allData = []
     uniqueKeys = set()
-    selected_option_index = None
+    selected_option_index = variant_index  # Use provided variant or None
 
     try:
         response = requests.get(url, timeout=10)
@@ -33,7 +41,9 @@ def scrapeAndTranslateToFileRascal(url, outputFile):
 
             key = keySpan.get_text(strip=True).title()
 
+            # Handle multiple variants
             if len(valueSpans) > 1 and selected_option_index is None:
+                # CLI mode - prompt user to choose variant
                 print("Rasta daugiau nei vienas prekės variantas puslapyje.")
                 for index, valueSpan in enumerate(valueSpans, start=1):
                     print(f"{index}: {valueSpan.get_text(strip=True)}")

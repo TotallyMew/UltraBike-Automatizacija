@@ -2,26 +2,40 @@ import requests
 from bs4 import BeautifulSoup
 from Utilities.TranslationHandler import TranslationHandler
 
-def scrapeAndTranslateToFilePinarello(bicycleUrlOrCode, outputFile):
+def scrapeAndTranslateToFilePinarello(bicycleUrlOrCode, outputFile, frameset_only=None):
+    """
+    Scrape Pinarello bicycle specifications
+    
+    Args:
+        bicycleUrlOrCode: URL to scrape
+        outputFile: Path to output file
+        frameset_only: True = frameset only, False = full bike, None = prompt user (CLI)
+    """
     translation_handler = TranslationHandler()
     keyTranslations = translation_handler.load_translations("Assets/Translations/PinarelloENG-LT.txt")
     valueTranslations = translation_handler.load_value_translations("Assets/Translations/vertimasSavybesENG-LT.txt")
 
-    # Ask user what to scrape
-    while True:
-        choice = input("Pasirinkite: (1) Frameset, (2) Pilnas dviratis: ").strip()
-        if choice == "1":
-            # Only frameset components
-            allowed_fields = {"frame", "fork", "seatpost", "seat clamp"}
-            filter_mode = True
-            break
-        elif choice == "2":
-            # All components
-            allowed_fields = set()
-            filter_mode = False
-            break
-        else:
-            print("Neteisingas pasirinkimas. Įveskite 1 arba 2.")
+    # Determine filter mode
+    if frameset_only is None:
+        # CLI mode - prompt user
+        while True:
+            choice = input("Pasirinkite: (1) Frameset, (2) Pilnas dviratis: ").strip()
+            if choice == "1":
+                frameset_only = True
+                break
+            elif choice == "2":
+                frameset_only = False
+                break
+            else:
+                print("Neteisingas pasirinkimas. Įveskite 1 arba 2.")
+    
+    # Set filter based on choice
+    if frameset_only:
+        allowed_fields = {"frame", "fork", "seatpost", "seat clamp"}
+        filter_mode = True
+    else:
+        allowed_fields = set()
+        filter_mode = False
 
     allData = []
     uniqueKeys = set()

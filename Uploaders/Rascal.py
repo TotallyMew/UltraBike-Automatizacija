@@ -1,22 +1,21 @@
-# uploaders/KROSS.py
-
-from Uploaders.baseUploader import ProductUploader
-from Scrapers.KROSSScraper import scrapeAndTranslateToFileKROSS
-from Managers.translationManager import TranslationManager
-from Managers.imageUploader import ImageUploader
+﻿from Uploaders.baseUploader import ProductUploader
+from Scrapers.RascalScraper import scrapeAndTranslateToFileRascal
 
 class Rascal(ProductUploader):
     def scrape(self):
-        # Performs scraping and writes to temporary files
+        # Get variant choice (if multiple variants exist)
+        # For now, None = prompt user in scraper (CLI mode)
+        # Later in GUI, this will come from dropdown
+        variant_index = None  # Let scraper prompt user
+        
         self.translationManager.prepareTranslationFiles(
-            scrape_func=scrapeAndTranslateToFileKROSS,
-            url=self.self.bicycleUrlOrCode
+            scrape_func=scrapeAndTranslateToFileRascal,
+            url=self.bicycleUrlOrCode,  # ← Fixed: removed double self
+            variant_index=variant_index
         )
 
     def uploadBrand(self):
         self.web_handler.add_brand_name(self.brandName)
 
     def uploadDescription(self):
-        # Optional: implement description logic using addDescriptionFromWord
         pass
-

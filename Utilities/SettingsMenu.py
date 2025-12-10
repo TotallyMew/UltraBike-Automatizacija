@@ -76,41 +76,45 @@ class SettingsMenu:
     def _change_kross_path(self):
         """Change KROSS path using folder picker"""
         print("\nAtidaroma aplanko pasirinkimo dialogo langas...")
-        
-        # Hide the root tkinter window
+        print("Jei nematote lango, patikrinkite užduočių juostą.")
+    
         root = Tk()
         root.withdraw()
-        root.attributes('-topmost', True)
-        
+        root.wm_attributes('-topmost', 1)
+        root.update()  # Force update before dialog
+    
         new_path = askdirectory(
             title="Pasirinkite KROSS nuotraukų aplanką",
-            initialdir=self.settings_manager.get_kross_path()
+            initialdir=self.settings_manager.get_kross_path(),
+            parent=root  # Explicit parent
         )
-        
+    
         root.destroy()
-        
+    
         if new_path:
             self.settings_manager.settings[1] = new_path
             print(f"Naujas kelias: {new_path}")
         else:
             print("Kelias nepakeistas")
-    
+
     def _change_repository_path(self):
         """Change repository path using folder picker"""
         print("\nAtidaroma aplanko pasirinkimo dialogo langas...")
-        
-        # Hide the root tkinter window
+        print("Jei nematote lango, patikrinkite užduočių juostą.")
+    
         root = Tk()
         root.withdraw()
-        root.attributes('-topmost', True)
-        
+        root.wm_attributes('-topmost', 1)
+        root.update()
+    
         new_path = askdirectory(
             title="Pasirinkite dviračių aplanką",
-            initialdir=self.settings_manager.get_repository_path()
+            initialdir=self.settings_manager.get_repository_path(),
+            parent=root
         )
-        
+    
         root.destroy()
-        
+    
         if new_path:
             self.settings_manager.settings[3] = new_path
             print(f"Naujas kelias: {new_path}")

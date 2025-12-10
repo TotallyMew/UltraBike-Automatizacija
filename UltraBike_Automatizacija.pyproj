@@ -27,6 +27,13 @@
     <Compile Include="Config\LoginConfig\CredentialManager.py" />
     <Compile Include="Config\LoginConfig\LoginHandler.py" />
     <Compile Include="Config\Settings\SettingsManager.py" />
+    <Compile Include="Database\DatabaseManager.py" />
+    <Compile Include="Database\SessionManager.py" />
+    <Compile Include="Database\SettingsManager.py" />
+    <Compile Include="Database\TranslationImporter.py" />
+    <Compile Include="Database\__init__.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="LentelesVertimas.py" />
     <Compile Include="main.py" />
     <Compile Include="Managers\FeatureUploader\featureUploader.py" />
@@ -34,6 +41,7 @@
     <Compile Include="Managers\FeatureUploader\languageSwitcher.py" />
     <Compile Include="Managers\imageUploader.py" />
     <Compile Include="Managers\translationManager.py" />
+    <Compile Include="migrate_settings.py" />
     <Compile Include="Scrapers\BassoScraper.py" />
     <Compile Include="Scrapers\FactorScraper.py" />
     <Compile Include="Scrapers\KrossFromTxtScraper.py" />
@@ -45,6 +53,12 @@
     <Compile Include="Scrapers\RondoScraper.py" />
     <Compile Include="Scrapers\TREKScraper.py" />
     <Compile Include="secondaryInput.py" />
+    <Compile Include="test_database.py" />
+    <Compile Include="test_login_handler.py" />
+    <Compile Include="test_session.py" />
+    <Compile Include="test_settings.py" />
+    <Compile Include="test_translationhandler.py" />
+    <Compile Include="test_translations.py" />
     <Compile Include="uploaderFactory.py" />
     <Compile Include="Uploaders\baseUploader.py" />
     <Compile Include="Uploaders\Basso.py" />
@@ -73,6 +87,7 @@
     <Folder Include="Config\LoginConfig\" />
     <Folder Include="Config\BrowserConfig\" />
     <Folder Include="Config\Settings\" />
+    <Folder Include="Database\" />
     <Folder Include="Managers\" />
     <Folder Include="Assets\Translations\" />
     <Folder Include="Managers\FeatureUploader\" />

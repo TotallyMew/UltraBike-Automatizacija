@@ -1,19 +1,20 @@
-# managers/translationManager.py
-
 import inspect
 from Utilities.TranslationHandler import TranslationHandler
 from Utilities.FileHandler import FileHandler
 from Utilities.ErrorManager import ErrorManager
 
 class TranslationManager:
-    def __init__(self, brandName, logger=None):
+    def __init__(self, brandName, db_manager=None, logger=None):
         self.brandName = brandName
         self.logger = logger
-        self.ltPath =  f"pabaigta{brandName}LT.txt"
+        self.db_manager = db_manager
+        
+        # Output file paths (still needed for intermediate processing)
+        self.ltPath = f"pabaigta{brandName}LT.txt"
         self.enPath = f"pabaigta{brandName}ENG.txt"
-        self.engDictPath = (r"D:\Iš desktop\Programavimas\Projects\Python\UltraBike_Automatizacija\Assets\Translations\vertimasSavybesLT-ENG.txt")
-        self.descriptionPath = (r"D:\Iš desktop\Programavimas\Projects\Python\UltraBike_Automatizacija\Assets\Translations\vertimasSavybesPL-LT.txt")
-        self.translation_handler = TranslationHandler()
+        
+        # Initialize handlers
+        self.translation_handler = TranslationHandler(db_manager)
         self.file_handler = FileHandler()
     
     def _log(self, message, **context):
@@ -25,27 +26,41 @@ class TranslationManager:
             self.logger.error("TranslationManager", message, exception=exception, **context)
     
     def prepareTranslationFiles(self, scrape_func, url, **kwargs):
+        """
+        Run scraper and prepare translation files
+        
+        Args:
+            scrape_func: Scraper function to call
+            url: URL or code to scrape
+            **kwargs: Additional parameters for scraper (driver, frameset_only, etc.)
+        """
         self._log("Preparing translation files", brand=self.brandName, url=url)
         
+        # Build arguments for scraper
         args = {
             "bicycleUrlOrCode": url,
             "outputFile": self.ltPath
         }
-
-        # Only add 'driver' if the scrape_func supports it
-        if 'driver' in inspect.signature(scrape_func).parameters:
-            args["driver"] = kwargs.get("driver")
-
+        
+        # Add any extra parameters the scraper accepts
+        scraper_params = inspect.signature(scrape_func).parameters
+        
+        for key, value in kwargs.items():
+            if key in scraper_params:
+                args[key] = value
+        
         try:
-            scrape_func(**args)
-            self._log("Scraping completed", output_file=self.ltPath)
+            # Run scraper
+            result = scrape_func(**args)
+            self._log("Scraping completed", output_file=self.ltPath, result=result)
             
-            self.translation_handler.translate_to_english(self.ltPath, self.enPath, self.engDictPath)
+            # Translate to English
+            self.translation_handler.translate_to_english(self.ltPath, self.enPath)
             self._log("Translation to English completed", output_file=self.enPath)
             
         except FileNotFoundError as e:
-            self._log_error("Translation dictionary not found", exception=e, dict_path=self.engDictPath)
-            ErrorManager.show_error("TRANSLATION_FILE_NOT_FOUND", file_path=self.engDictPath)
+            self._log_error("Translation file not found", exception=e)
+            ErrorManager.show_error("TRANSLATION_FILE_NOT_FOUND", file_path=str(e))
             raise
         except Exception as e:
             self._log_error("Translation preparation failed", exception=e, brand=self.brandName)
@@ -53,15 +68,21 @@ class TranslationManager:
             raise
 
     def translateAll(self):
-        self._log("Starting full translation")
+        """
+        Translate Lithuanian file to English
+        Uses database-powered translation
+        """
+        self._log("Starting translation to English")
         try:
-            self.translation_handler.translate_to_english(self.ltPath, self.enPath, self.engDictPath)
+            self.translation_handler.translate_to_english(self.ltPath, self.enPath)
             self._log("Translation completed successfully")
         except Exception as e:
             self._log_error("Translation failed", exception=e)
+            ErrorManager.show_error("TRANSLATION_FAILED")
             raise
 
     def loadLT(self):
+        """Load Lithuanian translations from file"""
         self._log("Loading Lithuanian translations", file=self.ltPath)
         try:
             data = self.file_handler.read_translated_file(self.ltPath)
@@ -73,6 +94,7 @@ class TranslationManager:
             raise
 
     def loadEN(self):
+        """Load English translations from file"""
         self._log("Loading English translations", file=self.enPath)
         try:
             data = self.file_handler.read_translated_file(self.enPath)
@@ -84,5 +106,8 @@ class TranslationManager:
             raise
 
     def loadLV(self):
+        """
+        Load Latvian translations (uses English as base)
+        """
         self._log("Loading Latvian translations (using EN)", file=self.enPath)
         return self.file_handler.read_translated_file(self.enPath)

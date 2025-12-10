@@ -1,0 +1,157 @@
+from datetime import datetime
+
+class SettingsManager:
+    """
+    Manage settings in database with named keys instead of index-based access
+    """
+    
+    def __init__(self, db_manager):
+        self.db = db_manager
+        self._initialize_defaults()
+    
+    def _initialize_defaults(self):
+        """
+        Insert default settings if they don't exist
+        """
+        defaults = [
+            # Paths
+            ('download_images', 'false', 'bool', 'paths', 
+             'Download and upload bicycle images', 'false'),
+            
+            ('kross_download_path', 'C:\\Users\\User\\Desktop\\Darbas\\Dviraciai\\KROSS', 
+             'path', 'paths', 'Path to download KROSS images', ''),
+            
+            ('repository_path', 'C:\\Users\\User\\Desktop', 
+             'path', 'paths', 'Base path for bicycle folders', ''),
+            
+            # Processing
+            ('extended_mode', 'true', 'bool', 'processing', 
+             'Enable extended mode (folder creator, scraper menu)', 'false'),
+            
+            # Browser
+            ('browser_choice', 'Chrome', 'string', 'browser', 
+             'Preferred browser (Chrome/Firefox/Edge)', 'Chrome'),
+            
+            ('last_brand', '', 'string', 'processing', 
+             'Last used brand', ''),
+            
+            # UI
+            ('window_width', '1200', 'int', 'ui', 
+             'Window width in pixels', '1200'),
+            
+            ('window_height', '800', 'int', 'ui', 
+             'Window height in pixels', '800'),
+            
+            ('theme', 'light', 'string', 'ui', 
+             'UI theme (light/dark)', 'light'),
+        ]
+        
+        cursor = self.db.conn.cursor()
+        
+        for key, value, value_type, category, description, default_value in defaults:
+            # Check if exists
+            existing = cursor.execute(
+                "SELECT key FROM settings WHERE key = ?", (key,)
+            ).fetchone()
+            
+            if not existing:
+                cursor.execute("""
+                    INSERT INTO settings 
+                    (key, value, value_type, category, description, default_value)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (key, value, value_type, category, description, default_value))
+        
+        self.db.conn.commit()
+    
+    def get(self, key: str, default=None):
+        """
+        Get setting value (automatically converts type)
+        """
+        cursor = self.db.conn.cursor()
+        result = cursor.execute("""
+            SELECT value, value_type 
+            FROM settings 
+            WHERE key = ?
+        """, (key,)).fetchone()
+        
+        if not result:
+            return default
+        
+        value = result['value']
+        value_type = result['value_type']
+        
+        # Convert to proper type
+        if value_type == 'bool':
+            return value.lower() == 'true'
+        elif value_type == 'int':
+            return int(value)
+        elif value_type == 'path' or value_type == 'string':
+            return value
+        else:
+            return value
+    
+    def set(self, key: str, value):
+        """
+        Set setting value
+        """
+        cursor = self.db.conn.cursor()
+        
+        # Convert value to string
+        if isinstance(value, bool):
+            value_str = 'true' if value else 'false'
+        else:
+            value_str = str(value)
+        
+        cursor.execute("""
+            UPDATE settings 
+            SET value = ?, updated_at = ?
+            WHERE key = ?
+        """, (value_str, datetime.now(), key))
+        
+        self.db.conn.commit()
+    
+    def get_all_by_category(self, category: str) -> dict:
+        """
+        Get all settings in a category
+        Returns dict of {key: value}
+        """
+        cursor = self.db.conn.cursor()
+        results = cursor.execute("""
+            SELECT key, value, value_type 
+            FROM settings 
+            WHERE category = ?
+            ORDER BY key
+        """, (category,)).fetchall()
+        
+        settings = {}
+        for row in results:
+            key = row['key']
+            value = row['value']
+            value_type = row['value_type']
+            
+            # Convert type
+            if value_type == 'bool':
+                settings[key] = value.lower() == 'true'
+            elif value_type == 'int':
+                settings[key] = int(value)
+            else:
+                settings[key] = value
+        
+        return settings
+    
+    # Convenience methods (backward compatible with old SettingsManager)
+    
+    def download_pictures_and_upload(self) -> bool:
+        return self.get('download_images', False)
+    
+    def get_kross_path(self) -> str:
+        return self.get('kross_download_path', '')
+    
+    def is_extended_mode_enabled(self) -> bool:
+        return self.get('extended_mode', False)
+    
+    def get_repository_path(self) -> str:
+        return self.get('repository_path', '')
+    
+    def get_browser_choice(self) -> str:
+        return self.get('browser_choice', 'Chrome')
