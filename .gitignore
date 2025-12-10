@@ -113,7 +113,7 @@ $RECYCLE.BIN/
 ultrabike.db
 *.db
 *.db-journal
-
+*.dat
 # Session files (machine-specific)
 session_*.enc
 
