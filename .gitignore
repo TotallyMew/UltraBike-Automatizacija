@@ -108,3 +108,16 @@ $RECYCLE.BIN/
 *.swp
 *.swo
 *~
+
+# Database (generated on first run)
+ultrabike.db
+*.db
+*.db-journal
+
+# Session files (machine-specific)
+session_*.enc
+
+# Test scripts (temporary development files)
+test_*.py
+import_translations_final.py
+migrate_settings.py
