@@ -2,12 +2,12 @@
 
 import requests
 from bs4 import BeautifulSoup
-from Utilities.TranslationHandler import TranslationHandler
+from Utilities.TranslationHandler import TranslationHandler, load_translations, load_value_translations
 
 def scrapeAndTranslateToFileKROSS(bicycleUrlOrCode, outputFile):
     translation_handler = TranslationHandler()
-    keyTranslations = translation_handler.load_translations(r"D:\Iš desktop\Programavimas\Projects\Python\UltraBike_Automatizacija\Assets\Translations\vertimasDetalesPL-LT.txt")
-    valueTranslations = translation_handler.load_value_translations(r"D:\Iš desktop\Programavimas\Projects\Python\UltraBike_Automatizacija\Assets\Translations\vertimasSavybesLT-ENG.txt")
+    keyTranslations = load_translations("Assets/Translations/vertimasDetalesPL-LT.txt")
+    valueTranslations = load_value_translations("Assets/Translations/vertimasSavybesLT-ENG.txt")
 
     allData = []
     uniqueKeys = set()
@@ -37,7 +37,7 @@ def scrapeAndTranslateToFileKROSS(bicycleUrlOrCode, outputFile):
 
                     if value.upper() == "BRAK" or value.upper() == "NIE" or value.upper() == "TAK":
                         continue 
-                    if key.upper() in [ #Prideti vertimus ir naujas savybes ultrabike, reikia atsirinkti kurios svarbios
+                    if key.upper() in [
                         "KOLOR BAZOWY",
                         "PRODUCENT",
                         "OSOBA ODPOWIEDZIALNA W UE",
@@ -55,7 +55,6 @@ def scrapeAndTranslateToFileKROSS(bicycleUrlOrCode, outputFile):
                         "TRYB WSPOMAGANIA"
                     ]:
                         continue
-
 
                     translatedKey = keyTranslations.get(key, key)
                     translatedValue = valueTranslations.get(value, value)

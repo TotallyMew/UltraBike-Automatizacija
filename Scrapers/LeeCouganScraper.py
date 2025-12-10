@@ -5,23 +5,20 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, StaleElementReferenceException
 from bs4 import BeautifulSoup
-from Utilities.TranslationHandler import TranslationHandler
+from Utilities.TranslationHandler import TranslationHandler, load_translations, load_value_translations
 from Utilities.WebIntercationHandler import WebInteractionHandler
-
 
 def loadCredentials(driver):
     web_handler = WebInteractionHandler(driver)
     username, password = web_handler.load_credentials("Assets/credentials.txt")
     return username, password
 
-
 def scrapeAndTranslateToFileLeeCougan(target_code, outputFile, driver):
     translation_handler = TranslationHandler()
-    keyTranslations = translation_handler.load_translations("Assets/Translations/LeeCouganENG-LT-LT.txt")
-    valueTranslations = translation_handler.load_value_translations("Assets/Translations/vertimasSavybesENG-LT.txt")
+    keyTranslations = load_translations("Assets/Translations/LeeCouganENG-LT.txt")
+    valueTranslations = load_value_translations("Assets/Translations/vertimasSavybesENG-LT.txt")
 
     username, password = loadCredentials(driver)
-
 
     close_driver_at_end = False
     if driver is None:

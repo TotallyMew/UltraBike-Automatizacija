@@ -7,13 +7,10 @@ class TranslationManager:
     def __init__(self, brandName, db_manager=None, logger=None):
         self.brandName = brandName
         self.logger = logger
-        self.db_manager = db_manager
-        
-        # Output file paths (still needed for intermediate processing)
         self.ltPath = f"pabaigta{brandName}LT.txt"
         self.enPath = f"pabaigta{brandName}ENG.txt"
-        
-        # Initialize handlers
+        self.engDictPath = "Assets/Translations/vertimasSavybesLT-ENG.txt"  # ← Fixed
+        self.descriptionPath = "Assets/Translations/vertimasSavybesPL-LT.txt"  # ← Fixed
         self.translation_handler = TranslationHandler(db_manager)
         self.file_handler = FileHandler()
     
@@ -26,41 +23,35 @@ class TranslationManager:
             self.logger.error("TranslationManager", message, exception=exception, **context)
     
     def prepareTranslationFiles(self, scrape_func, url, **kwargs):
-        """
-        Run scraper and prepare translation files
-        
-        Args:
-            scrape_func: Scraper function to call
-            url: URL or code to scrape
-            **kwargs: Additional parameters for scraper (driver, frameset_only, etc.)
-        """
         self._log("Preparing translation files", brand=self.brandName, url=url)
-        
-        # Build arguments for scraper
+    
         args = {
             "bicycleUrlOrCode": url,
             "outputFile": self.ltPath
         }
-        
-        # Add any extra parameters the scraper accepts
+
+        # Get scraper's accepted parameters
         scraper_params = inspect.signature(scrape_func).parameters
-        
+    
+        # Add kwargs that scraper accepts
         for key, value in kwargs.items():
             if key in scraper_params:
                 args[key] = value
-        
+    
+        # Only add 'driver' if scraper supports it
+        if 'driver' in scraper_params:
+            args["driver"] = kwargs.get("driver")
+
         try:
-            # Run scraper
-            result = scrape_func(**args)
-            self._log("Scraping completed", output_file=self.ltPath, result=result)
-            
-            # Translate to English
-            self.translation_handler.translate_to_english(self.ltPath, self.enPath)
+            scrape_func(**args)
+            self._log("Scraping completed", output_file=self.ltPath)
+        
+            self.translation_handler.translate_to_english(self.ltPath, self.enPath, self.engDictPath)
             self._log("Translation to English completed", output_file=self.enPath)
-            
+        
         except FileNotFoundError as e:
-            self._log_error("Translation file not found", exception=e)
-            ErrorManager.show_error("TRANSLATION_FILE_NOT_FOUND", file_path=str(e))
+            self._log_error("Translation dictionary not found", exception=e, dict_path=self.engDictPath)
+            ErrorManager.show_error("TRANSLATION_FILE_NOT_FOUND", file_path=self.engDictPath)
             raise
         except Exception as e:
             self._log_error("Translation preparation failed", exception=e, brand=self.brandName)

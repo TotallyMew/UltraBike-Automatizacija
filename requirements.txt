@@ -8,3 +8,4 @@ selenium==4.37.0
 stdiomask==0.0.6
 urllib3==2.5.0
 webdriver_manager==4.0.2
+cryptography==41.0.7

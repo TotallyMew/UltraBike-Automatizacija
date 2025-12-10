@@ -1,11 +1,11 @@
 ﻿import requests
 from bs4 import BeautifulSoup
-from Utilities.TranslationHandler import TranslationHandler
+from Utilities.TranslationHandler import TranslationHandler, load_translations, load_value_translations
 
 def scrapeAndTranslateToFileFactor(bicycleUrlOrCode, outputFile):
     translation_handler = TranslationHandler()
-    keyTranslations = translation_handler.load_translations("Assets/Translations/FactorENG-LT.txt")
-    valueTranslations = translation_handler.load_value_translations("Assets/Translations/vertimasSavybesENG-LT.txt")
+    keyTranslations = load_translations("Assets/Translations/FactorENG-LT.txt")
+    valueTranslations = load_value_translations("Assets/Translations/vertimasSavybesENG-LT.txt")
 
     # Skip these fields until translations are available
     skip_fields = {
@@ -51,22 +51,19 @@ def scrapeAndTranslateToFileFactor(bicycleUrlOrCode, outputFile):
                     continue
                 
                 # Normalize special characters
-                # Replace inch symbol and similar characters
                 key = key.replace('\u201c', '"').replace('\u201d', '"').replace('\u2033', '"').replace('″', '"')
                 value = value.replace('\u201c', '"').replace('\u201d', '"').replace('\u2033', '"').replace('″', '"')
 
                 if not key or not value or value == '-':
                     continue
 
-                # Clean up the value - remove "Standard Package: n/a" prefix if present
+                # Clean up the value
                 if "Standard Package: n/a" in value:
                     value = value.replace("Standard Package: n/a", "").strip()
 
                 # Handle special keys that need to be split
                 if key.lower() == "max rotor size":
-                    # Split front and rear if both specified
                     if "front" in value.lower() and "rear" in value.lower():
-                        # Extract just the size (e.g., "160mm" from "160mm front & rear")
                         import re
                         size_match = re.search(r'(\d+mm)', value)
                         if size_match:
@@ -81,7 +78,6 @@ def scrapeAndTranslateToFileFactor(bicycleUrlOrCode, outputFile):
                                 uniqueKeys.add(translatedKey)
                             continue
                     else:
-                        # Apply to both front and rear
                         for subKey in ["Front Rotors", "Rear Rotors"]:
                             translatedKey = keyTranslations.get(subKey, subKey)
                             translatedValue = translation_handler.translate_first_word(
@@ -91,7 +87,6 @@ def scrapeAndTranslateToFileFactor(bicycleUrlOrCode, outputFile):
                             uniqueKeys.add(translatedKey)
                         continue
 
-                # If key is "Rotors" (from Groupset Specs), also duplicate to Front/Rear
                 if key.lower() == "rotors":
                     for subKey in ["Front Rotors", "Rear Rotors"]:
                         translatedKey = keyTranslations.get(subKey, subKey)
@@ -102,7 +97,6 @@ def scrapeAndTranslateToFileFactor(bicycleUrlOrCode, outputFile):
                         uniqueKeys.add(translatedKey)
                     continue
 
-                # If key is "Brake type", duplicate to Front/Rear Brakes
                 if key.lower() == "brake type":
                     for subKey in ["Front Brakes", "Rear Brakes"]:
                         translatedKey = keyTranslations.get(subKey, subKey)

@@ -1,23 +1,14 @@
 import requests
 from bs4 import BeautifulSoup
-from Utilities.TranslationHandler import TranslationHandler
+from Utilities.TranslationHandler import TranslationHandler, load_translations, load_value_translations
 
 def scrapeAndTranslateToFileRascal(url, outputFile, variant_index=None):
-    """
-    Scrape Rascal bicycle specifications
-    
-    Args:
-        url: URL to scrape
-        outputFile: Path to output file
-        variant_index: Which variant to use (0-based), None = prompt user (CLI)
-    """
     translation_handler = TranslationHandler()
-    keyTranslations = translation_handler.load_translations("Assets/Translations/RascalENG-LT.txt")
-    valueTranslations = translation_handler.load_value_translations("Assets/Translations/vertimasSavybesENG-LT.txt")
+    keyTranslations = load_translations("Assets/Translations/RascalENG-LT.txt")
+    valueTranslations = load_value_translations("Assets/Translations/vertimasSavybesENG-LT.txt")
 
     allData = []
     uniqueKeys = set()
-    selected_option_index = variant_index  # Use provided variant or None
 
     try:
         response = requests.get(url, timeout=10)
@@ -42,15 +33,15 @@ def scrapeAndTranslateToFileRascal(url, outputFile, variant_index=None):
             key = keySpan.get_text(strip=True).title()
 
             # Handle multiple variants
-            if len(valueSpans) > 1 and selected_option_index is None:
-                # CLI mode - prompt user to choose variant
+            if len(valueSpans) > 1 and variant_index is None:
+                # CLI mode - prompt user
                 print("Rasta daugiau nei vienas prekės variantas puslapyje.")
                 for index, valueSpan in enumerate(valueSpans, start=1):
                     print(f"{index}: {valueSpan.get_text(strip=True)}")
                 while True:
                     try:
-                        selected_option_index = int(input("Pasirinkite pagal kurį rašyti: ")) - 1
-                        if 0 <= selected_option_index < len(valueSpans):
+                        variant_index = int(input("Pasirinkite pagal kurį rašyti: ")) - 1
+                        if 0 <= variant_index < len(valueSpans):
                             break
                         else:
                             print("Neteisingas pasirinkimas.")
@@ -58,8 +49,8 @@ def scrapeAndTranslateToFileRascal(url, outputFile, variant_index=None):
                         print("Neteisingas pasirinkimas. Pasirinkite per naują.")
 
             selectedValue = (
-                valueSpans[selected_option_index].get_text(strip=True)
-                if len(valueSpans) > 1
+                valueSpans[variant_index].get_text(strip=True)
+                if len(valueSpans) > 1 and variant_index is not None
                 else valueSpans[0].get_text(strip=True)
             )
 

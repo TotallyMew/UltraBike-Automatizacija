@@ -1,11 +1,11 @@
 import requests
 from bs4 import BeautifulSoup
-from Utilities.TranslationHandler import TranslationHandler
+from Utilities.TranslationHandler import TranslationHandler, load_translations, load_value_translations
 
 def scrapeAndTranslateToFileOctaneOne(url, outputFile):
     translation_handler = TranslationHandler()
-    keyTranslations = translation_handler.load_translations("Assets/Translations/OctaneENG-LT.txt")
-    valueTranslations = translation_handler.load_value_translations("Assets/Translations/vertimasSavybesENG-LT.txt")
+    keyTranslations = load_translations("Assets/Translations/OctaneENG-LT.txt")
+    valueTranslations = load_value_translations("Assets/Translations/vertimasSavybesENG-LT.txt")
 
     allData = []
     uniqueKeys = set()

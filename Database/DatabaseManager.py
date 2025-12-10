@@ -19,106 +19,106 @@ class DatabaseManager:
         print(f"✓ Connected to database: {self.db_path}")
     
     def _initialize_schema(self):
-        """Create all tables if they don't exist"""
+        """Initialize database schema (silently if already exists)"""
         cursor = self.conn.cursor()
-        
-        print("Creating database schema...")
-        
-        # 1. Credentials table
+    
+        # Check if schema already exists
+        cursor.execute("""
+            SELECT name FROM sqlite_master 
+            WHERE type='table' AND name='settings'
+        """)
+    
+        schema_exists = cursor.fetchone() is not None
+    
+        if not schema_exists:
+            print("Creating database schema...")
+    
+        # Create tables
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS credentials (
-                service TEXT PRIMARY KEY,
-                username TEXT NOT NULL,
-                password_encrypted BLOB NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT UNIQUE NOT NULL,
+                encrypted_password TEXT NOT NULL,
+                salt TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        print("  ✓ credentials table")
-        
-        # 2. Processing history
+        if not schema_exists:
+            print("  ✓ credentials table")
+    
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS processing_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 brand TEXT NOT NULL,
                 product_code TEXT NOT NULL,
                 url_or_code TEXT,
-                status TEXT NOT NULL CHECK(status IN ('success', 'failed', 'partial')),
-                error_message TEXT,
-                duration_seconds INTEGER,
+                status TEXT NOT NULL,
+                duration_seconds REAL,
                 features_uploaded INTEGER,
                 images_uploaded INTEGER,
-                processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                error_message TEXT,
+                processed_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        print("  ✓ processing_history table")
-        
-        # 3. Recent products
+        if not schema_exists:
+            print("  ✓ processing_history table")
+    
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS recent_products (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 brand TEXT NOT NULL,
                 product_code TEXT NOT NULL,
                 url_or_code TEXT,
-                last_used TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 use_count INTEGER DEFAULT 1,
+                last_used TEXT DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(brand, product_code)
             )
         """)
-        print("  ✓ recent_products table")
-        
-        # 4. Translations
+        if not schema_exists:
+            print("  ✓ recent_products table")
+    
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS translations (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 source_lang TEXT NOT NULL,
                 target_lang TEXT NOT NULL,
-                category TEXT NOT NULL,
                 source_term TEXT NOT NULL,
-                target_term TEXT NOT NULL,
-                notes TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                created_by TEXT DEFAULT 'system',
+                translated_term TEXT NOT NULL,
+                category TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(source_lang, target_lang, source_term)
             )
         """)
-        print("  ✓ translations table")
-        
-        # 5. Settings
+        if not schema_exists:
+            print("  ✓ translations table")
+    
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL,
-                value_type TEXT NOT NULL CHECK(value_type IN ('bool', 'string', 'int', 'path')),
+                value_type TEXT DEFAULT 'string',
                 category TEXT,
                 description TEXT,
                 default_value TEXT,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        print("  ✓ settings table")
-        
-        # Create indexes
-        print("Creating indexes...")
-        
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_translations_lookup 
-            ON translations(source_lang, target_lang, source_term)
-        """)
-        
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_history_date 
-            ON processing_history(processed_at DESC)
-        """)
-        
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_recent_used 
-            ON recent_products(last_used DESC)
-        """)
-        
+        if not schema_exists:
+            print("  ✓ settings table")
+    
+        if not schema_exists:
+            print("Creating indexes...")
+    
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_processing_brand ON processing_history(brand)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_processing_status ON processing_history(status)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_processing_date ON processing_history(processed_at)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_translations_lookup ON translations(source_lang, target_lang, source_term)")
+    
         self.conn.commit()
-        print("✓ Database schema initialized\n")
+    
+        if not schema_exists:
+            print("✓ Database schema initialized")
     
     def close(self):
         """Close database connection"""

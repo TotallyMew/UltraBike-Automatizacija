@@ -34,6 +34,23 @@
     <Compile Include="Database\__init__.py">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="GUI\app.py" />
+    <Compile Include="GUI\components\navigation.py" />
+    <Compile Include="GUI\components\top_bar.py" />
+    <Compile Include="GUI\components\__init__.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="GUI\main.py" />
+    <Compile Include="GUI\screens\history_screen.py" />
+    <Compile Include="GUI\screens\loading_screen.py" />
+    <Compile Include="GUI\screens\login_screen.py" />
+    <Compile Include="GUI\screens\master_password_prompt.py" />
+    <Compile Include="GUI\screens\master_password_screen.py" />
+    <Compile Include="GUI\screens\settings_screen.py" />
+    <Compile Include="GUI\screens\upload_screen.py" />
+    <Compile Include="GUI\screens\__init__.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="LentelesVertimas.py" />
     <Compile Include="main.py" />
     <Compile Include="Managers\FeatureUploader\featureUploader.py" />
@@ -55,6 +72,7 @@
     <Compile Include="secondaryInput.py" />
     <Compile Include="test_database.py" />
     <Compile Include="test_login_handler.py" />
+    <Compile Include="test_refactored_system.py" />
     <Compile Include="test_session.py" />
     <Compile Include="test_settings.py" />
     <Compile Include="test_translationhandler.py" />
@@ -88,10 +106,13 @@
     <Folder Include="Config\BrowserConfig\" />
     <Folder Include="Config\Settings\" />
     <Folder Include="Database\" />
+    <Folder Include="GUI\components\" />
+    <Folder Include="GUI\screens\" />
     <Folder Include="Managers\" />
     <Folder Include="Assets\Translations\" />
     <Folder Include="Managers\FeatureUploader\" />
     <Folder Include="Assets\" />
+    <Folder Include="GUI\" />
     <Folder Include="Scrapers\" />
     <Folder Include="Utilities\" />
     <Folder Include="Uploaders\" />

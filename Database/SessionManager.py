@@ -1,232 +1,189 @@
-﻿import os
+﻿"""
+Session Manager - Handles 24h auto-login sessions
+Uses machine-specific encryption for security
+"""
+
+import os
 import json
 import hashlib
-import uuid
+import secrets
 from datetime import datetime, timedelta
 from cryptography.fernet import Fernet
 import base64
 
 class SessionManager:
-    """
-    Manages master password, credential encryption, and 24-hour sessions
-    """
-    
     def __init__(self, db_manager):
         self.db = db_manager
         self.session_file = "session.dat"
-        self.master_key = None  # Derived from master password
-        self.credentials_cache = {}  # Decrypted credentials in memory
+        self.session_duration_hours = 24
     
-    # ==================== MASTER PASSWORD ====================
+    def _get_machine_id(self):
+        """Get unique machine identifier"""
+        # Use computer name + username as machine ID
+        import platform
+        import getpass
+        machine_string = f"{platform.node()}-{getpass.getuser()}"
+        return hashlib.sha256(machine_string.encode()).hexdigest()
     
-    def _derive_key_from_password(self, password: str) -> bytes:
-        """
-        Convert password to encryption key using SHA256
-        """
-        password_bytes = password.encode('utf-8')
-        key_bytes = hashlib.sha256(password_bytes).digest()
-        return base64.urlsafe_b64encode(key_bytes)
+    def _get_encryption_key(self):
+        """Generate encryption key from machine ID"""
+        machine_id = self._get_machine_id()
+        # Derive a valid Fernet key from machine ID
+        key_material = hashlib.sha256(machine_id.encode()).digest()
+        return base64.urlsafe_b64encode(key_material)
     
-    def set_master_password(self, password: str) -> bool:
-        """
-        Set master password (first-time setup)
-        """
-        if len(password) < 6:
-            print("❌ Password must be at least 6 characters")
-            return False
-        
-        self.master_key = self._derive_key_from_password(password)
-        print("✓ Master password set")
-        return True
+    def _encrypt(self, data: str) -> str:
+        """Encrypt data with machine-specific key"""
+        key = self._get_encryption_key()
+        f = Fernet(key)
+        return f.encrypt(data.encode()).decode()
     
-    def unlock_with_password(self, password: str) -> bool:
-        """
-        Unlock session with master password
-        """
-        test_key = self._derive_key_from_password(password)
-        
-        # Test if password is correct by trying to decrypt a credential
+    def _decrypt(self, encrypted_data: str) -> str:
+        """Decrypt data with machine-specific key"""
+        try:
+            key = self._get_encryption_key()
+            f = Fernet(key)
+            return f.decrypt(encrypted_data.encode()).decode()
+        except:
+            return None
+    
+    def has_master_password(self) -> bool:
+        """Check if master password is set in database"""
         cursor = self.db.conn.cursor()
-        test_cred = cursor.execute(
-            "SELECT password_encrypted FROM credentials LIMIT 1"
-        ).fetchone()
-        
-        if test_cred:
-            try:
-                cipher = Fernet(test_key)
-                cipher.decrypt(test_cred['password_encrypted'])
-                self.master_key = test_key
-                print("✓ Master password correct")
-                return True
-            except:
-                print("❌ Incorrect master password")
-                return False
-        else:
-            # No credentials yet, accept password
-            self.master_key = test_key
-            print("✓ Master password accepted (first credential)")
-            return True
     
-    # ==================== CREDENTIAL ENCRYPTION ====================
+        # Check if master password hash exists in settings
+        result = cursor.execute("""
+            SELECT value FROM settings WHERE key = 'master_password_hash'
+        """).fetchone()
     
-    def save_credential(self, service: str, username: str, password: str):
-        """
-        Save encrypted credential to database
-        """
-        if not self.master_key:
-            raise Exception("Master key not set")
+        return result is not None
+    
+    def store_credentials(self, email: str, password: str, master_password: str):
+        """Store encrypted credentials in database"""
+        # Hash master password for verification
+        master_hash = hashlib.sha256(master_password.encode()).hexdigest()
         
-        cipher = Fernet(self.master_key)
-        encrypted_password = cipher.encrypt(password.encode('utf-8'))
+        # Generate salt
+        salt = secrets.token_hex(16)
         
+        # Encrypt password with master password + salt
+        combined_key = hashlib.sha256(f"{master_password}{salt}".encode()).digest()
+        fernet_key = base64.urlsafe_b64encode(combined_key)
+        f = Fernet(fernet_key)
+        encrypted_password = f.encrypt(password.encode()).decode()
+        
+        # Store in database
         cursor = self.db.conn.cursor()
         cursor.execute("""
             INSERT OR REPLACE INTO credentials 
-            (service, username, password_encrypted, updated_at)
+            (email, encrypted_password, salt, updated_at)
             VALUES (?, ?, ?, ?)
-        """, (service, username, encrypted_password, datetime.now()))
+        """, (email, encrypted_password, salt, datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+        
+        # Also store master password hash in settings
+        cursor.execute("""
+            INSERT OR REPLACE INTO settings (key, value, updated_at)
+            VALUES ('master_password_hash', ?, ?)
+        """, (master_hash, datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
         
         self.db.conn.commit()
-        
-        # Cache in memory
-        self.credentials_cache[service] = {
-            'username': username,
-            'password': password
-        }
-        
-        print(f"✓ Saved credentials for {service}")
     
-    def get_credential(self, service: str) -> dict:
-        """
-        Get decrypted credential from database
-        """
-        # Check cache first
-        if service in self.credentials_cache:
-            return self.credentials_cache[service]
+    def verify_master_password(self, master_password: str) -> bool:
+        """Verify master password against stored hash"""
+        cursor = self.db.conn.cursor()
+        result = cursor.execute("""
+            SELECT value FROM settings WHERE key = 'master_password_hash'
+        """).fetchone()
         
-        if not self.master_key:
-            raise Exception("Master key not set")
+        if not result:
+            return False
+        
+        stored_hash = result[0]
+        provided_hash = hashlib.sha256(master_password.encode()).hexdigest()
+        
+        return stored_hash == provided_hash
+    
+    def get_credentials(self, master_password: str) -> tuple:
+        """Get credentials using master password"""
+        if not self.verify_master_password(master_password):
+            return None, None
         
         cursor = self.db.conn.cursor()
         result = cursor.execute("""
-            SELECT username, password_encrypted 
-            FROM credentials 
-            WHERE service = ?
-        """, (service,)).fetchone()
+            SELECT email, encrypted_password, salt FROM credentials
+            ORDER BY updated_at DESC LIMIT 1
+        """).fetchone()
         
         if not result:
-            return None
+            return None, None
         
-        cipher = Fernet(self.master_key)
-        decrypted_password = cipher.decrypt(result['password_encrypted']).decode('utf-8')
+        email, encrypted_password, salt = result
         
-        credential = {
-            'username': result['username'],
-            'password': decrypted_password
-        }
-        
-        # Cache it
-        self.credentials_cache[service] = credential
-        
-        return credential
+        # Decrypt password
+        try:
+            combined_key = hashlib.sha256(f"{master_password}{salt}".encode()).digest()
+            fernet_key = base64.urlsafe_b64encode(combined_key)
+            f = Fernet(fernet_key)
+            password = f.decrypt(encrypted_password.encode()).decode()
+            return email, password
+        except:
+            return None, None
     
-    # ==================== SESSION FILE (24-HOUR AUTO-LOGIN) ====================
-    
-    def _get_machine_key(self) -> bytes:
-        """
-        Generate machine-specific encryption key
-        Uses MAC address UUID for uniqueness
-        """
-        machine_id = str(uuid.getnode())  # MAC address as unique ID
-        key_bytes = hashlib.sha256(machine_id.encode('utf-8')).digest()
-        return base64.urlsafe_b64encode(key_bytes)
-    
-    def create_session(self):
-        """
-        Create 24-hour session file with encrypted credentials
-        """
-        if not self.master_key:
-            raise Exception("Master key not set")
-        
-        # Get all credentials
-        cursor = self.db.conn.cursor()
-        all_creds = cursor.execute("SELECT service FROM credentials").fetchall()
-        
+    def create_session(self, email: str, password: str):
+        """Create 24h session file"""
         session_data = {
-            'created_at': datetime.now().isoformat(),
-            'expires_at': (datetime.now() + timedelta(hours=24)).isoformat(),
-            'credentials': {}
+            'email': email,
+            'password': password,
+            'expires': (datetime.now() + timedelta(hours=self.session_duration_hours)).isoformat()
         }
         
-        # Decrypt and store all credentials
-        for cred_row in all_creds:
-            service = cred_row['service']
-            cred = self.get_credential(service)
-            if cred:
-                session_data['credentials'][service] = cred
-        
-        # Encrypt session data with machine-specific key
-        machine_key = self._get_machine_key()
-        cipher = Fernet(machine_key)
-        
-        session_json = json.dumps(session_data)
-        encrypted_session = cipher.encrypt(session_json.encode('utf-8'))
+        # Encrypt session data
+        encrypted_data = self._encrypt(json.dumps(session_data))
         
         # Write to file
-        with open(self.session_file, 'wb') as f:
-            f.write(encrypted_session)
-        
-        print(f"✓ Session created (expires in 24 hours)")
+        with open(self.session_file, 'w') as f:
+            f.write(encrypted_data)
     
-    def load_session(self) -> bool:
-        """
-        Load session from file (auto-login if valid)
-        Returns True if session loaded successfully
-        """
+    def validate_session(self) -> bool:
+        """Check if session file exists and is valid"""
         if not os.path.exists(self.session_file):
             return False
         
         try:
-            # Read encrypted session
-            with open(self.session_file, 'rb') as f:
-                encrypted_session = f.read()
+            with open(self.session_file, 'r') as f:
+                encrypted_data = f.read()
             
-            # Decrypt with machine key
-            machine_key = self._get_machine_key()
-            cipher = Fernet(machine_key)
-            decrypted_json = cipher.decrypt(encrypted_session).decode('utf-8')
-            
-            session_data = json.loads(decrypted_json)
-            
-            # Check if expired
-            expires_at = datetime.fromisoformat(session_data['expires_at'])
-            if datetime.now() > expires_at:
-                print("⚠ Session expired (>24 hours old)")
-                os.remove(self.session_file)
+            # Decrypt
+            decrypted_data = self._decrypt(encrypted_data)
+            if not decrypted_data:
                 return False
             
-            # Load credentials into cache
-            self.credentials_cache = session_data['credentials']
+            session_data = json.loads(decrypted_data)
             
-            # Reconstruct master key (we can't store it, but we have decrypted creds)
-            # This is a workaround - session is valid, credentials are decrypted
-            
-            print(f"✓ Session loaded (expires in {(expires_at - datetime.now()).seconds // 3600}h)")
-            return True
-            
-        except Exception as e:
-            print(f"⚠ Session file corrupted: {e}")
-            if os.path.exists(self.session_file):
-                os.remove(self.session_file)
+            # Check expiration
+            expires = datetime.fromisoformat(session_data['expires'])
+            return datetime.now() < expires
+        
+        except:
             return False
     
-    def destroy_session(self):
-        """
-        Delete session file (logout)
-        """
+    def get_credentials_from_session(self) -> tuple:
+        """Get credentials from valid session"""
+        if not self.validate_session():
+            return None, None
+        
+        try:
+            with open(self.session_file, 'r') as f:
+                encrypted_data = f.read()
+            
+            decrypted_data = self._decrypt(encrypted_data)
+            session_data = json.loads(decrypted_data)
+            
+            return session_data['email'], session_data['password']
+        except:
+            return None, None
+    
+    def clear_session(self):
+        """Delete session file"""
         if os.path.exists(self.session_file):
             os.remove(self.session_file)
-            print("✓ Session destroyed")
-        
-        self.credentials_cache = {}
-        self.master_key = None

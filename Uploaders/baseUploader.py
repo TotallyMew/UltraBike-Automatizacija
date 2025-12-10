@@ -1,5 +1,6 @@
 ﻿from abc import ABC, abstractmethod
 import time
+from datetime import datetime
 from Database.DatabaseManager import DatabaseManager
 from Database.SessionManager import SessionManager
 from Database.SettingsManager import SettingsManager
@@ -18,47 +19,35 @@ def getCode():
     return code
 
 class ProductUploader(ABC):
-    """
-    Base class for all brand uploaders
-    Now integrated with database for tracking and settings
-    """
-    
-    def __init__(self, driver, brandName, ultraBikeCode=None, bicycleUrlOrCode=None, 
-                 db_manager=None, logger=None):
+    def __init__(self, driver, brandName, ultraBikeCode=None, bicycleUrlOrCode=None, db_manager=None, brand_options=None, logger=None):
         self.driver = driver
         self.logger = logger
         self.brandName = brandName
+        self.brand_options = brand_options or {}  # ← Add this
 
-        # Database managers (create or use provided)
-        if db_manager:
-            self.db = db_manager
-            self.own_db = False
-        else:
-            self.db = DatabaseManager()
-            self.own_db = True
-        
-        self.session_manager = SessionManager(self.db)
-        self.settings_manager = SettingsManager(self.db)
+        self.features_uploaded = 0  # ← Add this
+        self.images_uploaded = 0    # ← Add this
 
-        # Navigation and utilities
         self.navigation_manager = ProductNavigationHandler(driver, logger)
         self.url_handler = URLHandler()
         self.web_handler = WebInteractionHandler(driver)
-        self.translation_handler = TranslationHandler(self.db)
+        self.translation_handler = TranslationHandler()
 
-        # Get product codes
         self.ultraBikeCode = ultraBikeCode if ultraBikeCode is not None else getCode()
         self.bicycleUrlOrCode = bicycleUrlOrCode if bicycleUrlOrCode is not None else self.url_handler.get_brand_url(brandName)
 
-        # Managers that depend on brand and database
+        # Database setup
+        if db_manager:
+            self.db = db_manager
+        else:
+            self.db = DatabaseManager()
+
+        self.session_manager = SessionManager(self.db)
+        self.settings_manager = SettingsManager(self.db)
+
         self.translationManager = TranslationManager(brandName, self.db, logger)
         self.imageUploader = ImageUploader(driver, brandName, logger)
         self.featureUploader = FeatureUploader(driver, logger)
-        
-        # Tracking
-        self.start_time = None
-        self.features_uploaded = 0
-        self.images_uploaded = False
     
     def _log(self, message, **context):
         if self.logger:
@@ -202,14 +191,30 @@ class ProductUploader(ABC):
             raise
 
     def uploadImages(self):
-        """Upload product images"""
         self._log("Uploading images")
         try:
+            # Get image count before upload
+            import os
+            from Utilities.FileHandler import FileHandler
+        
+            # Construct download path (same logic as ImageHandler)
+            base_directory = self.settings_manager.get_kross_path()
+            sanitized_name = FileHandler.sanitize_filename(self.ultraBikeCode)
+            download_directory = os.path.join(base_directory, sanitized_name)
+        
+            # Count images if directory exists
+            if os.path.exists(download_directory):
+                self.images_uploaded = len([f for f in os.listdir(download_directory) 
+                                            if f.lower().endswith(('.jpg', '.jpeg', '.png'))])
+
+        
             self.imageUploader.uploadAll(self.bicycleUrlOrCode)
             self._log("Images uploaded successfully")
+            ErrorManager.show_success("Nuotraukos sėkmingai įkeltos!")
         except Exception as e:
             self._log_error("Image upload failed", exception=e)
-            ErrorManager.show_warning("Nuotraukų įkelti nepavyko, tęsiama be nuotraukų")
+            ErrorManager.show_error("UPLOAD_IMAGE_FAILED")
+            # Don't raise - continue without images
 
     def uploadFeatures(self):
         """Upload product features in all languages"""
@@ -219,6 +224,10 @@ class ProductUploader(ABC):
             enData = self.translationManager.loadEN()
             lvData = self.translationManager.loadLV()
             
+             # Count features
+            self.features_uploaded = sum(len(table) for table in ltData)  # ← Add this
+
+
             self.features_uploaded = sum(len(table) for table in ltData)
             
             self._log("Feature data loaded", lt_count=len(ltData), en_count=len(enData))

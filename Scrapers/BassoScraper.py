@@ -7,12 +7,9 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException,
 from bs4 import BeautifulSoup
 import re
 from Utilities.WebIntercationHandler import WebInteractionHandler
-from Utilities.TranslationHandler import TranslationHandler
+from Utilities.TranslationHandler import TranslationHandler, load_translations, load_value_translations
 
 internalCounter = 0
-
-
-
 
 def loadCredentials(driver):
     web_handler = WebInteractionHandler(driver)
@@ -23,11 +20,7 @@ def process_special_values(raw_key: str, raw_val: str, target_language: str = 'l
     """Process special value cases with language-specific handling"""
     processed_val = raw_val
     
-    # # 1. Handle (if compatible) replacement only for Lithuanian
-    # if target_language.lower() == 'lt' and "(if compatible)" in processed_val:
-    #     processed_val = processed_val.replace("(if compatible)", "(jeigu suderinama)")
-    
-    # 2. Handle rotor values splitting
+    # Handle rotor values splitting
     if raw_key.lower() in ["front rotors", "rear rotors"]:
         if "Front:" in processed_val and "Rear:" in processed_val:
             if "front" in raw_key.lower():
@@ -36,7 +29,7 @@ def process_special_values(raw_key: str, raw_val: str, target_language: str = 'l
                 processed_val = processed_val.split("Rear:")[1].strip()
             processed_val = processed_val.replace(" mm", "mm").replace("  ", " ")
     
-    # 3. Handle spacer values formatting
+    # Handle spacer values formatting
     if raw_key.lower() == "spacers":
         matches = re.findall(r'(\d+\s*[xX]\s*\d+)', processed_val)
         if matches:
@@ -48,11 +41,8 @@ def scrapeAndTranslateToFileBasso(bicycleUrlOrCode, outputFile, driver):
     username, password = loadCredentials(driver)
 
     translation_handler = TranslationHandler()
-
-
-   
-    keyTranslations = translation_handler.load_translations("Assets/Translations/BassoENG-LT.txt")
-    valueTranslations = translation_handler.load_value_translations("Assets/Translations/vertimasSavybesENG-LT.txt")
+    keyTranslations = load_translations("Assets/Translations/BassoENG-LT.txt")
+    valueTranslations = load_value_translations("Assets/Translations/vertimasSavybesENG-LT.txt")
     
     wait = WebDriverWait(driver, 15)
     original_tab = driver.current_window_handle
