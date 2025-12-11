@@ -13,10 +13,17 @@ def loadCredentials(driver):
     username, password = web_handler.load_credentials("Assets/credentials.txt")
     return username, password
 
-def scrapeAndTranslateToFileLeeCougan(target_code, outputFile, driver):
-    translation_handler = TranslationHandler()
-    keyTranslations = load_translations("Assets/Translations/LeeCouganENG-LT.txt")
-    valueTranslations = load_value_translations("Assets/Translations/vertimasSavybesENG-LT.txt")
+def scrapeAndTranslateToFileLeeCougan(target_code, outputFile, driver, db_manager=None):
+    translation_handler = TranslationHandler(db_manager)
+    
+    # Component names (keys)
+    keyTranslations = translation_handler.get_translations_by_category("EN", "LT", "component")
+    
+    # Materials, colors, properties (values)
+    valueTranslations = {}
+    valueTranslations.update(translation_handler.get_translations_by_category("EN", "LT", "material"))
+    valueTranslations.update(translation_handler.get_translations_by_category("EN", "LT", "color"))
+    valueTranslations.update(translation_handler.get_translations_by_category("EN", "LT", "property"))
 
     username, password = loadCredentials(driver)
 
@@ -121,7 +128,7 @@ def scrapeAndTranslateToFileLeeCougan(target_code, outputFile, driver):
                 if not keyElem or not valElem:
                     continue
 
-                rawKey = keyElem.get_text(strip=True).replace(":", "").title()
+                rawKey = keyElem.get_text(strip=True).replace(":", "").upper()
                 rawVal = valElem.get_text(strip=True)
 
                 if not rawKey or not rawVal:

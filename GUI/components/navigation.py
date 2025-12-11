@@ -26,6 +26,11 @@ class NavigationRail:
                     label="Istorija"
                 ),
                 ft.NavigationRailDestination(
+                    icon=ft.Icons.TRANSLATE,
+                    selected_icon=ft.Icons.TRANSLATE,
+                    label="Vertimai"
+                ),
+                ft.NavigationRailDestination(
                     icon=ft.Icons.SETTINGS,
                     selected_icon=ft.Icons.SETTINGS,
                     label="Nustatymai"

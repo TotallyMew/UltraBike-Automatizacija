@@ -1,15 +1,21 @@
 import requests
 from bs4 import BeautifulSoup
-from Utilities.TranslationHandler import TranslationHandler, load_translations, load_value_translations
+from Utilities.TranslationHandler import TranslationHandler
 
-def scrapeAndTranslateToFilePinarello(bicycleUrlOrCode, outputFile, frameset_only=None):
-    translation_handler = TranslationHandler()
-    keyTranslations = load_translations("Assets/Translations/PinarelloENG-LT.txt")
-    valueTranslations = load_value_translations("Assets/Translations/vertimasSavybesENG-LT.txt")
+def scrapeAndTranslateToFilePinarello(bicycleUrlOrCode, outputFile, frameset_only=None, db_manager=None):
+    translation_handler = TranslationHandler(db_manager)
+    
+    # Component names (keys)
+    keyTranslations = translation_handler.get_translations_by_category("EN", "LT", "component")
+    
+    # Materials, colors, properties (values)
+    valueTranslations = {}
+    valueTranslations.update(translation_handler.get_translations_by_category("EN", "LT", "material"))
+    valueTranslations.update(translation_handler.get_translations_by_category("EN", "LT", "color"))
+    valueTranslations.update(translation_handler.get_translations_by_category("EN", "LT", "property"))
 
     # Determine mode
     if frameset_only is None:
-        # CLI mode - prompt user
         while True:
             choice = input("Pasirinkite: (1) Frameset, (2) Pilnas dviratis: ").strip()
             if choice == "1":
@@ -21,11 +27,10 @@ def scrapeAndTranslateToFilePinarello(bicycleUrlOrCode, outputFile, frameset_onl
             else:
                 print("Neteisingas pasirinkimas. Įveskite 1 arba 2.")
     
-    # Set allowed fields based on mode
     if frameset_only:
-        allowed_fields = {"frame", "fork", "seatpost", "seat clamp"}
+        allowed_fields = {"FRAME", "FORK", "SEATPOST", "SEAT CLAMP"}
     else:
-        allowed_fields = set()  # All fields allowed
+        allowed_fields = set()
 
     allData = []
     uniqueKeys = set()
@@ -49,14 +54,14 @@ def scrapeAndTranslateToFilePinarello(bicycleUrlOrCode, outputFile, frameset_onl
             if not titleDiv or not specDiv:
                 continue
 
-            title = titleDiv.get_text(strip=True).replace(':', '').strip().title()
+            title = titleDiv.get_text(strip=True).replace(':', '').strip().upper()  # ← .upper()
             spec = specDiv.get_text(strip=True).strip()
 
             if not title or not spec:
                 continue
 
             # Filter if frameset mode
-            if frameset_only and title.lower() not in allowed_fields:
+            if frameset_only and title not in allowed_fields:
                 continue
 
             translatedKey = keyTranslations.get(title, title)

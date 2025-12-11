@@ -1,11 +1,18 @@
 import requests
 from bs4 import BeautifulSoup
-from Utilities.TranslationHandler import TranslationHandler, load_translations, load_value_translations
+from Utilities.TranslationHandler import TranslationHandler
 
-def scrapeAndTranslateToFileOctaneOne(url, outputFile):
-    translation_handler = TranslationHandler()
-    keyTranslations = load_translations("Assets/Translations/OctaneENG-LT.txt")
-    valueTranslations = load_value_translations("Assets/Translations/vertimasSavybesENG-LT.txt")
+def scrapeAndTranslateToFileOctaneOne(url, outputFile, db_manager=None):
+    translation_handler = TranslationHandler(db_manager)
+    
+    # Component names (keys)
+    keyTranslations = translation_handler.get_translations_by_category("EN", "LT", "component")
+    
+    # Materials, colors, properties (values)
+    valueTranslations = {}
+    valueTranslations.update(translation_handler.get_translations_by_category("EN", "LT", "material"))
+    valueTranslations.update(translation_handler.get_translations_by_category("EN", "LT", "color"))
+    valueTranslations.update(translation_handler.get_translations_by_category("EN", "LT", "property"))
 
     allData = []
     uniqueKeys = set()
@@ -26,14 +33,14 @@ def scrapeAndTranslateToFileOctaneOne(url, outputFile):
             if not keyElem or not valueElem:
                 continue
 
-            key = keyElem.get_text(strip=True).title()
+            key = keyElem.get_text(strip=True).upper()  # ← .upper()
             value = valueElem.get_text(strip=True)
 
-            if key.lower() == "derailleurs":
-                frontKey = "Front Derailleur"
-                rearKey = "Rear Derailleur"
-                frontTranslated = "Priekinis pavarų perjungėjas"
-                rearTranslated = "Galinis pavarų perjungejas"
+            if key == "DERAILLEURS":
+                frontKey = "FRONT DERAILLEUR"
+                rearKey = "REAR DERAILLEUR"
+                frontTranslated = keyTranslations.get(frontKey, "Priekinis pavarų perjungėjas")
+                rearTranslated = keyTranslations.get(rearKey, "Galinis pavarų perjungejas")
                 translatedValue = translation_handler.translate_first_word(value, valueTranslations)
 
                 tableData[frontTranslated] = translatedValue
@@ -41,11 +48,11 @@ def scrapeAndTranslateToFileOctaneOne(url, outputFile):
                 uniqueKeys.update([frontTranslated, rearTranslated])
                 continue
 
-            if key.lower() == "levers/shifters":
-                leversKey = "Levers"
-                shiftersKey = "Shifters"
-                leversTranslated = "Stabdžių rankenėlės"
-                shiftersTranslated = "Pavarų perjungimo rankenėlės"
+            if key == "LEVERS/SHIFTERS":
+                leversKey = "LEVERS"
+                shiftersKey = "SHIFTERS"
+                leversTranslated = keyTranslations.get(leversKey, "Stabdžių rankenėlės")
+                shiftersTranslated = keyTranslations.get(shiftersKey, "Pavarų perjungimo rankenėlės")
                 translatedValue = translation_handler.translate_first_word(value, valueTranslations)
 
                 tableData[leversTranslated] = translatedValue

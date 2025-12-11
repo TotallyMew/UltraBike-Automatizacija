@@ -6,13 +6,18 @@ from Utilities.TranslationHandler import TranslationHandler, load_translations, 
 
 def scrapeAndTranslateToFileKROSS(bicycleUrlOrCode, outputFile, db_manager=None):
     translation_handler = TranslationHandler(db_manager)
-    keyTranslations = load_translations("Assets/Translations/vertimasDetalesPL-LT.txt")
-    valueTranslations = load_value_translations("Assets/Translations/vertimasSavybesLT-ENG.txt")
+    
+    # Component names (keys)
+    keyTranslations = translation_handler.get_translations_by_category("PL", "LT", "component")
 
+    # Materials, colors, properties (values)
+    valueTranslations = {}
+    valueTranslations.update(translation_handler.get_translations_by_category("PL", "LT", "material"))
+    valueTranslations.update(translation_handler.get_translations_by_category("PL", "LT", "color"))
+    valueTranslations.update(translation_handler.get_translations_by_category("PL", "LT", "property"))
 
     allData = []
     uniqueKeys = set()
-
 
     try:
         response = requests.get(bicycleUrlOrCode)
@@ -34,8 +39,11 @@ def scrapeAndTranslateToFileKROSS(bicycleUrlOrCode, outputFile, db_manager=None)
             for row in rows:
                 cells = row.find_all("td")
                 if len(cells) >= 2:
-                    key = cells[0].get_text(strip=True).title()
+                    key = cells[0].get_text(strip=True).upper()
                     value = cells[1].get_text(strip=True)
+                    
+                    print(f"[DEBUG] Raw key from HTML: '{key}'")
+                    print(f"[DEBUG] Key in keyTranslations? {key in keyTranslations}")
 
                     if value.upper() == "BRAK" or value.upper() == "NIE" or value.upper() == "TAK":
                         continue 
@@ -60,12 +68,8 @@ def scrapeAndTranslateToFileKROSS(bicycleUrlOrCode, outputFile, db_manager=None)
 
                     translatedKey = keyTranslations.get(key, key)
 
-                    print(f"translatedKey: {translatedKey}")
-
                     translatedValue = valueTranslations.get(value, value)
-                    print(f"translatedValue: {translatedValue}")
                     translatedValue = translation_handler.translate_first_word(translatedValue, valueTranslations)
-                    print(f"translatedValue2: {translatedValue}")
 
                     tableData[translatedKey] = translatedValue
                     uniqueKeys.add(translatedKey)

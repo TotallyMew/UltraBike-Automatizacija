@@ -1,11 +1,18 @@
 import requests
 from bs4 import BeautifulSoup
-from Utilities.TranslationHandler import TranslationHandler, load_translations, load_value_translations
+from Utilities.TranslationHandler import TranslationHandler
 
-def scrapeAndTranslateToFileRascal(url, outputFile, variant_index=None):
-    translation_handler = TranslationHandler()
-    keyTranslations = load_translations("Assets/Translations/RascalENG-LT.txt")
-    valueTranslations = load_value_translations("Assets/Translations/vertimasSavybesENG-LT.txt")
+def scrapeAndTranslateToFileRascal(url, outputFile, variant_index=None, db_manager=None):
+    translation_handler = TranslationHandler(db_manager)
+    
+    # Component names (keys)
+    keyTranslations = translation_handler.get_translations_by_category("EN", "LT", "component")
+    
+    # Materials, colors, properties (values)
+    valueTranslations = {}
+    valueTranslations.update(translation_handler.get_translations_by_category("EN", "LT", "material"))
+    valueTranslations.update(translation_handler.get_translations_by_category("EN", "LT", "color"))
+    valueTranslations.update(translation_handler.get_translations_by_category("EN", "LT", "property"))
 
     allData = []
     uniqueKeys = set()
@@ -30,11 +37,10 @@ def scrapeAndTranslateToFileRascal(url, outputFile, variant_index=None):
             if not keySpan or not valueSpans:
                 continue
 
-            key = keySpan.get_text(strip=True).title()
+            key = keySpan.get_text(strip=True).upper()  # ← .upper()
 
             # Handle multiple variants
             if len(valueSpans) > 1 and variant_index is None:
-                # CLI mode - prompt user
                 print("Rasta daugiau nei vienas prekės variantas puslapyje.")
                 for index, valueSpan in enumerate(valueSpans, start=1):
                     print(f"{index}: {valueSpan.get_text(strip=True)}")
@@ -54,8 +60,8 @@ def scrapeAndTranslateToFileRascal(url, outputFile, variant_index=None):
                 else valueSpans[0].get_text(strip=True)
             )
 
-            if key.lower() == "brakes":
-                for subKey in ["Front Brakes", "Rear Brakes"]:
+            if key == "BRAKES":
+                for subKey in ["FRONT BRAKES", "REAR BRAKES"]:
                     translatedKey = keyTranslations.get(subKey, subKey)
                     translatedValue = translation_handler.translate_first_word(valueTranslations.get(selectedValue, selectedValue), valueTranslations)
                     tableData[translatedKey] = translatedValue

@@ -175,6 +175,30 @@ class TranslationHandler:
         if hasattr(self, 'own_db') and self.own_db and hasattr(self, 'db'):
             self.db.close()
 
+    def get_translations_by_category(self, source_lang: str = "EN", 
+                                     target_lang: str = "LT", 
+                                     category: str = None) -> dict:
+        """
+        Get translations filtered by category
+        Returns dict of {source_term: target_term}
+        """
+        cursor = self.db.conn.cursor()
+    
+        if category:
+            results = cursor.execute("""
+                SELECT source_term, target_term 
+                FROM translations 
+                WHERE source_lang = ? AND target_lang = ? AND category = ?
+            """, (source_lang, target_lang, category)).fetchall()
+        else:
+            results = cursor.execute("""
+                SELECT source_term, target_term 
+                FROM translations 
+                WHERE source_lang = ? AND target_lang = ?
+            """, (source_lang, target_lang)).fetchall()
+    
+        return {row['source_term']: row['target_term'] for row in results}
+
 
 # ==================== BACKWARD COMPATIBILITY ====================
 # Old static methods kept for existing scrapers

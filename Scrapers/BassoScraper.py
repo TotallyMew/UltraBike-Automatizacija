@@ -37,12 +37,19 @@ def process_special_values(raw_key: str, raw_val: str, target_language: str = 'l
     
     return processed_val
 
-def scrapeAndTranslateToFileBasso(bicycleUrlOrCode, outputFile, driver):
+def scrapeAndTranslateToFileBasso(bicycleUrlOrCode, outputFile, driver, db_manager):
     username, password = loadCredentials(driver)
 
-    translation_handler = TranslationHandler()
-    keyTranslations = load_translations("Assets/Translations/BassoENG-LT.txt")
-    valueTranslations = load_value_translations("Assets/Translations/vertimasSavybesENG-LT.txt")
+    translation_handler = TranslationHandler(db_manager)
+    # Component names (keys)
+    keyTranslations = translation_handler.get_translations_by_category("EN", "LT", "component")
+    
+    # Materials, colors, properties (values)
+    valueTranslations = {}
+    valueTranslations.update(translation_handler.get_translations_by_category("EN", "LT", "material"))
+    valueTranslations.update(translation_handler.get_translations_by_category("EN", "LT", "color"))
+    valueTranslations.update(translation_handler.get_translations_by_category("EN", "LT", "property"))
+    
     
     wait = WebDriverWait(driver, 15)
     original_tab = driver.current_window_handle
@@ -140,7 +147,7 @@ def scrapeAndTranslateToFileBasso(bicycleUrlOrCode, outputFile, driver):
                 if not keyElem or not valElem:
                     continue
 
-                rawKey = keyElem.get_text(strip=True).replace(":", "").title()
+                rawKey = keyElem.get_text(strip=True).replace(":", "").upper()
                 rawVal = valElem.get_text(strip=True)
 
                 if not rawKey or not rawVal:

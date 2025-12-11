@@ -82,7 +82,7 @@ class TranslationImporter:
                         continue
                     
                     if len(parts) == 2:
-                        source = parts[0].strip()
+                        source = parts[0].strip().upper()
                         target = parts[1].strip()
                         
                         if source and target:

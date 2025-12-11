@@ -48,6 +48,7 @@
     <Compile Include="GUI\screens\master_password_prompt.py" />
     <Compile Include="GUI\screens\master_password_screen.py" />
     <Compile Include="GUI\screens\settings_screen.py" />
+    <Compile Include="GUI\screens\translations_screen.py" />
     <Compile Include="GUI\screens\upload_screen.py" />
     <Compile Include="GUI\screens\__init__.py">
       <SubType>Code</SubType>

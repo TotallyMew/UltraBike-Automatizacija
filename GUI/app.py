@@ -45,6 +45,7 @@ class UltraBikeApp:
         self.upload_screen = None
         self.history_screen = None
         self.settings_screen = None
+        self.translations_screen = None
     
         # Check for valid session ONLY if master password exists
         if self.credential_manager.has_master_password():
@@ -109,6 +110,12 @@ class UltraBikeApp:
             from GUI.screens.settings_screen import SettingsScreen
             self.settings_screen = SettingsScreen(self)
     
+
+        if not self.translations_screen:  # ← Add this
+            from GUI.screens.translations_screen import TranslationsScreen
+            self.translations_screen = TranslationsScreen(self)
+
+
         # Create navigation
         from GUI.components.navigation import NavigationRail
         from GUI.components.top_bar import TopBar
@@ -153,6 +160,7 @@ class UltraBikeApp:
         screens = [
             self.upload_screen,
             self.history_screen,
+            self.translations_screen,
             self.settings_screen
         ]
         

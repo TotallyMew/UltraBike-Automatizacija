@@ -1,11 +1,19 @@
-import requests
+﻿import requests
 from bs4 import BeautifulSoup
-from Utilities.TranslationHandler import TranslationHandler, load_translations, load_value_translations
+from Utilities.TranslationHandler import TranslationHandler
 
-def scrapeAndTranslateToFileRondo(url, outputFile):
-    translation_handler = TranslationHandler()
-    keyTranslations = load_translations("Assets/Translations/RondoENG-LT.txt")
-    valueTranslations = load_value_translations("Assets/Translations/vertimasSavybesENG-LT.txt")
+def scrapeAndTranslateToFileRondo(url, outputFile, db_manager=None):
+    translation_handler = TranslationHandler(db_manager)
+    
+    # Component names (keys)
+    keyTranslations = translation_handler.get_translations_by_category("EN", "LT", "component")
+    
+    # Materials, colors, properties (values)
+    valueTranslations = {}
+    valueTranslations.update(translation_handler.get_translations_by_category("EN", "LT", "material"))
+    valueTranslations.update(translation_handler.get_translations_by_category("EN", "LT", "color"))
+    valueTranslations.update(translation_handler.get_translations_by_category("EN", "LT", "property"))
+    
     allData = []
     tableData = {}
     uniqueKeys = set()
@@ -25,22 +33,20 @@ def scrapeAndTranslateToFileRondo(url, outputFile):
             if len(cells) != 2:
                 continue
 
-            key = cells[0].get_text(strip=True).replace(':', '').title()
+            key = cells[0].get_text(strip=True).replace(':', '').upper()  # ← .upper()
             value = cells[1].get_text(strip=True)
 
             if not value or value == '-':
                 continue
 
             specialKeys = {
-                "brakes": ["Front Brakes", "Rear Brakes"],
-                "rotors": ["Front Rotors", "Rear Rotors"],
-                "hubs": ["Front Hub", "Rear Hub"]
+                "BRAKES": ["FRONT BRAKES", "REAR BRAKES"],
+                "ROTORS": ["FRONT ROTORS", "REAR ROTORS"],
+                "HUBS": ["FRONT HUB", "REAR HUB"]
             }
 
-            keyLower = key.lower()
-
-            if keyLower in specialKeys:
-                for subKey in specialKeys[keyLower]:
+            if key in specialKeys:
+                for subKey in specialKeys[key]:
                     translatedKey = keyTranslations.get(subKey, subKey)
                     translatedValue = translation_handler.translate_first_word(valueTranslations.get(value, value), valueTranslations)
                     tableData[translatedKey] = translatedValue

@@ -2,10 +2,19 @@
 from bs4 import BeautifulSoup
 from Utilities.TranslationHandler import TranslationHandler, load_translations, load_value_translations
 
-def scrapeAndTranslateToFileFactor(bicycleUrlOrCode, outputFile):
-    translation_handler = TranslationHandler()
-    keyTranslations = load_translations("Assets/Translations/FactorENG-LT.txt")
-    valueTranslations = load_value_translations("Assets/Translations/vertimasSavybesENG-LT.txt")
+def scrapeAndTranslateToFileFactor(bicycleUrlOrCode, outputFile, db_manager=None):
+    translation_handler = TranslationHandler(db_manager)
+    
+    # Component names (keys)
+    keyTranslations = translation_handler.get_translations_by_category("EN", "LT", "component")
+    
+    # Materials, colors, properties (values)
+    valueTranslations = {}
+    valueTranslations.update(translation_handler.get_translations_by_category("EN", "LT", "material"))
+    valueTranslations.update(translation_handler.get_translations_by_category("EN", "LT", "color"))
+    valueTranslations.update(translation_handler.get_translations_by_category("EN", "LT", "property"))
+    
+    # ... rest unchanged
 
     # Skip these fields until translations are available
     skip_fields = {
@@ -43,7 +52,7 @@ def scrapeAndTranslateToFileFactor(bicycleUrlOrCode, outputFile):
                 if len(cells) != 2:
                     continue
                 
-                key = cells[0].get_text(strip=True)
+                key = cells[0].get_text(strip=True).upper()
                 value = cells[1].get_text(strip=True)
                 
                 # Skip fields we don't have translations for yet
