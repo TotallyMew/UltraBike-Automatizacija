@@ -167,7 +167,7 @@ class HistoryScreen:
         cursor = self.app.db.conn.cursor()
     
         # Build query with filters
-        query = "SELECT brand, product_code, url_or_code, status, duration_seconds, features_uploaded, images_uploaded, error_message, processed_at FROM processing_history WHERE 1=1"
+        query = "SELECT brand, product_code, url_or_code, status, duration_seconds, features_uploaded, images_uploaded, error_message, failed_stage, processed_at FROM processing_history WHERE 1=1"
         params = []
     
         # Brand filter - CASE INSENSITIVE
@@ -223,14 +223,19 @@ class HistoryScreen:
         """Build a single history item"""
         status_icon = "✓" if row['status'] == 'success' else "✗"
         status_color = ft.Colors.GREEN if row['status'] == 'success' else ft.Colors.RED
-        
+    
         # Format duration
         duration = f"{row['duration_seconds']:.1f}s" if row['duration_seconds'] else "N/A"
-        
+    
         # Format features/images counts
         features = str(row['features_uploaded']) if row['features_uploaded'] else "0"
         images = str(row['images_uploaded']) if row['images_uploaded'] else "0"
-        
+    
+        # Format failed stage
+        stage_info = ""
+        if row['status'] == 'failed' and row['failed_stage']:
+            stage_info = f" (Failed at: {row['failed_stage']})"
+    
         return ft.Container(
             content=ft.Column(
                 [
@@ -245,7 +250,7 @@ class HistoryScreen:
                                         weight=ft.FontWeight.BOLD
                                     ),
                                     ft.Text(
-                                        f"Duration: {duration} | Features: {features} | Images: {images}",
+                                        f"Duration: {duration} | Features: {features} | Images: {images}{stage_info}",
                                         size=12,
                                         color=ft.Colors.GREY_700
                                     ),
@@ -279,7 +284,7 @@ class HistoryScreen:
             # Get filtered data
             cursor = self.app.db.conn.cursor()
         
-            query = "SELECT brand, product_code, url_or_code, status, duration_seconds, features_uploaded, images_uploaded, error_message, processed_at FROM processing_history WHERE 1=1"
+            query = "SELECT brand, product_code, url_or_code, status, duration_seconds, features_uploaded, images_uploaded, error_message, failed_stage, processed_at FROM processing_history WHERE 1=1"
             params = []
         
             # Apply same filters as display - CASE INSENSITIVE

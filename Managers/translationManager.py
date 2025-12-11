@@ -9,10 +9,11 @@ class TranslationManager:
         self.logger = logger
         self.ltPath = f"pabaigta{brandName}LT.txt"
         self.enPath = f"pabaigta{brandName}ENG.txt"
-        self.engDictPath = "Assets/Translations/vertimasSavybesLT-ENG.txt"  # ← Fixed
-        self.descriptionPath = "Assets/Translations/vertimasSavybesPL-LT.txt"  # ← Fixed
+        self.engDictPath = r"D:\Iš desktop\Programavimas\Projects\Python\UltraBike_Automatizacija\Assets\Translations\vertimasSavybesLT-ENG.txt"  # ← Fixed
+        self.descriptionPath = r"D:\Iš desktop\Programavimas\Projects\Python\UltraBike_Automatizacija\Assets\Translations\vertimasSavybesPL-LT.txt"  # ← Fixed
         self.translation_handler = TranslationHandler(db_manager)
         self.file_handler = FileHandler()
+        self.db = db_manager
     
     def _log(self, message, **context):
         if self.logger:
@@ -27,7 +28,8 @@ class TranslationManager:
     
         args = {
             "bicycleUrlOrCode": url,
-            "outputFile": self.ltPath
+            "outputFile": self.ltPath,
+            'db_manager': self.db
         }
 
         # Get scraper's accepted parameters
@@ -41,6 +43,8 @@ class TranslationManager:
         # Only add 'driver' if scraper supports it
         if 'driver' in scraper_params:
             args["driver"] = kwargs.get("driver")
+
+        
 
         try:
             scrape_func(**args)

@@ -113,8 +113,8 @@ class TranslationImporter:
         # Insert new translation
         cursor.execute("""
             INSERT INTO translations 
-            (source_lang, target_lang, category, source_term, target_term, created_by)
-            VALUES (?, ?, ?, ?, ?, 'system')
+            (source_lang, target_lang, category, source_term, target_term)
+            VALUES (?, ?, ?, ?, ?)
         """, (source_lang, target_lang, category, source_term, target_term))
         
         self.imported_count += 1

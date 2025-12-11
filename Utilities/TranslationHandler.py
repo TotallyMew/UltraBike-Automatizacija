@@ -76,36 +76,32 @@ class TranslationHandler:
     def translate_first_word(self, value: str, value_translations: dict = None) -> str:
         """
         Translate only the first word of a value
-        Used for colors/materials that appear at start of string
-        
-        Example: "ALUMINIUM 7005" → "ALIUMINIS 7005"
-        
-        This method kept for backward compatibility with existing scrapers
+        Database-first, dictionary fallback for backward compatibility
         """
         if not value:
             return value
-        
+    
         value_parts = value.split()
         if not value_parts:
             return value
-        
+    
         first_word = value_parts[0].upper()
-        
-        # If value_translations dict provided (old style), use it
-        if value_translations and first_word in value_translations:
-            value_parts[0] = value_translations[first_word]
-            return " ".join(value_parts)
-        
-        # Otherwise query database
+    
+        # Try database first (EN and PL sources)
         translation = self.get_translation(first_word, "EN", "LT")
-        
-        # Also try Polish if English didn't work
-        if translation == first_word:
-            translation = self.get_translation(first_word, "PL", "LT")
-        
         if translation != first_word:
             value_parts[0] = translation
-        
+            return " ".join(value_parts)
+    
+        translation = self.get_translation(first_word, "PL", "LT")
+        if translation != first_word:
+            value_parts[0] = translation
+            return " ".join(value_parts)
+    
+        # Fallback to dictionary if provided (for backward compatibility)
+        if value_translations and first_word in value_translations:
+            value_parts[0] = value_translations[first_word]
+    
         return " ".join(value_parts)
     
     def translate_to_english(self, input_file: str, output_file: str, 

@@ -41,6 +41,7 @@
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="GUI\main.py" />
+    <Compile Include="GUI\screens\batch_upload_screen.py" />
     <Compile Include="GUI\screens\history_screen.py" />
     <Compile Include="GUI\screens\loading_screen.py" />
     <Compile Include="GUI\screens\login_screen.py" />
@@ -51,6 +52,7 @@
     <Compile Include="GUI\screens\__init__.py">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="import_translations.py" />
     <Compile Include="LentelesVertimas.py" />
     <Compile Include="main.py" />
     <Compile Include="Managers\FeatureUploader\featureUploader.py" />
@@ -88,6 +90,7 @@
     <Compile Include="Uploaders\Rascal.py" />
     <Compile Include="Uploaders\Rondo.py" />
     <Compile Include="Uploaders\TREK.py" />
+    <Compile Include="Utilities\BatchProcessor.py" />
     <Compile Include="Utilities\ErrorManager.py" />
     <Compile Include="Utilities\FileHandler.py" />
     <Compile Include="Utilities\FolderCreator.py" />

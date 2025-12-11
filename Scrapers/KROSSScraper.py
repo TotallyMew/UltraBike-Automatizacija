@@ -4,13 +4,15 @@ import requests
 from bs4 import BeautifulSoup
 from Utilities.TranslationHandler import TranslationHandler, load_translations, load_value_translations
 
-def scrapeAndTranslateToFileKROSS(bicycleUrlOrCode, outputFile):
-    translation_handler = TranslationHandler()
+def scrapeAndTranslateToFileKROSS(bicycleUrlOrCode, outputFile, db_manager=None):
+    translation_handler = TranslationHandler(db_manager)
     keyTranslations = load_translations("Assets/Translations/vertimasDetalesPL-LT.txt")
     valueTranslations = load_value_translations("Assets/Translations/vertimasSavybesLT-ENG.txt")
 
+
     allData = []
     uniqueKeys = set()
+
 
     try:
         response = requests.get(bicycleUrlOrCode)
@@ -57,8 +59,13 @@ def scrapeAndTranslateToFileKROSS(bicycleUrlOrCode, outputFile):
                         continue
 
                     translatedKey = keyTranslations.get(key, key)
+
+                    print(f"translatedKey: {translatedKey}")
+
                     translatedValue = valueTranslations.get(value, value)
+                    print(f"translatedValue: {translatedValue}")
                     translatedValue = translation_handler.translate_first_word(translatedValue, valueTranslations)
+                    print(f"translatedValue2: {translatedValue}")
 
                     tableData[translatedKey] = translatedValue
                     uniqueKeys.add(translatedKey)

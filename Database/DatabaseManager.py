@@ -58,6 +58,8 @@ class DatabaseManager:
                 features_uploaded INTEGER,
                 images_uploaded INTEGER,
                 error_message TEXT,
+                failed_stage TEXT,
+                batch_id TEXT,
                 processed_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         """)
@@ -84,7 +86,7 @@ class DatabaseManager:
                 source_lang TEXT NOT NULL,
                 target_lang TEXT NOT NULL,
                 source_term TEXT NOT NULL,
-                translated_term TEXT NOT NULL,
+                target_term TEXT NOT NULL,
                 category TEXT,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(source_lang, target_lang, source_term)

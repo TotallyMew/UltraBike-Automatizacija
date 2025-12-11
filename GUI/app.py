@@ -17,7 +17,7 @@ from GUI.components.navigation import NavigationRail
 from GUI.components.top_bar import TopBar
 from GUI.screens.master_password_screen import MasterPasswordScreen
 from GUI.screens.master_password_prompt import MasterPasswordPrompt
-
+from Utilities.Logger import Logger  # Add to imports at top
 class UltraBikeApp:
     """Main application controller"""
     
@@ -25,6 +25,8 @@ class UltraBikeApp:
         self.page = page
         self.driver = None
         self.current_user = None
+        self.logger = Logger()
+        self.current_screen_index = 0
     
         # Database setup
         self.db = DatabaseManager()
@@ -145,6 +147,9 @@ class UltraBikeApp:
     
     def handle_nav_change(self, index):
         """Handle navigation change"""
+
+        self.current_screen_index = index
+
         screens = [
             self.upload_screen,
             self.history_screen,
@@ -248,3 +253,20 @@ class UltraBikeApp:
         loading_screen = LoadingScreen(self, message)
         self.page.add(loading_screen.build())
         self.page.update()
+
+    def start_batch_processing(self, items):
+        """
+        Start batch processing with collected items
+    
+        Args:
+            items: List of {brand, code, url} dicts
+        """
+        # Switch to upload screen if not already there
+        if self.current_screen_index != 0:
+            self.current_screen_index = 0
+            self.content_area.content = self.upload_screen.build()
+            self.page.update()
+    
+    
+        # Show batch processing UI
+        self.upload_screen.show_batch_processing(items)

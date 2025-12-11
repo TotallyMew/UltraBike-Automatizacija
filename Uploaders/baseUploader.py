@@ -19,11 +19,14 @@ def getCode():
     return code
 
 class ProductUploader(ABC):
-    def __init__(self, driver, brandName, ultraBikeCode=None, bicycleUrlOrCode=None, db_manager=None, brand_options=None, logger=None):
+    def __init__(self, driver, brandName, ultraBikeCode=None, bicycleUrlOrCode=None, 
+             db_manager=None, brand_options=None, logger=None, batch_id=None):
         self.driver = driver
         self.logger = logger
         self.brandName = brandName
         self.brand_options = brand_options or {}  # ← Add this
+
+        self.batch_id = batch_id
 
         self.features_uploaded = 0  # ← Add this
         self.images_uploaded = 0    # ← Add this
@@ -58,42 +61,49 @@ class ProductUploader(ABC):
             self.logger.error(f"{self.brandName}Uploader", message, exception=exception, **context)
 
     def run(self):
-        """Main execution flow with database tracking"""
+        """Main execution flow with granular error tracking"""
         self._log("Starting upload process", code=self.ultraBikeCode)
         self.start_time = time.time()
-        
+        failed_stage = None
+    
         try:
-            # Main upload workflow
+            failed_stage = 'scraping'
             self.scrape()
+        
+            failed_stage = 'translation'
             self.translate()
+        
+            failed_stage = 'navigation'
             self.openProduct()
-            
-            # Optional image upload
+        
             if self.settings_manager.download_pictures_and_upload():
+                failed_stage = 'images'
                 self.uploadImages()
                 self.images_uploaded = True
-            
+        
+            failed_stage = 'features'
             self.uploadFeatures()
+        
+            failed_stage = 'brand'
             self.uploadBrand()
+        
+            failed_stage = 'description'
             self.uploadDescription()
-            
-            # Calculate duration
+        
+            # Success - clear failed_stage
+            failed_stage = None
             duration = time.time() - self.start_time
-            
-            # Record success in database
             self._record_success(duration)
-            
-            # Add to recent products cache
             self._cache_recent_product()
-            
+        
             self._log("Upload process completed successfully", duration=f"{duration:.2f}s")
             ErrorManager.show_success(f"Dviratis {self.ultraBikeCode} sėkmingai apdorotas!")
-            
+        
         except Exception as e:
             duration = time.time() - self.start_time if self.start_time else 0
-            self._record_failure(str(e), duration)
-            
-            self._log_error("Upload process failed", exception=e, code=self.ultraBikeCode)
+            self._record_failure(str(e), duration, failed_stage)
+        
+            self._log_error("Upload process failed", exception=e, code=self.ultraBikeCode, stage=failed_stage)
             ErrorManager.show_error("UNEXPECTED_ERROR", error=str(e))
             raise
     
@@ -103,36 +113,37 @@ class ProductUploader(ABC):
         cursor.execute("""
             INSERT INTO processing_history 
             (brand, product_code, url_or_code, status, duration_seconds, 
-             features_uploaded, images_uploaded, processed_at)
-            VALUES (?, ?, ?, 'success', ?, ?, ?, datetime('now'))
+             features_uploaded, images_uploaded, batch_id, processed_at)
+            VALUES (?, ?, ?, 'success', ?, ?, ?, ?, datetime('now'))
         """, (
             self.brandName, 
             self.ultraBikeCode, 
             self.bicycleUrlOrCode, 
             duration,
             self.features_uploaded,
-            self.images_uploaded
+            self.images_uploaded,
+            self.batch_id
         ))
         self.db.conn.commit()
-        self._log("Success recorded in database")
     
-    def _record_failure(self, error_message, duration):
-        """Record failed upload to database"""
+    def _record_failure(self, error_message, duration, failed_stage=None):
+        """Record failed upload to database with stage info"""
         cursor = self.db.conn.cursor()
         cursor.execute("""
             INSERT INTO processing_history 
             (brand, product_code, url_or_code, status, error_message, 
-             duration_seconds, processed_at)
-            VALUES (?, ?, ?, 'failed', ?, ?, datetime('now'))
+             duration_seconds, failed_stage, batch_id, processed_at)
+            VALUES (?, ?, ?, 'failed', ?, ?, ?, ?, datetime('now'))
         """, (
             self.brandName, 
             self.ultraBikeCode, 
             self.bicycleUrlOrCode, 
             error_message,
-            duration
+            duration,
+            failed_stage,
+            self.batch_id
         ))
         self.db.conn.commit()
-        self._log("Failure recorded in database")
     
     def _cache_recent_product(self):
         """Add product to recent products cache"""
