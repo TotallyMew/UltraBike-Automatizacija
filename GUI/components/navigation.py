@@ -31,6 +31,11 @@ class NavigationRail:
                     label="Vertimai"
                 ),
                 ft.NavigationRailDestination(
+                    icon=ft.Icons.DESCRIPTION,  # ← NEW
+                    selected_icon=ft.Icons.DESCRIPTION,
+                    label="Aprašymai"  # ← NEW
+                ),
+                ft.NavigationRailDestination(
                     icon=ft.Icons.SETTINGS,
                     selected_icon=ft.Icons.SETTINGS,
                     label="Nustatymai"

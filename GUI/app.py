@@ -18,6 +18,9 @@ from GUI.components.top_bar import TopBar
 from GUI.screens.master_password_screen import MasterPasswordScreen
 from GUI.screens.master_password_prompt import MasterPasswordPrompt
 from Utilities.Logger import Logger  # Add to imports at top
+from GUI.screens.descriptions_screen import DescriptionsScreen
+
+
 class UltraBikeApp:
     """Main application controller"""
     
@@ -34,7 +37,7 @@ class UltraBikeApp:
         self.credential_manager = CredentialManager(self.db)
     
         # Configure window
-        self.page.title = "UltraBike Automation"
+        self.page.title = "UltraBike prekių automatizacija"
         self.page.window_width = 1200
         self.page.window_height = 800
         self.page.window_resizable = True
@@ -46,6 +49,7 @@ class UltraBikeApp:
         self.history_screen = None
         self.settings_screen = None
         self.translations_screen = None
+        self.descriptions_screen = None
     
         # Check for valid session ONLY if master password exists
         if self.credential_manager.has_master_password():
@@ -53,7 +57,7 @@ class UltraBikeApp:
                 # Valid session exists - show loading and auto-login
                 email, password = self.credential_manager.get_saved_credentials()
                 if email and password:
-                    self.show_loading("Logging in to PrestaShop...")
+                    self.show_loading("Jungiamasi į PrestaShop...")
             
                     # Schedule auto-login after 100ms (let loading screen render)
                     def do_auto_login(e):
@@ -109,12 +113,14 @@ class UltraBikeApp:
         if not self.settings_screen:
             from GUI.screens.settings_screen import SettingsScreen
             self.settings_screen = SettingsScreen(self)
-    
-
+   
         if not self.translations_screen:  # ← Add this
             from GUI.screens.translations_screen import TranslationsScreen
             self.translations_screen = TranslationsScreen(self)
 
+        if not self.descriptions_screen:
+            from GUI.screens.descriptions_screen import DescriptionsScreen
+            self.descriptions_screen = DescriptionsScreen(self)
 
         # Create navigation
         from GUI.components.navigation import NavigationRail
@@ -161,6 +167,7 @@ class UltraBikeApp:
             self.upload_screen,
             self.history_screen,
             self.translations_screen,
+            self.descriptions_screen,
             self.settings_screen
         ]
         

@@ -42,6 +42,7 @@
     </Compile>
     <Compile Include="GUI\main.py" />
     <Compile Include="GUI\screens\batch_upload_screen.py" />
+    <Compile Include="GUI\screens\descriptions_screen.py" />
     <Compile Include="GUI\screens\history_screen.py" />
     <Compile Include="GUI\screens\loading_screen.py" />
     <Compile Include="GUI\screens\login_screen.py" />
@@ -56,6 +57,7 @@
     <Compile Include="import_translations.py" />
     <Compile Include="LentelesVertimas.py" />
     <Compile Include="main.py" />
+    <Compile Include="Managers\DescriptionManager.py" />
     <Compile Include="Managers\FeatureUploader\featureUploader.py" />
     <Compile Include="Managers\FeatureUploader\fieldWriter.py" />
     <Compile Include="Managers\FeatureUploader\languageSwitcher.py" />

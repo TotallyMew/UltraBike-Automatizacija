@@ -106,8 +106,24 @@ class DatabaseManager:
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         """)
+
         if not schema_exists:
             print("  ✓ settings table")
+
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS descriptions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                description_lt TEXT,
+                description_en TEXT,
+                description_lv TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        if not schema_exists:
+            print("  ✓ descriptions table")
     
         if not schema_exists:
             print("Creating indexes...")

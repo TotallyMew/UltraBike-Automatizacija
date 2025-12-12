@@ -42,8 +42,6 @@ def scrapeAndTranslateToFileKROSS(bicycleUrlOrCode, outputFile, db_manager=None)
                     key = cells[0].get_text(strip=True).upper()
                     value = cells[1].get_text(strip=True)
                     
-                    print(f"[DEBUG] Raw key from HTML: '{key}'")
-                    print(f"[DEBUG] Key in keyTranslations? {key in keyTranslations}")
 
                     if value.upper() == "BRAK" or value.upper() == "NIE" or value.upper() == "TAK":
                         continue 

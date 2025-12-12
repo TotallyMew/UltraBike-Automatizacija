@@ -16,8 +16,6 @@ class Basso(ProductUploader):
     def uploadBrand(self):
         self.web_handler.add_brand_name(self.brandName)
 
-    def uploadDescription(self):
-        # Optional: implement description logic using addDescriptionFromWord
-        pass
+
 
 
