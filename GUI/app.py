@@ -289,7 +289,7 @@ class UltraBikeApp:
         # Switch to upload screen if not already there
         if self.current_screen_index != 0:
             self.current_screen_index = 0
-            self.content_area.content = self.upload_screen.build()
+            self.content_area.content = self.upload_screen.screen_content
             self.page.update()
     
     
