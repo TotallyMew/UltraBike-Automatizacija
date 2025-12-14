@@ -52,14 +52,12 @@ class ProductUploader(ABC):
         self.translationManager = TranslationManager(brandName, self.db, logger)
         self.imageUploader = ImageUploader(driver, brandName, logger)
         self.featureUploader = FeatureUploader(driver, logger)
-        
-        # Description handling
+
+        # Description handling - always initialize manager (needed for standalone disclaimer)
+        self.description_manager = DescriptionManager(self.db, logger)
         self.description_name = self.brand_options.get('description_name', None)
         print(f"DEBUG baseUploader.__init__: self.description_name = {self.description_name}")
-        
-        if self.description_name:
-            self.description_manager = DescriptionManager(self.db, logger)
-            print(f"DEBUG baseUploader.__init__: DescriptionManager initialized")
+        print(f"DEBUG baseUploader.__init__: DescriptionManager initialized")
     
     def _log(self, message, **context):
         if self.logger:
@@ -238,17 +236,51 @@ class ProductUploader(ABC):
             # Don't raise - continue without images
 
     def uploadDescription(self):
-        """Upload product description if provided"""
+        """Upload product description if provided, or standalone disclaimer if checked"""
         print(f"DEBUG: uploadDescription called, description_name = {self.description_name}")
-    
+
+        # Get append_disclaimer flag from brand_options
+        append_disclaimer = self.brand_options.get('append_disclaimer', False)
+
+        # If no description but disclaimer is checked, upload just the disclaimer
+        if not self.description_name and append_disclaimer:
+            self._log("No description selected, but disclaimer requested - uploading standalone disclaimer")
+            print("DEBUG: No description name but disclaimer=True, uploading standalone disclaimer")
+            try:
+                # Upload disclaimer only (empty strings for base content)
+                success = self.description_manager.upload_to_prestashop_raw(
+                    self.driver,
+                    self.ultraBikeCode,
+                    '',  # Empty LT content
+                    '',  # Empty EN content
+                    '',  # Empty LV content
+                    append_disclaimer=True
+                )
+
+                from Utilities.ErrorManager import ErrorManager
+
+                if success:
+                    self._log("Standalone disclaimer uploaded successfully")
+                    ErrorManager.show_success("Disclaimer įkeltas!")
+                else:
+                    self._log_error("Standalone disclaimer upload returned False")
+                    ErrorManager.show_warning("Nepavyko įkelti disclaimer")
+
+            except Exception as e:
+                import traceback
+                print(f"DEBUG: Exception in uploadDescription (standalone): {traceback.format_exc()}")
+                self._log_error("Standalone disclaimer upload failed", exception=e)
+                from Utilities.ErrorManager import ErrorManager
+                ErrorManager.show_warning(f"Disclaimer įkėlimo klaida: {str(e)}")
+            return
+
+        # If no description and no disclaimer, skip
         if not self.description_name:
             self._log("No description to upload")
             print("DEBUG: No description name provided, skipping")
             return
-    
-        # Get append_disclaimer flag from brand_options
-        append_disclaimer = self.brand_options.get('append_disclaimer', False)
-    
+
+        # Upload description with optional disclaimer
         print(f"DEBUG: Attempting to upload description: {self.description_name}, append_disclaimer={append_disclaimer}")
         self._log("Uploading description", name=self.description_name, append_disclaimer=append_disclaimer)
         try:
@@ -258,27 +290,28 @@ class ProductUploader(ABC):
                 self.description_name,
                 append_disclaimer=append_disclaimer
             )
-        
+
+            from Utilities.ErrorManager import ErrorManager
+
             print(f"DEBUG: upload_to_prestashop returned: {success}")
-        
+
             if success:
                 self._log("Description uploaded successfully")
-                from Utilities.ErrorManager import ErrorManager
                 if append_disclaimer:
                     ErrorManager.show_success(f"Aprašymas '{self.description_name}' su disclaimer įkeltas!")
                 else:
                     ErrorManager.show_success(f"Aprašymas '{self.description_name}' įkeltas!")
             else:
                 self._log_error("Description upload returned False")
-                from Utilities.ErrorManager import ErrorManager
                 ErrorManager.show_warning(f"Nepavyko įkelti aprašymo '{self.description_name}'")
-            
+
         except Exception as e:
             import traceback
             print(f"DEBUG: Exception in uploadDescription: {traceback.format_exc()}")
             self._log_error("Description upload failed", exception=e)
             from Utilities.ErrorManager import ErrorManager
             ErrorManager.show_warning(f"Aprašymo įkėlimo klaida: {str(e)}")
+
 
     def uploadFeatures(self):
         """Upload product features in all languages"""

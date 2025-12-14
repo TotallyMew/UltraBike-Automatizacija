@@ -238,8 +238,10 @@ class UltraBikeApp:
         # Setup browser (can run in background)
         browser_choice = self.settings.get_browser_choice()
         browser_manager = BrowserManager()
-        self.driver = browser_manager.setup_browser(browser_choice)
-    
+
+        # Don't retry on internet failure in GUI mode
+        self.driver = browser_manager.setup_browser(browser_choice, retry_callback=lambda: False)
+
         if self.driver is None:
             # Browser failed, show login screen (must update UI on main thread)
             def show_login_ui():
