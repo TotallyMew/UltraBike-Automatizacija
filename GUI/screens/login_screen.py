@@ -76,27 +76,32 @@ class LoginScreen:
         """Handle login button click"""
         email = self.email_field.value
         password = self.password_field.value
-    
+
         # Validate
         if not email or not password:
             self.status_text.value = "Įveskite el. paštą ir slaptažodį"
             self.status_text.color = ft.Colors.RED
             self.page.update()
             return
-    
+
         # Show progress
         self.login_button.disabled = True
         self.status_text.value = "Jungiamasi..."
         self.status_text.color = ft.Colors.BLUE
         self.page.update()
-    
-        # Setup browser
+
+        # Setup browser with retry callback
         browser_choice = self.app.settings.get_browser_choice()
         browser_manager = BrowserManager()
-        driver = browser_manager.setup_browser(browser_choice)
-    
+
+        def internet_retry_callback():
+            """Called when internet connection fails - just fail in GUI"""
+            return False  # Don't retry in GUI, just fail
+
+        driver = browser_manager.setup_browser(browser_choice, retry_callback=internet_retry_callback)
+
         if driver is None:
-            self.status_text.value = "Naršyklės paleisti nepavyko"
+            self.status_text.value = "Naršyklės paleisti nepavyko. Patikrinkite interneto ryšį."
             self.status_text.color = ft.Colors.RED
             self.login_button.disabled = False
             self.page.update()

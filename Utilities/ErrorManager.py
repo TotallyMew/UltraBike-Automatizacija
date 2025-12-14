@@ -60,22 +60,22 @@
         """Display user-friendly error message"""
         template = ErrorManager.ERRORS.get(error_code, ErrorManager.ERRORS["UNKNOWN_ERROR"])
         message = template.format(**kwargs)
-        print(f"\n❌ KLAIDA: {message}\n")
+        print(f"\n[ERROR] KLAIDA: {message}\n")
     
     @staticmethod
     def show_warning(message):
         """Display warning message"""
-        print(f"\n⚠️ ĮSPĖJIMAS: {message}\n")
+        print(f"\n[WARNING] ISPEJIMAS: {message}\n")
     
     @staticmethod
     def show_info(message):
         """Display info message"""
-        print(f"\nℹ️ {message}\n")
+        print(f"\n[INFO] {message}\n")
     
     @staticmethod
     def show_success(message):
         """Display success message"""
-        print(f"\n✓ {message}\n")
+        print(f"\n[OK] {message}\n")
     
     @staticmethod
     def prompt_retry(operation_name="operacija"):

@@ -26,11 +26,25 @@ class BrowserManager:
     def __init__(self):
         self.internet_checker = InternetChecker()
 
-    def setup_browser(self, browser_choice):
+    def setup_browser(self, browser_choice, retry_callback=None):
+        """
+        Setup browser with optional retry callback for GUI compatibility
+
+        Args:
+            browser_choice: Browser to use (chrome, firefox, edge)
+            retry_callback: Optional callback for internet retry. If None, uses CLI prompts.
+                          Should return True to retry, False to cancel.
+        """
         while True:
             if not self.internet_checker.check_connection():
-                if not self._prompt_retry_internet():
-                    return None
+                if retry_callback is not None:
+                    # GUI mode - use callback
+                    if not retry_callback():
+                        return None
+                else:
+                    # CLI mode - use prompts
+                    if not self._prompt_retry_internet():
+                        return None
                 continue
 
             try:

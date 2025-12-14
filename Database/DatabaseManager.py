@@ -16,7 +16,7 @@ class DatabaseManager:
         self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self.conn.execute("PRAGMA foreign_keys = ON")
         self.conn.row_factory = sqlite3.Row
-        print(f"✓ Connected to database: {self.db_path}")
+        print(f"[OK] Connected to database: {self.db_path}")
     
     def _initialize_schema(self):
         """Initialize database schema (silently if already exists)"""
@@ -45,7 +45,7 @@ class DatabaseManager:
             )
         """)
         if not schema_exists:
-            print("  ✓ credentials table")
+            print("  [OK] credentials table")
     
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS processing_history (
@@ -64,7 +64,7 @@ class DatabaseManager:
             )
         """)
         if not schema_exists:
-            print("  ✓ processing_history table")
+            print("  [OK] processing_history table")
     
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS recent_products (
@@ -78,7 +78,7 @@ class DatabaseManager:
             )
         """)
         if not schema_exists:
-            print("  ✓ recent_products table")
+            print("  [OK] recent_products table")
     
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS translations (
@@ -93,7 +93,7 @@ class DatabaseManager:
             )
         """)
         if not schema_exists:
-            print("  ✓ translations table")
+            print("  [OK] translations table")
     
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS settings (
@@ -108,7 +108,7 @@ class DatabaseManager:
         """)
 
         if not schema_exists:
-            print("  ✓ settings table")
+            print("  [OK] settings table")
 
 
         cursor.execute("""
@@ -123,7 +123,7 @@ class DatabaseManager:
             )
         """)
         if not schema_exists:
-            print("  ✓ descriptions table")
+            print("  [OK] descriptions table")
     
         if not schema_exists:
             print("Creating indexes...")
@@ -136,10 +136,10 @@ class DatabaseManager:
         self.conn.commit()
     
         if not schema_exists:
-            print("✓ Database schema initialized")
+            print("[OK] Database schema initialized")
     
     def close(self):
         """Close database connection"""
         if self.conn:
             self.conn.close()
-            print("✓ Database connection closed")
+            print("[OK] Database connection closed")

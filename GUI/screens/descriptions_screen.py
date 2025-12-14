@@ -444,36 +444,46 @@ class DescriptionsScreen:
     
     def show_upload_dialog(self):
         """Show dialog to enter product code for upload"""
-        
+
         code_field = ft.TextField(
             label="Product Code",
             hint_text="UB-XXXX",
             width=200,
             autofocus=True
         )
-        
+
+        # Add disclaimer checkbox
+        disclaimer_checkbox = ft.Checkbox(
+            label="Append color disclaimer",
+            value=False
+        )
+
         def upload_clicked(e):
             product_code = code_field.value.strip()
             if not product_code:
                 self.show_status("Product code required", ft.Colors.RED)
                 return
-            
+
+            append_disclaimer = disclaimer_checkbox.value
+
             # Close dialog
             self.page.close(dialog)
-            
+
             # Upload
-            self.upload_to_prestashop(product_code)
-        
+            self.upload_to_prestashop(product_code, append_disclaimer)
+
         def cancel_clicked(e):
             self.page.close(dialog)
-        
+
         dialog = ft.AlertDialog(
             title=ft.Text("Upload to PrestaShop"),
             content=ft.Column(
                 [
                     ft.Text("Enter product code to upload description:"),
                     ft.Container(height=10),
-                    code_field
+                    code_field,
+                    ft.Container(height=10),
+                    disclaimer_checkbox
                 ],
                 tight=True,
                 width=250
@@ -483,12 +493,12 @@ class DescriptionsScreen:
                 ft.ElevatedButton("Upload", on_click=upload_clicked)
             ]
         )
-        
+
         self.page.open(dialog)
     
-    def upload_to_prestashop(self, product_code: str):
+    def upload_to_prestashop(self, product_code: str, append_disclaimer: bool = False):
         """Upload description to PrestaShop product"""
-        
+
         # Validate HTML before upload
         for lang_name, content in [
             ('Lithuanian', self.lt_content),
@@ -500,23 +510,23 @@ class DescriptionsScreen:
                 if not is_valid:
                     self.show_status(f"{lang_name}: {error_msg}", ft.Colors.RED)
                     return
-        
+
         self.show_status(f"Uploading to {product_code}...", ft.Colors.BLUE)
-        
+
         try:
             # Navigate to product by code only (no brand needed)
             from selenium.webdriver.common.by import By
             from selenium.webdriver.common.keys import Keys
             from selenium.webdriver.support.ui import WebDriverWait
             from selenium.webdriver.support import expected_conditions as EC
-            
+
             driver = self.app.driver
-            
+
             # Scroll to top
             driver.execute_script("window.scrollTo(0, 0);")
             import time
             time.sleep(0.5)
-            
+
             # Clear all search fields
             search_name = driver.find_element(By.NAME, "filter_column_name")
             search_name.clear()
@@ -524,38 +534,44 @@ class DescriptionsScreen:
             search_category.clear()
             search_ref = driver.find_element(By.NAME, "filter_column_reference")
             search_ref.clear()
-            
+
             # Scroll search field into view
             driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", search_ref)
             time.sleep(0.3)
-            
+
             # Search by product code
             search_ref.send_keys(product_code + Keys.ENTER)
-            
+
             # Wait for results
             time.sleep(2)
-            
+
             # Click product link in first result
             product_link = WebDriverWait(driver, 5).until(
                 EC.element_to_be_clickable((By.CSS_SELECTOR, "table.table tbody tr td:nth-child(4) a"))
             )
             product_link.click()
-            
+
             # Wait for product page to load
             time.sleep(2)
-            
-            # Upload description
-            success = self.desc_manager.upload_to_prestashop(
-                driver, 
-                product_code, 
-                self.current_description_name
+
+            # Upload description with disclaimer flag
+            success = self.desc_manager.upload_to_prestashop_raw(
+                driver,
+                product_code,
+                self.lt_content,
+                self.en_content,
+                self.lv_content,
+                append_disclaimer=append_disclaimer
             )
-            
+
             if success:
-                self.show_status(f"Uploaded to {product_code} successfully", ft.Colors.GREEN)
+                if append_disclaimer:
+                    self.show_status(f"Uploaded to {product_code} with disclaimer", ft.Colors.GREEN)
+                else:
+                    self.show_status(f"Uploaded to {product_code} successfully", ft.Colors.GREEN)
             else:
                 self.show_status("Upload failed", ft.Colors.RED)
-                
+
         except Exception as ex:
             self.show_status(f"Upload error: {str(ex)}", ft.Colors.RED)
     
