@@ -12,9 +12,11 @@ class HistoryScreen:
         self.app = app
         self.page = app.page
     
+# GUI/screens/history_screen.py
+
     def build(self):
         """Build history screen UI"""
-        
+    
         # Filters
         self.brand_filter = ft.Dropdown(
             label="Filter by Brand",
@@ -33,7 +35,7 @@ class HistoryScreen:
             value="All",
             on_change=lambda e: self.refresh_history()
         )
-        
+    
         self.status_filter = ft.Dropdown(
             label="Filter by Status",
             width=150,
@@ -45,7 +47,7 @@ class HistoryScreen:
             value="All",
             on_change=lambda e: self.refresh_history()
         )
-        
+    
         self.date_filter = ft.Dropdown(
             label="Date Range",
             width=150,
@@ -58,55 +60,64 @@ class HistoryScreen:
             value="All Time",
             on_change=lambda e: self.refresh_history()
         )
-        
+    
         # Export button
         self.export_button = ft.ElevatedButton(
             "Export to Excel",
             icon=ft.Icons.TABLE_CHART,
             on_click=self.export_to_excel
         )
-        
+    
+        # Refresh button (manual)
+        self.refresh_button = ft.IconButton(
+            icon=ft.Icons.REFRESH,
+            tooltip="Refresh",
+            on_click=lambda e: self.refresh_history()
+        )
+    
         # Statistics
         self.stats_container = ft.Container(
-            content=self.build_stats(),
+            content=ft.Text("Loading statistics...", size=14),  # Placeholder
             padding=15,
             bgcolor=ft.Colors.BLUE_50,
             border_radius=10
         )
-        
+    
         # History list container
         self.history_list = ft.Column([], scroll=ft.ScrollMode.AUTO, expand=True)
-        
-        # Build initial history
-        self.refresh_history()
-        
+    
+        # DON'T call refresh_history() here - will be called when screen is shown
+    
         # Layout
-        return ft.Column(
+        self.screen_content = ft.Column(
             [
                 ft.Text("Apdorojimo Istorija", size=24, weight=ft.FontWeight.BOLD),
                 ft.Container(height=10),
-                
+            
                 # Statistics
                 self.stats_container,
                 ft.Container(height=20),
-                
+            
                 # Filters
                 ft.Row(
                     [
                         self.brand_filter,
                         self.status_filter,
                         self.date_filter,
+                        self.refresh_button,
                         self.export_button
                     ],
                     spacing=10
                 ),
                 ft.Container(height=10),
-                
+            
                 # History list
                 self.history_list
             ],
             expand=True
         )
+    
+        return self.screen_content
     
     def build_stats(self):
         """Build statistics summary"""

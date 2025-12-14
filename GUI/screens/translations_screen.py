@@ -7,6 +7,9 @@ class TranslationsScreen:
         self.app = app
         self.page = app.page
         self.current_translations = []
+        self.current_page = 0
+        self.page_size = 50  # Show 50 rows per page
+        self.total_pages = 0
     
     def build(self):
         """Build translations screen UI"""
@@ -67,6 +70,30 @@ class TranslationsScreen:
             on_click=self.show_add_dialog
         )
         
+        # Refresh button
+        self.refresh_button = ft.IconButton(
+            icon=ft.Icons.REFRESH,
+            tooltip="Refresh",
+            on_click=lambda e: self.refresh_translations()
+        )
+        
+        # Pagination controls
+        self.page_info = ft.Text("", size=12, color=ft.Colors.GREY_700)
+        
+        self.prev_button = ft.IconButton(
+            icon=ft.Icons.ARROW_BACK,
+            tooltip="Previous page",
+            on_click=lambda e: self.change_page(-1),
+            disabled=True
+        )
+        
+        self.next_button = ft.IconButton(
+            icon=ft.Icons.ARROW_FORWARD,
+            tooltip="Next page",
+            on_click=lambda e: self.change_page(1),
+            disabled=True
+        )
+        
         # Translations table header
         header = ft.Row(
             [
@@ -86,11 +113,8 @@ class TranslationsScreen:
             expand=True
         )
         
-        # Load initial data
-        self.refresh_translations()
-        
         # Layout
-        return ft.Column(
+        self.screen_content = ft.Column(
             [
                 ft.Text("Vertimų Valdymas", size=24, weight=ft.FontWeight.BOLD),
                 ft.Container(height=10),
@@ -103,6 +127,7 @@ class TranslationsScreen:
                         self.target_lang_filter,
                         self.category_filter,
                         self.search_field,
+                        self.refresh_button,
                         self.add_button
                     ],
                     spacing=10
@@ -110,6 +135,16 @@ class TranslationsScreen:
                 
                 ft.Container(height=10),
                 ft.Divider(),
+                
+                # Pagination controls
+                ft.Row(
+                    [
+                        self.prev_button,
+                        self.page_info,
+                        self.next_button
+                    ],
+                    spacing=10
+                ),
                 
                 # Table header
                 header,
@@ -123,9 +158,12 @@ class TranslationsScreen:
             ],
             expand=True
         )
+        
+        return self.screen_content
     
     def refresh_translations(self):
         """Refresh translations list based on filters"""
+        
         cursor = self.app.db.conn.cursor()
         
         # Build query
@@ -155,15 +193,30 @@ class TranslationsScreen:
         
         query += " ORDER BY source_term"
         
-        # Execute query
-        translations = cursor.execute(query, params).fetchall()
+        # Execute query and store all results
+        self.current_translations = cursor.execute(query, params).fetchall()
+        
+        # Calculate pagination
+        self.total_pages = (len(self.current_translations) + self.page_size - 1) // self.page_size
+        self.current_page = 0
+        
+        # Render first page
+        self.render_page()
+    
+    def render_page(self):
+        """Render current page of translations"""
         
         # Clear list
         self.translations_list.controls.clear()
         
-        # Populate list
-        if translations:
-            for row in translations:
+        # Calculate slice
+        start_idx = self.current_page * self.page_size
+        end_idx = min(start_idx + self.page_size, len(self.current_translations))
+        page_translations = self.current_translations[start_idx:end_idx]
+        
+        # Build rows for current page only
+        if page_translations:
+            for row in page_translations:
                 self.translations_list.controls.append(
                     self.build_translation_row(row)
                 )
@@ -172,7 +225,20 @@ class TranslationsScreen:
                 ft.Text("No translations found", color=ft.Colors.GREY_600)
             )
         
+        # Update pagination controls
+        self.page_info.value = f"Page {self.current_page + 1} of {self.total_pages} ({len(self.current_translations)} total)"
+        self.prev_button.disabled = self.current_page == 0
+        self.next_button.disabled = self.current_page >= self.total_pages - 1
+        
         self.page.update()
+    
+    def change_page(self, delta):
+        """Navigate between pages"""
+        new_page = self.current_page + delta
+        
+        if 0 <= new_page < self.total_pages:
+            self.current_page = new_page
+            self.render_page()
     
     def build_translation_row(self, row):
         """Build a single translation row"""

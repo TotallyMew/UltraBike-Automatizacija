@@ -76,7 +76,7 @@ class SettingsScreen:
         self.status_text = ft.Text("", size=14)
         
         # Build layout
-        return ft.Column(
+        self.screen_content = ft.Column(
             [
                 ft.Text("Nustatymai", size=24, weight=ft.FontWeight.BOLD),
                 ft.Container(height=20),
@@ -117,6 +117,7 @@ class SettingsScreen:
             scroll=ft.ScrollMode.AUTO,
             expand=True
         )
+        return self.screen_content
     
     def browse_folder(self, setting_key, text_field):
         """Open folder picker dialog"""

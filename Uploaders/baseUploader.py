@@ -27,7 +27,6 @@ class ProductUploader(ABC):
         self.logger = logger
         self.brandName = brandName
         self.brand_options = brand_options or {}
-        
         print(f"DEBUG baseUploader.__init__: self.brand_options = {self.brand_options}")
 
         self.features_uploaded = 0
@@ -241,36 +240,45 @@ class ProductUploader(ABC):
     def uploadDescription(self):
         """Upload product description if provided"""
         print(f"DEBUG: uploadDescription called, description_name = {self.description_name}")
-        
+    
         if not self.description_name:
             self._log("No description to upload")
             print("DEBUG: No description name provided, skipping")
             return
-        
-        print(f"DEBUG: Attempting to upload description: {self.description_name}")
-        self._log("Uploading description", name=self.description_name)
+    
+        # Get append_disclaimer flag from brand_options
+        append_disclaimer = self.brand_options.get('append_disclaimer', False)
+    
+        print(f"DEBUG: Attempting to upload description: {self.description_name}, append_disclaimer={append_disclaimer}")
+        self._log("Uploading description", name=self.description_name, append_disclaimer=append_disclaimer)
         try:
             success = self.description_manager.upload_to_prestashop(
                 self.driver,
                 self.ultraBikeCode,
-                self.description_name
+                self.description_name,
+                append_disclaimer=append_disclaimer
             )
-            
+        
             print(f"DEBUG: upload_to_prestashop returned: {success}")
-            
+        
             if success:
                 self._log("Description uploaded successfully")
-                ErrorManager.show_success(f"Aprašymas '{self.description_name}' įkeltas!")
+                from Utilities.ErrorManager import ErrorManager
+                if append_disclaimer:
+                    ErrorManager.show_success(f"Aprašymas '{self.description_name}' su disclaimer įkeltas!")
+                else:
+                    ErrorManager.show_success(f"Aprašymas '{self.description_name}' įkeltas!")
             else:
                 self._log_error("Description upload returned False")
+                from Utilities.ErrorManager import ErrorManager
                 ErrorManager.show_warning(f"Nepavyko įkelti aprašymo '{self.description_name}'")
-                
+            
         except Exception as e:
             import traceback
             print(f"DEBUG: Exception in uploadDescription: {traceback.format_exc()}")
             self._log_error("Description upload failed", exception=e)
+            from Utilities.ErrorManager import ErrorManager
             ErrorManager.show_warning(f"Aprašymo įkėlimo klaida: {str(e)}")
-            # Don't raise - continue with features
 
     def uploadFeatures(self):
         """Upload product features in all languages"""
