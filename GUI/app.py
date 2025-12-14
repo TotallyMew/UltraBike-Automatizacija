@@ -100,21 +100,21 @@ class UltraBikeApp:
     def show_main(self):
         """Show main application with navigation"""
         self.page.clean()
-
+    
         # Initialize screens if not already created
         if not self.upload_screen:
             from GUI.screens.upload_screen import UploadScreen
             self.upload_screen = UploadScreen(self)
-
+    
         if not self.history_screen:
             from GUI.screens.history_screen import HistoryScreen
             self.history_screen = HistoryScreen(self)
-
+    
         if not self.settings_screen:
             from GUI.screens.settings_screen import SettingsScreen
             self.settings_screen = SettingsScreen(self)
    
-        if not self.translations_screen:
+        if not self.translations_screen:  # ← Add this
             from GUI.screens.translations_screen import TranslationsScreen
             self.translations_screen = TranslationsScreen(self)
 
@@ -125,23 +125,19 @@ class UltraBikeApp:
         # Create navigation
         from GUI.components.navigation import NavigationRail
         from GUI.components.top_bar import TopBar
-
+    
         self.nav = NavigationRail(self, on_change=self.handle_nav_change)
-
+    
         # Create top bar
         self.top_bar = TopBar(self, self.current_user, on_logout=self.logout)
-
-        # Build upload screen if not already built
-        if not hasattr(self.upload_screen, 'screen_content'):
-            self.upload_screen.build()
-
+    
         # Content area (starts with upload screen)
         self.content_area = ft.Container(
-            content=self.upload_screen.screen_content,  # ← Use cached content
+            content=self.upload_screen.build(),
             padding=20,
             expand=True
         )
-
+    
         # Layout
         main_layout = ft.Column(
             [
@@ -158,14 +154,13 @@ class UltraBikeApp:
             spacing=0,
             expand=True
         )
-
+    
         self.page.add(main_layout)
         self.page.update()
     
-    # GUI/app.py
-
     def handle_nav_change(self, index):
         """Handle navigation change"""
+
         self.current_screen_index = index
 
         screens = [
@@ -175,28 +170,8 @@ class UltraBikeApp:
             self.descriptions_screen,
             self.settings_screen
         ]
-    
-        selected_screen = screens[index]
-    
-        # Build screen if not already built (lazy loading)
-        if not hasattr(selected_screen, 'screen_content'):
-            print(f"DEBUG: Building screen {index} for first time")  # ← Add this
-            selected_screen.build()
-        else:
-            print(f"DEBUG: Using cached content for screen {index}")  # ← Add this
-    
-        self.content_area.content = selected_screen.screen_content
-    
-        # Load data for screens that need it (only on first visit)
-        if index == 1 and not hasattr(self.history_screen, '_data_loaded'):
-            print("DEBUG: Loading history data")  # ← Add this
-            self.history_screen.refresh_history()
-            self.history_screen._data_loaded = True
-        elif index == 2 and not hasattr(self.translations_screen, '_data_loaded'):
-            print("DEBUG: Loading translations data")  # ← Add this
-            self.translations_screen.refresh_translations()
-            self.translations_screen._data_loaded = True
-    
+        
+        self.content_area.content = screens[index].build()
         self.page.update()
     
     def logout(self):
