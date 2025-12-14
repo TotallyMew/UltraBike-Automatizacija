@@ -90,7 +90,7 @@ class DescriptionsScreen:
         )
         
         # Layout
-        return ft.Column(
+        self.screen_content = ft.Column(
             [
                 ft.Text("Aprašymų Redaktorius", size=24, weight=ft.FontWeight.BOLD),
                 ft.Container(height=10),
@@ -118,6 +118,7 @@ class DescriptionsScreen:
             ],
             expand=True
         )
+        return self.screen_content
     
     def create_html_editor(self, lang_code: str):
         """Create HTML textarea editor"""

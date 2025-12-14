@@ -160,7 +160,6 @@ class UltraBikeApp:
     
     def handle_nav_change(self, index):
         """Handle navigation change"""
-
         self.current_screen_index = index
 
         screens = [
@@ -171,7 +170,22 @@ class UltraBikeApp:
             self.settings_screen
         ]
         
-        self.content_area.content = screens[index].build()
+        selected_screen = screens[index]
+        
+        # Build screen if not already built (lazy loading)
+        if not hasattr(selected_screen, 'screen_content'):
+            selected_screen.build()
+        
+        self.content_area.content = selected_screen.screen_content
+        
+        # Load data for screens that need it (only on first visit)
+        if index == 1 and not hasattr(self.history_screen, '_data_loaded'):
+            self.history_screen.refresh_history()
+            self.history_screen._data_loaded = True
+        elif index == 2 and not hasattr(self.translations_screen, '_data_loaded'):
+            self.translations_screen.refresh_translations()
+            self.translations_screen._data_loaded = True
+        
         self.page.update()
     
     def logout(self):

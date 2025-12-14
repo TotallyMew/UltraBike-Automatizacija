@@ -86,7 +86,6 @@ class HistoryScreen:
         # History list container
         self.history_list = ft.Column([], scroll=ft.ScrollMode.AUTO, expand=True)
     
-        # DON'T call refresh_history() here - will be called when screen is shown
     
         # Layout
         self.screen_content = ft.Column(
@@ -116,7 +115,7 @@ class HistoryScreen:
             ],
             expand=True
         )
-    
+        
         return self.screen_content
     
     def build_stats(self):

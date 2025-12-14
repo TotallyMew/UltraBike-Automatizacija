@@ -102,7 +102,7 @@ class UploadScreen:
         self.load_descriptions_list(update_page=False)
 
         # Build layout
-        return ft.Column(
+        self.screen_content = ft.Column(
             [
                 ft.Text("Dviračio Įkėlimas", size=24, weight=ft.FontWeight.BOLD),
                 ft.Container(height=20),
@@ -154,6 +154,7 @@ class UploadScreen:
             scroll=ft.ScrollMode.AUTO,
             expand=True
         )
+        return self.screen_content
     
     def show_disclaimer_preview(self):
         """Show disclaimer preview dialog"""
