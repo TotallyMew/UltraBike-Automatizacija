@@ -175,8 +175,12 @@ class DescriptionsScreen:
         elif lang_code == 'lv':
             self.lv_content = content
         
-        # Enable save button
-        self.save_button.disabled = False
+        # Enable save and upload buttons when any content exists
+        has_content = bool(self.lt_content or self.en_content or self.lv_content)
+        self.save_button.disabled = not has_content
+        self.upload_button.disabled = not has_content
+        self.page.update()
+
     
     def handle_new(self, e):
         """Create new description"""
@@ -434,12 +438,7 @@ class DescriptionsScreen:
     
     def handle_upload(self, e):
         """Upload description to PrestaShop"""
-        
-        if not self.current_description_name:
-            self.show_status("Save description first", ft.Colors.ORANGE)
-            return
-        
-        # Show product code input dialog
+                
         self.show_upload_dialog()
     
     def show_upload_dialog(self):
