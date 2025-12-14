@@ -77,12 +77,6 @@ class UltraBikeApp:
             # First run - setup master password
             self.show_master_password_setup()
     
-    def show_login(self):
-        """Show login screen"""
-        self.page.clean()
-        self.page.add(self.login_screen.build())
-        self.page.update()
-    
     def on_login_success(self, email, driver):
         """Called when login succeeds"""
         self.current_user = email
