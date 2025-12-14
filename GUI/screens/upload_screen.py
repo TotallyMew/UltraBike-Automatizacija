@@ -211,9 +211,33 @@ class UploadScreen:
         except Exception as e:
             print(f"Failed to load descriptions: {e}")
     
+
+    #FLET BUG WORKAROUND - cannot clear dropdown selection directly
     def clear_description_selection(self):
         """Clear description dropdown selection"""
-        self.description_dropdown.value = None
+        # Get current descriptions
+        try:
+            descriptions = self.desc_manager.list_descriptions()
+        except:
+            descriptions = []
+        
+        # Create new dropdown with empty value
+        new_dropdown = ft.Dropdown(
+            label="Aprašymas (optional)",
+            width=400,
+            hint_text="Pasirinkite aprašymą arba palikite tuščią",
+            options=[
+                ft.dropdown.Option(desc['name']) for desc in descriptions
+            ],
+            value=None  # Empty, shows hint text
+        )
+        
+        description_row = self.screen_content.controls[8]
+        
+        # Replace the dropdown widget
+        description_row.controls[0] = new_dropdown
+        self.description_dropdown = new_dropdown
+        
         self.page.update()
     
     def handle_brand_change(self, e):
