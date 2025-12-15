@@ -5,13 +5,14 @@ import threading
 import re
 from uploaderFactory import getUploaderClass
 from Managers.DescriptionManager import DescriptionManager
+from Utilities.BatchProcessor import BatchProcessor
 
 class UploadScreen:
     def __init__(self, app):
         self.app = app
         self.page = app.page
         self.desc_manager = DescriptionManager(app.db, app.logger if hasattr(app, 'logger') else None)
-    
+        self.batch_processor = BatchProcessor(app.driver, app.db, app.logger if hasattr(app, 'logger') else None)
     def build(self):
         """Build upload screen UI"""
         
@@ -295,7 +296,6 @@ class UploadScreen:
         description_name = self.description_dropdown.value  # Can be None
         append_disclaimer = self.disclaimer_checkbox.value
 
-        print(f"DEBUG UploadScreen: brand={brand}, code={product_code}, description={description_name}, disclaimer={append_disclaimer}")
 
         # Get brand-specific options
         brand_options = {}
@@ -305,12 +305,8 @@ class UploadScreen:
         # Add description and disclaimer to brand_options
         if description_name:
             brand_options['description_name'] = description_name
-            print(f"DEBUG UploadScreen: Added description to brand_options: {description_name}")
 
         brand_options['append_disclaimer'] = append_disclaimer
-        print(f"DEBUG UploadScreen: Added disclaimer flag: {append_disclaimer}")
-
-        print(f"DEBUG UploadScreen: brand_options = {brand_options}")
         
         # Show progress
         self.upload_button.disabled = True
@@ -409,36 +405,46 @@ class UploadScreen:
 
 
 
+        # GUI/screens/upload_screen.py
+        # Function: show_batch_processing
+
     def show_batch_processing(self, items):
-        """Show batch processing UI and start processing"""
         from Utilities.BatchProcessor import BatchProcessor
         from uploaderFactory import getUploaderClass
-    
-        # Clear existing content
+
+        # Save queue and results
         self.batch_queue = items
         self.batch_results = []
-    
-        # Create batch processor
-        self.batch_processor = BatchProcessor(
-            self.app.driver,
-            self.app.db,
-            logger=None  # Add logger if available
-        )
-    
-        # Add items to queue
+
+        # Ensure batch_processor exists
+        if not hasattr(self, 'batch_processor'):
+            self.batch_processor = BatchProcessor(
+                self.app.driver,
+                self.app.db,
+                logger=getattr(self.app, 'logger', None)
+            )
+
+        # Clear queue and add items
+        self.batch_processor.clear_queue()
         for item in items:
             self.batch_processor.add_to_queue(
                 item['brand'],
                 item['code'],
-                item['url']
+                item['url'],
+                brand_options={
+                    "description_name": item.get("description_name"),
+                    "append_disclaimer": item.get("append_disclaimer", False),
+                    "frameset_only": item.get("frameset_only", False)
+                }
             )
-    
-        # Build processing UI
+
+        # Build batch processing UI
         self.build_batch_processing_ui()
-    
-        # Start processing in background thread
+
+        # Start processing in a background thread
+        import threading
         def process():
-            def uploader_factory(driver, brand, code, url, db, batch_id):
+            def uploader_factory(driver, brand, code, url, db, batch_id, brand_options=None):
                 uploader_class = getUploaderClass(brand)
                 return uploader_class(
                     driver,
@@ -446,18 +452,20 @@ class UploadScreen:
                     ultraBikeCode=code,
                     bicycleUrlOrCode=url,
                     db_manager=db,
-                    batch_id=batch_id
+                    batch_id=batch_id,
+                    brand_options=brand_options
                 )
-        
+
             try:
                 results = self.batch_processor.start_batch(uploader_factory)
                 self.on_batch_complete(results)
             except Exception as e:
                 self.on_batch_error(str(e))
-    
-        import threading
+
         thread = threading.Thread(target=process, daemon=True)
         thread.start()
+
+
 
     def build_batch_processing_ui(self):
         """Build UI for batch processing progress"""

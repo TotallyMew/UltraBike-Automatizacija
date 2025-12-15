@@ -20,7 +20,7 @@ def getCode():
     return code
 
 class ProductUploader(ABC):
-    def __init__(self, driver, brandName, ultraBikeCode=None, bicycleUrlOrCode=None, db_manager=None, brand_options=None, logger=None):
+    def __init__(self, driver, brandName, ultraBikeCode=None, bicycleUrlOrCode=None, db_manager=None, brand_options=None, logger=None, batch_id = None):
         print(f"DEBUG baseUploader.__init__: brand_options = {brand_options}")
         
         self.driver = driver
@@ -28,6 +28,7 @@ class ProductUploader(ABC):
         self.brandName = brandName
         self.brand_options = brand_options or {}
         print(f"DEBUG baseUploader.__init__: self.brand_options = {self.brand_options}")
+        self.batch_id = batch_id
 
         self.features_uploaded = 0
         self.images_uploaded = 0
@@ -95,7 +96,13 @@ class ProductUploader(ABC):
             
             # Upload brand
             self.uploadBrand()
-            
+
+            # Auto-save if enabled in settings
+            if self.settings_manager.is_auto_save_enabled():
+                self.saveUpdate()
+            else:
+                self._log("Auto-save disabled, skipping saveUpdate()")
+
             # Calculate duration
             duration = time.time() - self.start_time
             

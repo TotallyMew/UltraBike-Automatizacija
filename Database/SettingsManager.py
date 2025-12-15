@@ -25,11 +25,14 @@ class SettingsManager:
              'path', 'paths', 'Base path for bicycle folders', ''),
             
             # Processing
-            ('extended_mode', 'true', 'bool', 'processing', 
+            ('extended_mode', 'true', 'bool', 'processing',
              'Enable extended mode (folder creator, scraper menu)', 'false'),
-            
+
+            ('auto_save', 'true', 'bool', 'processing',
+             'Automatically save product updates after upload', 'true'),
+
             # Browser
-            ('browser_choice', 'Chrome', 'string', 'browser', 
+            ('browser_choice', 'Chrome', 'string', 'browser',
              'Preferred browser (Chrome/Firefox/Edge)', 'Chrome'),
             
             ('last_brand', '', 'string', 'processing', 
@@ -155,3 +158,6 @@ class SettingsManager:
     
     def get_browser_choice(self) -> str:
         return self.get('browser_choice', 'Chrome')
+
+    def is_auto_save_enabled(self) -> bool:
+        return self.get('auto_save', True)

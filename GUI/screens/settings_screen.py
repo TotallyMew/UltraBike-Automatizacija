@@ -35,6 +35,12 @@ class SettingsScreen:
             label="Extended mode (folder creator, scraper menu)",
             value=self.app.settings.is_extended_mode_enabled()
         )
+
+        # Auto-save toggle
+        self.auto_save_switch = ft.Switch(
+            label="Auto-save product updates after upload",
+            value=self.app.settings.is_auto_save_enabled()
+        )
         
         # KROSS path
         self.kross_path_field = ft.TextField(
@@ -93,6 +99,8 @@ class SettingsScreen:
                 self.download_images_switch,
                 ft.Container(height=5),
                 self.extended_mode_switch,
+                ft.Container(height=5),
+                self.auto_save_switch,
                 ft.Container(height=20),
                 
                 # Paths section
@@ -149,6 +157,7 @@ class SettingsScreen:
             browser = self.browser_dropdown.value
             download_images = self.download_images_switch.value
             extended_mode = self.extended_mode_switch.value
+            auto_save = self.auto_save_switch.value
             kross_path = self.kross_path_field.value
             repo_path = self.repo_path_field.value
             
@@ -169,6 +178,7 @@ class SettingsScreen:
             self.app.settings.set('browser_choice', browser)
             self.app.settings.set('download_images', download_images)
             self.app.settings.set('extended_mode', extended_mode)
+            self.app.settings.set('auto_save', auto_save)
             self.app.settings.set('kross_download_path', kross_path)
             self.app.settings.set('repository_path', repo_path)
             
