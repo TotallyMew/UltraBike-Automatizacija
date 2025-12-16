@@ -61,6 +61,16 @@ def scrapeAndTranslateToFilePinarello(bicycleUrlOrCode, outputFile, frameset_onl
                 continue
 
             # Filter if frameset mode
+
+            if title.lower() == "axles disc":
+                for subTitle in ["Front Hub", "Rear Hub"]:
+                    subTitle = subTitle.upper()
+                    translatedKey = keyTranslations.get(subTitle, subTitle)
+                    translatedValue = translation_handler.translate_first_word(valueTranslations.get(spec, spec), valueTranslations)
+                    tableData[translatedKey] = translatedValue
+                    uniqueKeys.add(translatedKey)
+                continue
+
             if frameset_only and title not in allowed_fields:
                 continue
 
