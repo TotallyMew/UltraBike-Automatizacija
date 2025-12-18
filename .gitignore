@@ -121,3 +121,7 @@ session_*.enc
 test_*.py
 import_translations_final.py
 migrate_settings.py
+nul
+.claude/settings.local.json
+lines_of_code.py
+.claude/settings.local.json
