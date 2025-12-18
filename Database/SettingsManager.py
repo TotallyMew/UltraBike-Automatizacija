@@ -39,14 +39,17 @@ class SettingsManager:
              'Last used brand', ''),
             
             # UI
-            ('window_width', '1200', 'int', 'ui', 
+            ('window_width', '1200', 'int', 'ui',
              'Window width in pixels', '1200'),
-            
-            ('window_height', '800', 'int', 'ui', 
+
+            ('window_height', '800', 'int', 'ui',
              'Window height in pixels', '800'),
-            
-            ('theme', 'light', 'string', 'ui', 
+
+            ('theme', 'light', 'string', 'ui',
              'UI theme (light/dark)', 'light'),
+
+            ('language', 'English', 'string', 'ui',
+             'Application language (English/Lithuanian)', 'English'),
         ]
         
         cursor = self.db.conn.cursor()
@@ -70,16 +73,23 @@ class SettingsManager:
         """
         Get setting value (automatically converts type)
         """
+        # Use Row factory for dictionary-like access
+        self.db.conn.row_factory = lambda cursor, row: {
+            col[0]: row[idx] for idx, col in enumerate(cursor.description)
+        }
         cursor = self.db.conn.cursor()
         result = cursor.execute("""
-            SELECT value, value_type 
-            FROM settings 
+            SELECT value, value_type
+            FROM settings
             WHERE key = ?
         """, (key,)).fetchone()
-        
+
+        # Reset row factory
+        self.db.conn.row_factory = None
+
         if not result:
             return default
-        
+
         value = result['value']
         value_type = result['value_type']
         

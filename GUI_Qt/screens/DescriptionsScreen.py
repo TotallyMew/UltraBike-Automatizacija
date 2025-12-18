@@ -1,0 +1,570 @@
+"""
+Descriptions Screen - Fluent Design System
+HTML description editor with list selection and tabbed editing
+"""
+
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
+    QTextEdit, QTabWidget, QPushButton, QInputDialog, QMessageBox as QMsgBox
+)
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QKeySequence, QShortcut
+from qfluentwidgets import (
+    CardWidget, TransparentToolButton, FluentIcon,
+    TitleLabel, BodyLabel, CaptionLabel, InfoBar, InfoBarPosition,
+    isDarkTheme, PrimaryPushButton, LineEdit, PushButton, qconfig
+)
+from Managers.DescriptionManager import DescriptionManager
+from GUI_Qt.styles.theme_config import COLORS, FONTS
+
+
+class DescriptionsScreen(QWidget):
+    """Descriptions management screen with list + tabs layout"""
+
+    def __init__(self, main_window, parent=None):
+        super().__init__(parent)
+        self.main = main_window
+        self.desc_manager = DescriptionManager(self.main.db)
+        self.current_description_name = None
+        self.has_unsaved_changes = False
+
+        self._init_ui()
+        self._load_description_list()
+        self._setup_shortcuts()
+
+        # Connect to theme change signal
+        qconfig.themeChangedFinished.connect(self._on_theme_changed)
+
+    def _setup_shortcuts(self):
+        """Setup keyboard shortcuts for common actions"""
+        # Ctrl+S to save
+        save_shortcut = QShortcut(QKeySequence.StandardKey.Save, self)
+        save_shortcut.activated.connect(self._handle_save)
+
+        # Ctrl+N to create new
+        new_shortcut = QShortcut(QKeySequence.StandardKey.New, self)
+        new_shortcut.activated.connect(self._handle_new)
+
+        # Delete key to delete (when list has focus and item is selected)
+        delete_shortcut = QShortcut(QKeySequence.StandardKey.Delete, self)
+        delete_shortcut.activated.connect(self._handle_delete_shortcut)
+
+    def _handle_delete_shortcut(self):
+        """Handle delete key press - only delete if list has focus and item is selected"""
+        if self.description_list.hasFocus() and self.current_description_name:
+            self._handle_delete()
+
+    def _init_ui(self):
+        """Initialize UI with side-by-side layout"""
+        self._apply_theme()
+        self.setAutoFillBackground(True)
+
+        # Main layout
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setSpacing(16)
+
+        # === HEADER ===
+        header = QHBoxLayout()
+
+        # Title with icon
+        title_container = QHBoxLayout()
+        title_container.setSpacing(12)
+
+        title_icon = TransparentToolButton(FluentIcon.DOCUMENT, self)
+        title_icon.setFixedSize(32, 32)
+        title_icon.setEnabled(False)
+
+        title_label = TitleLabel("Product Descriptions")
+
+        title_container.addWidget(title_icon)
+        title_container.addWidget(title_label)
+
+        header.addLayout(title_container)
+        header.addStretch()
+
+        # Current description name
+        is_dark = isDarkTheme()
+        self.current_name_label = BodyLabel("")
+        self.current_name_label.setStyleSheet(f"""
+            background-color: {COLORS['lavender_grey']};
+            color: white;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 600;
+        """)
+        self.current_name_label.setVisible(False)
+        header.addWidget(self.current_name_label)
+
+        main_layout.addLayout(header)
+
+        # === MAIN CONTENT (SIDE BY SIDE) ===
+        content_layout = QHBoxLayout()
+        content_layout.setSpacing(16)
+
+        # LEFT PANEL - Description List
+        left_panel = CardWidget()
+        left_panel.setBorderRadius(8)
+        left_panel.setFixedWidth(300)
+
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.setContentsMargins(16, 16, 16, 16)
+        left_layout.setSpacing(12)
+
+        # List header
+        list_header = QHBoxLayout()
+        list_title = BodyLabel("Saved Descriptions")
+        list_title.setStyleSheet(f"font-weight: 600; color: {COLORS['text_secondary']};")
+
+        refresh_btn = TransparentToolButton(FluentIcon.SYNC, self)
+        refresh_btn.setToolTip("Refresh list")
+        refresh_btn.setFixedSize(28, 28)
+        refresh_btn.clicked.connect(self._load_description_list)
+
+        list_header.addWidget(list_title)
+        list_header.addStretch()
+        list_header.addWidget(refresh_btn)
+
+        left_layout.addLayout(list_header)
+
+        # Description list
+        self.description_list = QListWidget()
+        self.description_list.itemClicked.connect(self._on_description_selected)
+        self._style_list()
+
+        left_layout.addWidget(self.description_list)
+
+        # List buttons
+        list_btn_layout = QVBoxLayout()
+        list_btn_layout.setSpacing(8)
+
+        self.new_btn = PrimaryPushButton("New")
+        self.new_btn.setIcon(FluentIcon.ADD.icon())
+        self.new_btn.clicked.connect(self._handle_new)
+
+        self.delete_btn = PushButton("Delete")
+        self.delete_btn.setIcon(FluentIcon.DELETE.icon())
+        self.delete_btn.setEnabled(False)
+        self.delete_btn.clicked.connect(self._handle_delete)
+
+        list_btn_layout.addWidget(self.new_btn)
+        list_btn_layout.addWidget(self.delete_btn)
+
+        left_layout.addLayout(list_btn_layout)
+
+        content_layout.addWidget(left_panel)
+
+        # RIGHT PANEL - Tabs with HTML Editors
+        right_panel = CardWidget()
+        right_panel.setBorderRadius(8)
+
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(16, 16, 16, 16)
+        right_layout.setSpacing(12)
+
+        # Editor tabs
+        self.tabs = QTabWidget()
+
+        # Lithuanian tab
+        self.lt_editor = self._create_html_editor()
+        self.tabs.addTab(self.lt_editor, "🇱🇹 Lietuvių")
+
+        # English tab
+        self.en_editor = self._create_html_editor()
+        self.tabs.addTab(self.en_editor, "🇬🇧 English")
+
+        # Latvian tab
+        self.lv_editor = self._create_html_editor()
+        self.tabs.addTab(self.lv_editor, "🇱🇻 Latviešu")
+
+        self._style_tabs()
+
+        right_layout.addWidget(self.tabs)
+
+        # Action buttons
+        action_layout = QHBoxLayout()
+        action_layout.setSpacing(12)
+
+        self.save_btn = PrimaryPushButton("Save")
+        self.save_btn.setIcon(FluentIcon.SAVE.icon())
+        self.save_btn.setFixedHeight(36)
+        self.save_btn.setEnabled(False)
+        self.save_btn.clicked.connect(self._handle_save)
+
+        action_layout.addStretch()
+        action_layout.addWidget(self.save_btn)
+
+        right_layout.addLayout(action_layout)
+
+        content_layout.addWidget(right_panel, 1)
+
+        main_layout.addLayout(content_layout, 1)
+
+    def _create_html_editor(self):
+        """Create HTML text editor widget"""
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+
+        # Warning message
+        warning = QHBoxLayout()
+        warning_icon = FluentIcon.INFO.icon()
+        warning_label = CaptionLabel("HTML only - paste from SVENG.txt, SVLT.txt, SVLV.txt")
+        warning_label.setStyleSheet(f"color: {COLORS['lavender_grey']}; font-weight: 500;")
+
+        warning.addWidget(warning_label)
+        warning.addStretch()
+
+        layout.addLayout(warning)
+
+        # Text editor
+        editor = QTextEdit()
+        editor.setPlaceholderText("Paste HTML here (e.g., <h1>Title</h1>, <p>Text</p>)...")
+        editor.setAcceptRichText(False)
+        editor.textChanged.connect(self._on_content_changed)
+
+        # Store reference for theme updates
+        editor.setObjectName("html_editor")
+
+        # Apply styling immediately
+        is_dark = isDarkTheme()
+        editor.setStyleSheet(f"""
+            QTextEdit {{
+                background-color: {COLORS['bg_alt_dark'] if is_dark else COLORS['bg_light']};
+                color: {COLORS['text_primary_dark'] if is_dark else COLORS['text_primary_light']};
+                border: 1px solid {COLORS['border_dark'] if is_dark else COLORS['border_light']};
+                border-radius: 6px;
+                font-family: {FONTS['family_mono']};
+                font-size: 13px;
+                line-height: 1.5;
+                padding: 12px;
+            }}
+        """)
+
+        layout.addWidget(editor)
+
+        return container
+
+    def _style_list(self):
+        """Apply styling to description list"""
+        is_dark = isDarkTheme()
+        self.description_list.setStyleSheet(f"""
+            QListWidget {{
+                background-color: {'#1a1b2e' if is_dark else COLORS['bg_light']};
+                border: 1px solid {COLORS['border_dark'] if is_dark else COLORS['border_light']};
+                border-radius: 6px;
+                padding: 4px;
+                font-family: {FONTS['family']};
+                font-size: {FONTS['size_body']};
+                color: {COLORS['text_primary_dark'] if is_dark else COLORS['text_primary_light']};
+            }}
+            QListWidget::item {{
+                padding: 12px;
+                border-radius: 4px;
+                margin: 2px;
+            }}
+            QListWidget::item:hover {{
+                background-color: {'rgba(141, 153, 174, 0.15)' if is_dark else 'rgba(43, 45, 66, 0.05)'};
+            }}
+            QListWidget::item:selected {{
+                background-color: {COLORS['lavender_grey']};
+                color: white;
+            }}
+        """)
+
+    def _style_tabs(self):
+        """Apply styling to tab widget"""
+        is_dark = isDarkTheme()
+        self.tabs.setStyleSheet(f"""
+            QTabWidget::pane {{
+                border: 1px solid {COLORS['border_dark'] if is_dark else COLORS['border_light']};
+                border-radius: 6px;
+                top: -1px;
+                background-color: {'#1a1b2e' if is_dark else COLORS['bg_light']};
+            }}
+            QTabBar::tab {{
+                background-color: {'#15162a' if is_dark else COLORS['bg_light']};
+                color: {COLORS['text_secondary'] if not is_dark else COLORS['text_primary_dark']};
+                padding: 10px 20px;
+                border: 1px solid {COLORS['border_dark'] if is_dark else COLORS['border_light']};
+                border-bottom: none;
+                border-top-left-radius: 6px;
+                border-top-right-radius: 6px;
+                margin-right: 2px;
+                font-family: {FONTS['family']};
+                font-size: {FONTS['size_body']};
+            }}
+            QTabBar::tab:selected {{
+                background-color: {COLORS['lavender_grey']};
+                color: white;
+                font-weight: {FONTS['weight_semibold']};
+            }}
+            QTabBar::tab:hover:!selected {{
+                background-color: {'rgba(141, 153, 174, 0.2)' if is_dark else 'rgba(43, 45, 66, 0.1)'};
+            }}
+        """)
+
+    def _load_description_list(self):
+        """Load list of saved descriptions"""
+        self.description_list.clear()
+
+        try:
+            descriptions = self.desc_manager.list_descriptions()
+
+            for desc in descriptions:
+                item = QListWidgetItem(desc['name'])
+                item.setData(Qt.ItemDataRole.UserRole, desc)
+                self.description_list.addItem(item)
+
+        except Exception as ex:
+            InfoBar.error(
+                title="Load Failed",
+                content=str(ex),
+                parent=self,
+                position=InfoBarPosition.TOP
+            )
+
+    def _on_description_selected(self, item):
+        """Handle description selection from list"""
+        desc_data = item.data(Qt.ItemDataRole.UserRole)
+        name = desc_data['name']
+
+        self._load_description(name)
+
+    def _load_description(self, name):
+        """Load description into editors"""
+        try:
+            desc = self.desc_manager.load_description(name)
+
+            if desc:
+                self.current_description_name = name
+                self.has_unsaved_changes = False
+                self.current_name_label.setText(f"Editing: {name}")
+                self.current_name_label.setVisible(True)
+
+                # Get editors from tabs
+                lt_editor = self.lt_editor.findChild(QTextEdit)
+                en_editor = self.en_editor.findChild(QTextEdit)
+                lv_editor = self.lv_editor.findChild(QTextEdit)
+
+                # Temporarily disconnect text changed signals to avoid triggering unsaved changes
+                lt_editor.textChanged.disconnect(self._on_content_changed)
+                en_editor.textChanged.disconnect(self._on_content_changed)
+                lv_editor.textChanged.disconnect(self._on_content_changed)
+
+                # Load content
+                lt_editor.setPlainText(desc['description_lt'] or "")
+                en_editor.setPlainText(desc['description_en'] or "")
+                lv_editor.setPlainText(desc['description_lv'] or "")
+
+                # Reconnect signals
+                lt_editor.textChanged.connect(self._on_content_changed)
+                en_editor.textChanged.connect(self._on_content_changed)
+                lv_editor.textChanged.connect(self._on_content_changed)
+
+                self.save_btn.setEnabled(True)
+                self.delete_btn.setEnabled(True)
+
+                InfoBar.success(
+                    title="Loaded",
+                    content=f"Loaded '{name}'",
+                    parent=self,
+                    position=InfoBarPosition.TOP,
+                    duration=2000
+                )
+
+        except Exception as ex:
+            InfoBar.error(
+                title="Load Failed",
+                content=str(ex),
+                parent=self,
+                position=InfoBarPosition.TOP
+            )
+
+    def _on_content_changed(self):
+        """Handle content change in editors"""
+        self.has_unsaved_changes = True
+        self.save_btn.setEnabled(True)
+        self._update_title_indicator()
+
+    def _update_title_indicator(self):
+        """Update title label to show unsaved changes"""
+        if not self.current_name_label.isVisible():
+            return
+
+        if self.current_description_name:
+            indicator = " *" if self.has_unsaved_changes else ""
+            self.current_name_label.setText(f"Editing: {self.current_description_name}{indicator}")
+        else:
+            self.current_name_label.setText("New Description (not saved) *")
+
+    def _handle_new(self):
+        """Create new description"""
+        self.current_description_name = None
+        self.has_unsaved_changes = True
+        self.current_name_label.setText("New Description (not saved) *")
+        self.current_name_label.setVisible(True)
+
+        # Clear editors
+        lt_editor = self.lt_editor.findChild(QTextEdit)
+        en_editor = self.en_editor.findChild(QTextEdit)
+        lv_editor = self.lv_editor.findChild(QTextEdit)
+
+        lt_editor.clear()
+        en_editor.clear()
+        lv_editor.clear()
+
+        self.save_btn.setEnabled(True)
+        self.delete_btn.setEnabled(False)
+        self.description_list.clearSelection()
+
+        InfoBar.success(
+            title="New Description",
+            content="Ready to create new description",
+            parent=self,
+            position=InfoBarPosition.TOP,
+            duration=2000
+        )
+
+    def _handle_save(self):
+        """Save current description"""
+        # Get content from editors
+        lt_editor = self.lt_editor.findChild(QTextEdit)
+        en_editor = self.en_editor.findChild(QTextEdit)
+        lv_editor = self.lv_editor.findChild(QTextEdit)
+
+        lt_content = lt_editor.toPlainText().strip()
+        en_content = en_editor.toPlainText().strip()
+        lv_content = lv_editor.toPlainText().strip()
+
+        # If new, ask for name
+        if not self.current_description_name:
+            name, ok = QInputDialog.getText(
+                self,
+                "Save Description",
+                "Enter description name:",
+                text=""
+            )
+
+            if not ok or not name.strip():
+                return
+
+            self.current_description_name = name.strip()
+
+        # Save to database
+        try:
+            success = self.desc_manager.save_description(
+                self.current_description_name,
+                lt_content,
+                en_content,
+                lv_content
+            )
+
+            if success:
+                self.has_unsaved_changes = False
+                self.current_name_label.setText(f"Editing: {self.current_description_name}")
+                self.delete_btn.setEnabled(True)
+
+                InfoBar.success(
+                    title="Saved",
+                    content=f"Description '{self.current_description_name}' saved",
+                    parent=self,
+                    position=InfoBarPosition.TOP,
+                    duration=2000
+                )
+
+                # Reload list
+                self._load_description_list()
+
+        except Exception as ex:
+            InfoBar.error(
+                title="Save Failed",
+                content=str(ex),
+                parent=self,
+                position=InfoBarPosition.TOP
+            )
+
+    def _handle_delete(self):
+        """Delete current description"""
+        if not self.current_description_name:
+            return
+
+        # Confirm deletion
+        reply = QMsgBox.question(
+            self,
+            "Confirm Delete",
+            f"Delete description '{self.current_description_name}'?",
+            QMsgBox.StandardButton.Yes | QMsgBox.StandardButton.No
+        )
+
+        if reply == QMsgBox.StandardButton.Yes:
+            try:
+                success = self.desc_manager.delete_description(self.current_description_name)
+
+                if success:
+                    InfoBar.success(
+                        title="Deleted",
+                        content=f"Deleted '{self.current_description_name}'",
+                        parent=self,
+                        position=InfoBarPosition.TOP,
+                        duration=2000
+                    )
+
+                    # Reset and reload
+                    self._handle_new()
+                    self._load_description_list()
+
+            except Exception as ex:
+                InfoBar.error(
+                    title="Delete Failed",
+                    content=str(ex),
+                    parent=self,
+                    position=InfoBarPosition.TOP
+                )
+
+    def _apply_theme(self):
+        """Apply theme to screen components"""
+        is_dark = isDarkTheme()
+        # Use a darker shade of space indigo for better contrast in dark mode
+        bg_color = '#16172b' if is_dark else COLORS['platinum']
+
+        self.setStyleSheet(f"""
+            DescriptionsScreen {{
+                background-color: {bg_color};
+                font-family: {FONTS['family']};
+            }}
+        """)
+
+        # Apply styles to list and tabs
+        if hasattr(self, 'description_list'):
+            self._style_list()
+
+        if hasattr(self, 'tabs'):
+            self._style_tabs()
+            # Update all HTML editors
+            for i in range(self.tabs.count()):
+                tab = self.tabs.widget(i)
+                editor = tab.findChild(QTextEdit)
+                if editor:
+                    self._style_editor(editor)
+
+    def _style_editor(self, editor):
+        """Apply styling to HTML editor"""
+        is_dark = isDarkTheme()
+        editor.setStyleSheet(f"""
+            QTextEdit {{
+                background-color: {COLORS['bg_alt_dark'] if is_dark else COLORS['bg_light']};
+                color: {COLORS['text_primary_dark'] if is_dark else COLORS['text_primary_light']};
+                border: 1px solid {COLORS['border_dark'] if is_dark else COLORS['border_light']};
+                border-radius: 6px;
+                font-family: {FONTS['family_mono']};
+                font-size: 13px;
+                line-height: 1.5;
+                padding: 12px;
+            }}
+        """)
+
+    def _on_theme_changed(self):
+        """Handle theme change event"""
+        self._apply_theme()
