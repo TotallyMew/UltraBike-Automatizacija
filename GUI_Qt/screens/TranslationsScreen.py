@@ -21,10 +21,11 @@ from GUI_Qt.styles.theme_config import COLORS, FONTS
 class EditTranslationDialog(MessageBox):
     """Dialog for editing a translation"""
 
-    def __init__(self, brand, original, translation, parent=None, tr=None):
+    def __init__(self, categories, category, original, translation, parent=None, tr=None):
         self.tr = tr or (lambda k, **kw: k.format(**kw) if kw else k)
         super().__init__(self.tr("translations.edit_dialog.title"), "", parent)
-        self.brand = brand
+        self.categories = categories or []
+        self.original_category = category
         self.original_text = original
         self.original_translation = translation
 
@@ -38,28 +39,22 @@ class EditTranslationDialog(MessageBox):
         layout.setSpacing(12)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        # Brand (read-only)
-        brand_label = CaptionLabel(self.tr("translations.brand"))
-        brand_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
-        brand_value = BodyLabel(brand)
-        brand_value.setStyleSheet(f"""
-            background-color: {COLORS['lavender_grey']};
-            color: white;
-            padding: 6px 12px;
-            border-radius: 4px;
-            font-weight: 500;
-        """)
+        # Category (editable)
+        category_label = CaptionLabel(self.tr("translations.edit_dialog.category"))
+        category_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self.category_combo = ComboBox()
+        self.category_combo.addItems(self.categories)
+        if category:
+            idx = self.category_combo.findText(category)
+            if idx >= 0:
+                self.category_combo.setCurrentIndex(idx)
 
-        # Original (read-only)
-        original_label = CaptionLabel(self.tr("translations.original"))
-        original_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
-        original_value = BodyLabel(original)
-        original_value.setStyleSheet(f"""
-            background-color: {'rgba(255,255,255,0.05)' if isDarkTheme() else 'rgba(0,0,0,0.03)'};
-            padding: 8px 12px;
-            border-radius: 6px;
-        """)
-        original_value.setWordWrap(True)
+        # Base word (editable)
+        base_label = CaptionLabel(self.tr("translations.edit_dialog.base"))
+        base_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self.base_input = LineEdit()
+        self.base_input.setText(original)
+        self.base_input.setPlaceholderText(self.tr("translations.edit_dialog.base.placeholder"))
 
         # Translation (editable)
         translation_label = CaptionLabel(self.tr("translations.translation"))
@@ -68,11 +63,11 @@ class EditTranslationDialog(MessageBox):
         self.translation_input.setText(translation)
         self.translation_input.setPlaceholderText(self.tr("translations.translation.placeholder"))
 
-        layout.addWidget(brand_label)
-        layout.addWidget(brand_value)
+        layout.addWidget(category_label)
+        layout.addWidget(self.category_combo)
         layout.addSpacing(8)
-        layout.addWidget(original_label)
-        layout.addWidget(original_value)
+        layout.addWidget(base_label)
+        layout.addWidget(self.base_input)
         layout.addSpacing(8)
         layout.addWidget(translation_label)
         layout.addWidget(self.translation_input)
@@ -83,15 +78,19 @@ class EditTranslationDialog(MessageBox):
         self.yesButton.setText(self.tr("translations.dialog.save"))
         self.cancelButton.setText(self.tr("translations.dialog.cancel"))
 
-    def get_translation(self):
-        """Get the edited translation"""
-        return self.translation_input.text().strip()
+    def get_data(self):
+        """Get the edited translation data."""
+        return (
+            self.category_combo.currentText().strip(),
+            self.base_input.text().strip(),
+            self.translation_input.text().strip(),
+        )
 
 
 class AddTranslationDialog(MessageBox):
     """Dialog for adding a new translation"""
 
-    def __init__(self, brands, parent=None, tr=None):
+    def __init__(self, categories, parent=None, tr=None):
         self.tr = tr or (lambda k, **kw: k.format(**kw) if kw else k)
         super().__init__(self.tr("translations.add_dialog.title"), "", parent)
 
@@ -105,12 +104,12 @@ class AddTranslationDialog(MessageBox):
         layout.setSpacing(12)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        # Brand selector
-        brand_label = CaptionLabel(self.tr("translations.brand"))
-        brand_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
-        self.brand_combo = ComboBox()
-        self.brand_combo.addItems(brands)
-        self.brand_combo.setPlaceholderText(self.tr("translations.brand.placeholder"))
+        # Category selector
+        category_label = CaptionLabel(self.tr("translations.add_dialog.category"))
+        category_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self.category_combo = ComboBox()
+        self.category_combo.addItems(categories)
+        self.category_combo.setPlaceholderText(self.tr("translations.brand.placeholder"))
 
         # Original text
         original_label = CaptionLabel(self.tr("translations.original"))
@@ -124,8 +123,8 @@ class AddTranslationDialog(MessageBox):
         self.translation_input = LineEdit()
         self.translation_input.setPlaceholderText(self.tr("translations.translation.placeholder"))
 
-        layout.addWidget(brand_label)
-        layout.addWidget(self.brand_combo)
+        layout.addWidget(category_label)
+        layout.addWidget(self.category_combo)
         layout.addSpacing(8)
         layout.addWidget(original_label)
         layout.addWidget(self.original_input)
@@ -142,7 +141,7 @@ class AddTranslationDialog(MessageBox):
     def get_data(self):
         """Get the translation data"""
         return (
-            self.brand_combo.currentText(),
+            self.category_combo.currentText(),
             self.original_input.text().strip(),
             self.translation_input.text().strip()
         )
@@ -155,6 +154,11 @@ class TranslationsScreen(QWidget):
         super().__init__(parent)
         self.main = main_window
         self._FILTER_ALL = "__all__"
+        # Canonical translation categories used by scrapers/translation logic.
+        # Legacy values (e.g. brand names like "KROSS") can exist in older DBs;
+        # we intentionally hide them from the UI to avoid confusion.
+        self._CATEGORY_UNCATEGORIZED = "Uncategorized"
+        self._ALLOWED_CATEGORIES = ["component", "material", "color", "property"]
         self.current_page = 0
         self.page_size = 20
         self.all_translations = []
@@ -227,7 +231,6 @@ class TranslationsScreen(QWidget):
         self.search_input = SearchLineEdit()
         self.search_input.setPlaceholderText("")
         self.search_input.setMinimumWidth(200)
-        self.search_input.setMaximumWidth(400)
         self.search_input.textChanged.connect(self._apply_filters)
 
         # Brand filter - flexible width
@@ -238,7 +241,6 @@ class TranslationsScreen(QWidget):
         self.brand_filter = ComboBox()
         self._populate_brand_filter()
         self.brand_filter.setMinimumWidth(120)
-        self.brand_filter.setMaximumWidth(180)
         self.brand_filter.currentTextChanged.connect(self._apply_filters)
 
         # Add button
@@ -279,7 +281,6 @@ class TranslationsScreen(QWidget):
         # Table container with max-width for better layout on large screens
         table_container = QWidget()
         table_container.setStyleSheet("background: transparent;")
-        table_container.setMaximumWidth(1400)
         table_container_layout = QVBoxLayout(table_container)
         table_container_layout.setContentsMargins(0, 0, 0, 0)
         table_container_layout.addWidget(self.table, 1)
@@ -317,6 +318,10 @@ class TranslationsScreen(QWidget):
 
         self.retranslate_ui()
 
+    def _category_options(self) -> list[str]:
+        """Return the category/type options shown in the UI."""
+        return [*self._ALLOWED_CATEGORIES, self._CATEGORY_UNCATEGORIZED]
+
     def _populate_brand_filter(self):
         tr = self.main.i18n.tr
         current = self.brand_filter.currentData() if hasattr(self, 'brand_filter') else None
@@ -324,8 +329,8 @@ class TranslationsScreen(QWidget):
         self.brand_filter.blockSignals(True)
         self.brand_filter.clear()
         self.brand_filter.addItem(tr("common.all"), self._FILTER_ALL)
-        for brand in ["KROSS", "Pinarello", "Basso", "Factor", "TREK", "Rondo", "Octane", "Rascal", "Lee Cougan"]:
-            self.brand_filter.addItem(brand, brand)
+        for cat in self._category_options():
+            self.brand_filter.addItem(cat, cat)
         if current is not None:
             idx = self.brand_filter.findData(current)
             if idx >= 0:
@@ -343,7 +348,7 @@ class TranslationsScreen(QWidget):
 
         self.title_label.setText(tr("translations.title"))
         self.search_input.setPlaceholderText(tr("translations.search.placeholder"))
-        self.brand_label.setText(tr("common.brand") + ":")
+        self.brand_label.setText(tr("translations.brand"))
         self.add_btn.setText(tr("translations.add"))
         self.refresh_btn.setToolTip(tr("translations.refresh"))
         self.prev_btn.setToolTip(tr("common.previous_page"))
@@ -413,12 +418,22 @@ class TranslationsScreen(QWidget):
         try:
             cursor = self.main.db.conn.cursor()
 
-            # Get all translations
-            self.all_translations = cursor.execute("""
-                SELECT COALESCE(category, 'Uncategorized'), source_term, target_term
+            # Get only canonical categories (plus NULL/legacy Uncategorized).
+            # This prevents brand names (e.g. "KROSS") from showing up as a "type".
+            allowed = [*self._ALLOWED_CATEGORIES, self._CATEGORY_UNCATEGORIZED]
+            placeholders = ",".join(["?"] * len(allowed))
+            self.all_translations = cursor.execute(
+                f"""
+                SELECT id,
+                       COALESCE(category, '{self._CATEGORY_UNCATEGORIZED}') AS category,
+                       source_term,
+                       target_term
                 FROM translations
+                WHERE category IS NULL OR category IN ({placeholders})
                 ORDER BY category, source_term
-            """).fetchall()
+                """,
+                allowed,
+            ).fetchall()
 
             # Update statistics
             count = len(self.all_translations)
@@ -444,20 +459,21 @@ class TranslationsScreen(QWidget):
 
         # Filter translations
         self.filtered_translations = []
-        for brand, original, translation in self.all_translations:
+        for row in self.all_translations:
+            tid, category, original, translation = row
             # Brand filter
-            if brand_filter and brand_filter != self._FILTER_ALL and brand != brand_filter:
+            if brand_filter and brand_filter != self._FILTER_ALL and category != brand_filter:
                 continue
 
             # Search filter
             if search_text and not (
                 search_text in original.lower() or
                 search_text in translation.lower() or
-                search_text in brand.lower()
+                search_text in category.lower()
             ):
                 continue
 
-            self.filtered_translations.append((brand, original, translation))
+            self.filtered_translations.append((tid, category, original, translation))
 
         # Reset to first page
         self.current_page = 0
@@ -489,11 +505,11 @@ class TranslationsScreen(QWidget):
 
         # Populate table
         page_data = self.filtered_translations[start_idx:end_idx]
-        for row_idx, (brand, original, translation) in enumerate(page_data):
+        for row_idx, (tid, category, original, translation) in enumerate(page_data):
             self.table.insertRow(row_idx)
 
-            # Brand badge
-            brand_item = QTableWidgetItem(brand)
+            # Category badge
+            brand_item = QTableWidgetItem(category)
             brand_item.setForeground(QColor(COLORS['lavender_grey']))
             self.table.setItem(row_idx, 0, brand_item)
 
@@ -514,12 +530,12 @@ class TranslationsScreen(QWidget):
             edit_btn = TransparentToolButton(FluentIcon.EDIT, self)
             edit_btn.setFixedSize(32, 32)
             edit_btn.setToolTip(self.main.i18n.tr("translations.edit.tip"))
-            edit_btn.clicked.connect(lambda checked, b=brand, o=original, t=translation: self._edit_translation(b, o, t))
+            edit_btn.clicked.connect(lambda checked, _id=tid: self._edit_translation(_id))
 
             delete_btn = TransparentToolButton(FluentIcon.DELETE, self)
             delete_btn.setFixedSize(32, 32)
             delete_btn.setToolTip(self.main.i18n.tr("translations.delete.tip"))
-            delete_btn.clicked.connect(lambda checked, b=brand, o=original: self._delete_translation(b, o))
+            delete_btn.clicked.connect(lambda checked, _id=tid, o=original: self._delete_translation(_id, o))
 
             actions_layout.addWidget(edit_btn)
             actions_layout.addWidget(delete_btn)
@@ -543,13 +559,12 @@ class TranslationsScreen(QWidget):
 
     def _show_add_dialog(self):
         """Show dialog to add new translation"""
-        brands = ["KROSS", "Pinarello", "Basso", "Factor", "TREK", "Rondo", "Octane", "Rascal", "Lee Cougan"]
-        dialog = AddTranslationDialog(brands, self, tr=self.main.i18n.tr)
+        dialog = AddTranslationDialog(self._category_options(), self, tr=self.main.i18n.tr)
 
         if dialog.exec():
-            brand, original, translation = dialog.get_data()
+            category, original, translation = dialog.get_data()
 
-            if not brand or not original or not translation:
+            if not category or not original or not translation:
                 InfoBar.warning(
                     title=self.main.i18n.tr("translations.missing.title"),
                     content=self.main.i18n.tr("translations.missing.content"),
@@ -558,17 +573,17 @@ class TranslationsScreen(QWidget):
                 )
                 return
 
-            self._add_translation(brand, original, translation)
+            self._add_translation(category, original, translation)
 
-    def _add_translation(self, brand, original, translation):
+    def _add_translation(self, category, original, translation):
         """Add new translation to database"""
         try:
             cursor = self.main.db.conn.cursor()
 
             # Check if already exists
             existing = cursor.execute(
-                "SELECT 1 FROM translations WHERE category = ? AND source_term = ?",
-                (brand, original)
+                "SELECT 1 FROM translations WHERE source_lang = 'EN' AND target_lang = 'LT' AND source_term = ?",
+                (original,)
             ).fetchone()
 
             if existing:
@@ -583,8 +598,8 @@ class TranslationsScreen(QWidget):
             # Insert new translation
             cursor.execute(
                 """INSERT INTO translations (source_lang, target_lang, source_term, target_term, category, created_at)
-                   VALUES ('en', 'lt', ?, ?, ?, datetime('now'))""",
-                (original, translation, brand)
+                   VALUES ('EN', 'LT', ?, ?, ?, datetime('now'))""",
+                (original, translation, category)
             )
             self.main.db.conn.commit()
 
@@ -606,14 +621,33 @@ class TranslationsScreen(QWidget):
                 position=InfoBarPosition.TOP
             )
 
-    def _edit_translation(self, brand, original, translation):
+    def _edit_translation(self, translation_id: int):
         """Show dialog to edit translation"""
-        dialog = EditTranslationDialog(brand, original, translation, self, tr=self.main.i18n.tr)
+        try:
+            cursor = self.main.db.conn.cursor()
+            row = cursor.execute(
+                "SELECT id, COALESCE(category, 'Uncategorized') AS category, source_term, target_term FROM translations WHERE id = ?",
+                (translation_id,)
+            ).fetchone()
+            if not row:
+                return
 
-        if dialog.exec():
-            new_translation = dialog.get_translation()
+            categories = self._category_options()
 
-            if not new_translation:
+            dialog = EditTranslationDialog(
+                categories,
+                row["category"],
+                row["source_term"],
+                row["target_term"],
+                self,
+                tr=self.main.i18n.tr,
+            )
+
+            if not dialog.exec():
+                return
+
+            new_category, new_base, new_translation = dialog.get_data()
+            if not new_category or not new_base or not new_translation:
                 InfoBar.warning(
                     title=self.main.i18n.tr("translations.invalid.title"),
                     content=self.main.i18n.tr("translations.invalid.content"),
@@ -622,25 +656,32 @@ class TranslationsScreen(QWidget):
                 )
                 return
 
-            self._update_translation(brand, original, new_translation)
-
-    def _update_translation(self, brand, original, new_translation):
-        """Update translation in database"""
-        try:
-            cursor = self.main.db.conn.cursor()
+            # Uniqueness is on (source_lang,target_lang,source_term) - guard collisions.
+            existing = cursor.execute(
+                """SELECT 1 FROM translations
+                   WHERE source_lang = 'EN' AND target_lang = 'LT' AND source_term = ? AND id != ?""",
+                (new_base, translation_id),
+            ).fetchone()
+            if existing:
+                InfoBar.warning(
+                    title=self.main.i18n.tr("translations.exists.title"),
+                    content=self.main.i18n.tr("translations.exists.content"),
+                    parent=self,
+                    position=InfoBarPosition.TOP
+                )
+                return
 
             cursor.execute(
-                "UPDATE translations SET target_term = ? WHERE category = ? AND source_term = ?",
-                (new_translation, brand, original)
+                "UPDATE translations SET category = ?, source_term = ?, target_term = ? WHERE id = ?",
+                (new_category, new_base, new_translation, translation_id),
             )
             self.main.db.conn.commit()
 
-            # Reload translations
             self._load_translations()
 
             InfoBar.success(
                 title=self.main.i18n.tr("translations.updated.title"),
-                content=self.main.i18n.tr("translations.updated.content", original=original),
+                content=self.main.i18n.tr("translations.updated.content", original=new_base),
                 parent=self,
                 position=InfoBarPosition.TOP
             )
@@ -653,7 +694,7 @@ class TranslationsScreen(QWidget):
                 position=InfoBarPosition.TOP
             )
 
-    def _delete_translation(self, brand, original):
+    def _delete_translation(self, translation_id: int, original: str):
         """Delete translation with confirmation"""
         # Show confirmation dialog
         dialog = MessageBox(
@@ -669,8 +710,8 @@ class TranslationsScreen(QWidget):
                 cursor = self.main.db.conn.cursor()
 
                 cursor.execute(
-                    "DELETE FROM translations WHERE category = ? AND source_term = ?",
-                    (brand, original)
+                    "DELETE FROM translations WHERE id = ?",
+                    (translation_id,)
                 )
                 self.main.db.conn.commit()
 

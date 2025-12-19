@@ -58,27 +58,22 @@ class LoginHandler:
             self._log_error("Login failed - unexpected error", exception=e, email=email)
             return False
     
-    def login(self, credentials_callback=None, retry_callback=None, max_attempts=3):
-        """
-        Main login method - GUI/CLI agnostic
-        
-        Args:
-            credentials_callback: Function that returns (email, password) tuple
-                                 If None, uses default CLI prompts
-            retry_callback: Function that returns True/False for retry
-                          If None, uses default CLI prompts
-            max_attempts: Maximum login attempts before giving up
+    def login(self, credentials_callback, retry_callback, max_attempts=3):
+        """Main login method.
+
+        This project is GUI-only. Callers must provide:
+        - credentials_callback() -> (email, password)
+        - retry_callback() -> bool
         """
         self._log("Starting login process")
         self.driver.maximize_window()
         self.driver.get("https://ultrabike.lt/admin-ultro/")
         
-        # Require GUI to provide callbacks in GUI-only mode
         if credentials_callback is None:
-            raise RuntimeError("CLI login flow disabled: GUI must provide a credentials_callback(email,password).")
+            raise ValueError("credentials_callback is required")
 
         if retry_callback is None:
-            raise RuntimeError("CLI login flow disabled: GUI must provide a retry_callback returning True/False.")
+            raise ValueError("retry_callback is required")
         
         attempts = 0
         
@@ -93,9 +88,7 @@ class LoginHandler:
             
             # Try to login
             if self.attempt_login(email, password):
-                # Success - save credentials
-                self.credential_manager.save_credentials(email, password)
-                ErrorManager.show_success("Sėkmingai prisijungėt!")
+                # Success - persistence handled by GUI (encrypted with master password)
                 return True
             
             attempts += 1
@@ -116,20 +109,6 @@ class LoginHandler:
                 return False
         
         return False
-    
-    def _cli_credentials_callback(self) -> tuple:
-        """
-        Default CLI implementation for getting credentials
-        Used when no callback provided (backward compatibility)
-        """
-        raise RuntimeError("CLI login helper disabled: GUI must provide credentials via credentials_callback.")
-    
-    def _cli_retry_callback(self) -> bool:
-        """
-        Default CLI implementation for retry prompt
-        Used when no callback provided (backward compatibility)
-        """
-        raise RuntimeError("CLI login retry helper disabled: GUI must provide a retry_callback.")
     
     def _is_valid_email(self, email: str) -> bool:
         """Basic email validation"""

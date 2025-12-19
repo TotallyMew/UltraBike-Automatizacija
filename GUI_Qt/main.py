@@ -17,11 +17,30 @@ from qfluentwidgets import setTheme, Theme
 
 from GUI_Qt.MainWindow import MainWindow
 from GUI_Qt.styles.theme_config import apply_theme
-from PySide6.QtGui import QIcon,QPixmap
+from PySide6.QtGui import QIcon
+
+from Utilities.ResourcePaths import resource_path
+
+
+def _set_windows_appusermodel_id(app_id: str) -> None:
+    """Set AppUserModelID so Windows taskbar uses the correct icon/grouping."""
+    if not sys.platform.startswith("win"):
+        return
+
+    try:
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(app_id)
+    except Exception:
+        # Best-effort; failure here should never block startup.
+        pass
 
 
 def main():
     """Main application entry point"""
+
+    # Helps Windows taskbar icon + grouping (especially for pinned shortcuts)
+    _set_windows_appusermodel_id("UltraBike_Automatizacija")
 
     # Enable High DPI scaling for modern displays
     QApplication.setHighDpiScaleFactorRoundingPolicy(
@@ -32,24 +51,35 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName("UltraBike Automatizacija")
     app.setOrganizationName("UltraBike")
+    try:
+        app.setApplicationDisplayName("UltraBike Automatizacija")
+    except Exception:
+        pass
 
-    icon_path = os.path.join(project_root, "might work.ico")
-    # Debug: icon existence and absolute path can be logged if needed
-        #Set the application icon
-    icon_path = os.path.join(project_root, "might work.ico")  # path to your ICO
-    app.setWindowIcon(QIcon(icon_path))
-    # Debug: QPixmap null check can be logged if needed
+    # Application icon (optional)
+    app_icon = None
+    try:
+        icon_file = resource_path("might work.ico")
+        if icon_file.exists():
+            app_icon = QIcon(str(icon_file))
+            app.setWindowIcon(app_icon)
+    except Exception:
+        app_icon = None
 
     # Apply Fluent Design theme
     apply_theme(app)
 
     # Create and show main window
     window = MainWindow()
-    window.setWindowIcon(QIcon(icon_path))
+    try:
+        if app_icon is not None:
+            window.setWindowIcon(app_icon)
+    except Exception:
+        pass
     window.show()
 
     # Run application
-    sys.exit(app.exec())
+    app.exec()
 
 
 if __name__ == "__main__":

@@ -191,6 +191,41 @@ class BatchProcessor:
         """Request to stop batch processing after current item"""
         self.should_stop = True
         self._log("Stop requested")
+
+    def process_batch(self, items, master_password=None):
+        """Convenience wrapper used by GUI to process a batch list.
+
+        Args:
+            items: List of dicts with keys: brand, code, url, description_name, frameset_only, append_disclaimer
+            master_password: Optional master password (used to decrypt external brand credentials).
+        """
+        self.clear_queue()
+
+        for it in items:
+            brand_options = {
+                "description_name": it.get("description_name") or None,
+                "frameset_only": bool(it.get("frameset_only")) if it.get("frameset_only") is not None else False,
+                "append_disclaimer": bool(it.get("append_disclaimer")) if it.get("append_disclaimer") is not None else False,
+            }
+            self.add_to_queue(it.get("brand"), it.get("code"), it.get("url"), brand_options=brand_options)
+
+        from uploaderFactory import getUploaderClass
+
+        def uploader_factory(driver, brand, code, url_or_code, db, batch_id, brand_options):
+            uploader_class = getUploaderClass(brand)
+            return uploader_class(
+                driver,
+                brand,
+                ultraBikeCode=code,
+                bicycleUrlOrCode=url_or_code,
+                db_manager=db,
+                brand_options=brand_options,
+                logger=self.logger,
+                batch_id=batch_id,
+                master_password=master_password,
+            )
+
+        return self.start_batch(uploader_factory)
     
     def get_results(self):
         """Get current results"""

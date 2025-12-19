@@ -5,7 +5,7 @@ Modal dialog for uploading multiple products via manual entry or Excel import
 
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QWidget, QScrollArea,
-    QPushButton, QTabWidget, QFileDialog, QLabel
+    QPushButton, QTabWidget, QFileDialog, QLabel, QSizePolicy
 )
 from PySide6.QtCore import Qt, Signal
 from qfluentwidgets import (
@@ -47,36 +47,42 @@ class BatchRowWidget(QWidget):
         # Brand dropdown
         self.brand_combo = ComboBox()
         self.brand_combo.addItems(self.brands)
-        self.brand_combo.setFixedWidth(120)
+        self.brand_combo.setMinimumWidth(120)
+        self.brand_combo.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
         self.brand_combo.currentTextChanged.connect(self._on_brand_change)
         self.brand_combo.currentTextChanged.connect(self.changed.emit)
 
         # Product code
         self.code_field = LineEdit()
-        self.code_field.setFixedWidth(120)
+        self.code_field.setMinimumWidth(120)
+        self.code_field.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
         self.code_field.textChanged.connect(self.changed.emit)
 
         # URL/Code
         self.url_field = LineEdit()
-        self.url_field.setFixedWidth(280)
+        self.url_field.setMinimumWidth(260)
+        self.url_field.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.url_field.textChanged.connect(self.changed.emit)
 
         # Description
         self.desc_combo = ComboBox()
         self.desc_combo.addItem("")  # Empty option
         self.desc_combo.addItems(self.descriptions)
-        self.desc_combo.setFixedWidth(200)
+        self.desc_combo.setMinimumWidth(200)
+        self.desc_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.desc_combo.currentTextChanged.connect(self.changed.emit)
 
         # Frameset checkbox (hidden by default)
         self.frameset_check = CheckBox()
         self.frameset_check.setVisible(False)
-        self.frameset_check.setFixedWidth(70)
+        self.frameset_check.setMinimumWidth(70)
+        self.frameset_check.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.frameset_check.stateChanged.connect(self.changed.emit)
 
         # Disclaimer checkbox
         self.disclaimer_check = CheckBox()
-        self.disclaimer_check.setFixedWidth(50)
+        self.disclaimer_check.setMinimumWidth(50)
+        self.disclaimer_check.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.disclaimer_check.stateChanged.connect(self.changed.emit)
 
         # Delete button
@@ -84,14 +90,13 @@ class BatchRowWidget(QWidget):
         self._delete_btn.clicked.connect(lambda: self.deleted.emit(self))
         self._delete_btn.setFixedWidth(32)
 
-        layout.addWidget(self.brand_combo)
-        layout.addWidget(self.code_field)
-        layout.addWidget(self.url_field)
-        layout.addWidget(self.desc_combo)
-        layout.addWidget(self.frameset_check)
-        layout.addWidget(self.disclaimer_check)
-        layout.addWidget(self._delete_btn)
-        layout.addStretch()
+        layout.addWidget(self.brand_combo, 0)
+        layout.addWidget(self.code_field, 0)
+        layout.addWidget(self.url_field, 2)
+        layout.addWidget(self.desc_combo, 1)
+        layout.addWidget(self.frameset_check, 0)
+        layout.addWidget(self.disclaimer_check, 0)
+        layout.addWidget(self._delete_btn, 0)
 
         self.retranslate_ui()
 

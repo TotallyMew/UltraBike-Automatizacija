@@ -108,7 +108,6 @@ class DescriptionsScreen(QWidget):
         left_panel = CardWidget()
         left_panel.setBorderRadius(8)
         left_panel.setMinimumWidth(250)
-        left_panel.setMaximumWidth(350)  # Responsive width instead of fixed
 
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(16, 16, 16, 16)
@@ -160,7 +159,6 @@ class DescriptionsScreen(QWidget):
         # RIGHT PANEL - Tabs with HTML Editors (with max-width for readability)
         right_panel = CardWidget()
         right_panel.setBorderRadius(8)
-        right_panel.setMaximumWidth(1000)  # Prevent text editors from becoming too wide
 
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(16, 16, 16, 16)

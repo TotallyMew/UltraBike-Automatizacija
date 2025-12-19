@@ -126,9 +126,7 @@
   <ItemGroup>
     <Content Include="Assets\PaltaIIENG.txt" />
     <Content Include="Assets\Translations\FactorENG-LT.txt" />
-    <Content Include="Config\LoginConfig\loginInfo.json" />
     <Content Include="Assets\Translations\BassoENG-LT.txt" />
-    <Content Include="Assets\credentials.txt" />
     <Content Include="Assets\Translations\LeeCouganENG-LT.txt" />
     <Content Include="Assets\Translations\LookENG-LT.txt" />
     <Content Include="Assets\Translations\OctaneENG-LT.txt" />

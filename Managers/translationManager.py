@@ -1,4 +1,5 @@
 import inspect
+from pathlib import Path
 from Utilities.TranslationHandler import TranslationHandler
 from Utilities.FileHandler import FileHandler
 from Utilities.ErrorManager import ErrorManager
@@ -9,8 +10,6 @@ class TranslationManager:
         self.logger = logger
         self.ltPath = f"pabaigta{brandName}LT.txt"
         self.enPath = f"pabaigta{brandName}ENG.txt"
-        self.engDictPath = r"D:\Iš desktop\Programavimas\Projects\Python\UltraBike_Automatizacija\Assets\Translations\vertimasSavybesLT-ENG.txt"  # ← Fixed
-        self.descriptionPath = r"D:\Iš desktop\Programavimas\Projects\Python\UltraBike_Automatizacija\Assets\Translations\vertimasSavybesPL-LT.txt"  # ← Fixed
         self.translation_handler = TranslationHandler(db_manager)
         self.file_handler = FileHandler()
         self.db = db_manager
@@ -55,14 +54,10 @@ class TranslationManager:
         try:
             scrape_func(**args)
             self._log("Scraping completed", output_file=self.ltPath)
-        
-            self.translation_handler.translate_to_english(self.ltPath, self.enPath, self.engDictPath)
+
+            # Translate using database-powered translations (preferred)
+            self.translation_handler.translate_to_english(self.ltPath, self.enPath)
             self._log("Translation to English completed", output_file=self.enPath)
-        
-        except FileNotFoundError as e:
-            self._log_error("Translation dictionary not found", exception=e, dict_path=self.engDictPath)
-            ErrorManager.show_error("TRANSLATION_FILE_NOT_FOUND", file_path=self.engDictPath)
-            raise
         except Exception as e:
             self._log_error("Translation preparation failed", exception=e, brand=self.brandName)
             ErrorManager.show_error("TRANSLATION_FAILED")
@@ -112,3 +107,19 @@ class TranslationManager:
         """
         self._log("Loading Latvian translations (using EN)", file=self.enPath)
         return self.file_handler.read_translated_file(self.enPath)
+
+    def cleanup_generated_files(self) -> None:
+        """Delete generated pabaigta*.txt output files for this brand.
+
+        Intended to be called after a successful run when the user enabled
+        the corresponding setting.
+        """
+        for file_path in (self.ltPath, self.enPath):
+            try:
+                p = Path(file_path)
+                if p.exists() and p.is_file():
+                    p.unlink()
+                    self._log("Deleted generated translation file", file=str(p))
+            except Exception as e:
+                # Do not fail the whole workflow due to cleanup issues.
+                self._log_error("Failed to delete generated translation file", exception=e, file=file_path)

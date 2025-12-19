@@ -1,4 +1,5 @@
 ﻿import os
+from pathlib import Path
 import re
 from datetime import datetime
 
@@ -90,6 +91,7 @@ class TranslationImporter:
         
         except Exception as e:
             # Warning: Error reading {file_path}: {e}
+            pass
         
         return translations
     
@@ -146,30 +148,31 @@ class TranslationImporter:
         """
         # Info: Importing translations (header)
         
-        base_path = "Assets/Translations/"
+        from Utilities.ResourcePaths import resource_path
+        base_path = resource_path("Assets/Translations")
         
         # List of all translation files
         files_to_import = [
             # Component translations (ENG → LT)
-            (f"{base_path}vertimasDetalesENG-LT.txt", "EN", "LT"),
+            (str(base_path / "vertimasDetalesENG-LT.txt"), "EN", "LT"),
             
             # Property translations (ENG → LT)
-            (f"{base_path}vertimasSavybesENG-LT.txt", "EN", "LT"),
-            (f"{base_path}vertimasSavybesLT-ENG.txt", "LT", "EN"),
+            (str(base_path / "vertimasSavybesENG-LT.txt"), "EN", "LT"),
+            (str(base_path / "vertimasSavybesLT-ENG.txt"), "LT", "EN"),
             
             # Property translations (PL → LT)
-            (f"{base_path}vertimasDetalesPL-LT.txt", "PL", "LT"),
-            (f"{base_path}vertimasSavybesPL-LT.txt", "PL", "LT"),
+            (str(base_path / "vertimasDetalesPL-LT.txt"), "PL", "LT"),
+            (str(base_path / "vertimasSavybesPL-LT.txt"), "PL", "LT"),
             
             # Brand-specific translations
-            (f"{base_path}BassoENG-LT.txt", "EN", "LT"),
-            (f"{base_path}FactorENG-LT.txt", "EN", "LT"),
-            (f"{base_path}LeeCouganENG-LT.txt", "EN", "LT"),
-            (f"{base_path}LookENG-LT.txt", "EN", "LT"),
-            (f"{base_path}OctaneENG-LT.txt", "EN", "LT"),
-            (f"{base_path}PinarelloENG-LT.txt", "EN", "LT"),
-            (f"{base_path}RascalENG-LT.txt", "EN", "LT"),
-            (f"{base_path}RondoENG-LT.txt", "EN", "LT"),
+            (str(base_path / "BassoENG-LT.txt"), "EN", "LT"),
+            (str(base_path / "FactorENG-LT.txt"), "EN", "LT"),
+            (str(base_path / "LeeCouganENG-LT.txt"), "EN", "LT"),
+            (str(base_path / "LookENG-LT.txt"), "EN", "LT"),
+            (str(base_path / "OctaneENG-LT.txt"), "EN", "LT"),
+            (str(base_path / "PinarelloENG-LT.txt"), "EN", "LT"),
+            (str(base_path / "RascalENG-LT.txt"), "EN", "LT"),
+            (str(base_path / "RondoENG-LT.txt"), "EN", "LT"),
         ]
         
         for file_path, source_lang, target_lang in files_to_import:
@@ -192,4 +195,5 @@ class TranslationImporter:
         # Info: Category breakdown
         for cat in categories:
             # Info: {cat['category']}: {cat['count']} translations
+            pass
         # Info: End of category breakdown

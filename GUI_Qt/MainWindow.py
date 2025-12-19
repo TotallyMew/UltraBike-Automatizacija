@@ -27,7 +27,7 @@ class MainWindow(FluentWindow):
     def __init__(self):
         super().__init__()
 
-        # Initialize backend managers (same as Flet version)
+        # Initialize backend managers
         self.driver = None
         self.current_user = None
         self.logger = Logger()
@@ -59,11 +59,15 @@ class MainWindow(FluentWindow):
 
         # Initialize screens (lazy loading)
         self.login_screen = None
+
+        # Cached for current run after master unlock/setup
+        self._unlocked_master_password = None
         self.upload_screen = None
         self.batch_upload_screen = None
         self.history_screen = None
         self.translations_screen = None
         self.descriptions_screen = None
+        self.account_screen = None
         self.settings_screen = None
 
         # Top bar reference
@@ -228,12 +232,21 @@ class MainWindow(FluentWindow):
             position=NavigationItemPosition.TOP
         )
 
+        # Account / credentials
+        self._nav_items["account"] = self.navigationInterface.addItem(
+            routeKey="account",
+            icon=FluentIcon.PEOPLE,
+            text=self.i18n.tr("nav.account"),
+            onClick=lambda: self._switch_to_screen(5),
+            position=NavigationItemPosition.BOTTOM
+        )
+
         # Add settings to bottom
         self._nav_items["settings"] = self.navigationInterface.addItem(
             routeKey="settings",
             icon=FluentIcon.SETTING,
             text=self.i18n.tr("nav.settings"),
-            onClick=lambda: self._switch_to_screen(5),
+            onClick=lambda: self._switch_to_screen(6),
             position=NavigationItemPosition.BOTTOM
         )
 
@@ -249,6 +262,7 @@ class MainWindow(FluentWindow):
             self._set_nav_item_text("history", translate(lang_code, "nav.history"))
             self._set_nav_item_text("translations", translate(lang_code, "nav.translations"))
             self._set_nav_item_text("descriptions", translate(lang_code, "nav.descriptions"))
+            self._set_nav_item_text("account", translate(lang_code, "nav.account"))
             self._set_nav_item_text("settings", translate(lang_code, "nav.settings"))
         except Exception:
             pass
@@ -259,6 +273,47 @@ class MainWindow(FluentWindow):
             self._retranslate_ui(self.i18n.language.code)
         except Exception:
             pass
+
+    def get_unlocked_master_password(self, parent=None):
+        """Return cached master password, or prompt the user to unlock."""
+        try:
+            if self._unlocked_master_password and self.credential_manager.verify_master_password(self._unlocked_master_password):
+                return self._unlocked_master_password
+        except Exception:
+            pass
+
+        if not self.credential_manager.has_master_password():
+            return None
+
+        try:
+            from qfluentwidgets import MessageBox, PasswordLineEdit
+
+            dialog_parent = parent if parent is not None else self
+            dialog = MessageBox(
+                self.i18n.tr("master.prompt.title"),
+                self.i18n.tr("master.prompt.subtitle"),
+                dialog_parent,
+            )
+
+            pw = PasswordLineEdit()
+            pw.setPlaceholderText(self.i18n.tr("master.password.placeholder"))
+            pw.setMinimumWidth(360)
+            pw.returnPressed.connect(lambda: dialog.accept())
+            dialog.textLayout.addWidget(pw)
+            dialog.yesButton.setText(self.i18n.tr("master.unlock"))
+            dialog.cancelButton.setText(self.i18n.tr("common.cancel"))
+
+            if not dialog.exec():
+                return None
+
+            candidate = pw.text()
+            if self.credential_manager.verify_master_password(candidate):
+                self._unlocked_master_password = candidate
+                return candidate
+
+            return None
+        except Exception:
+            return None
 
     def _set_nav_item_text(self, route_key: str, text: str) -> None:
         """Best-effort: update a navigation item's label text at runtime."""
@@ -287,6 +342,7 @@ class MainWindow(FluentWindow):
             self._set_nav_item_text("history", self.i18n.tr("nav.history"))
             self._set_nav_item_text("translations", self.i18n.tr("nav.translations"))
             self._set_nav_item_text("descriptions", self.i18n.tr("nav.descriptions"))
+            self._set_nav_item_text("account", self.i18n.tr("nav.account"))
             self._set_nav_item_text("settings", self.i18n.tr("nav.settings"))
 
             # Notify screens if they implement live retranslation
@@ -297,6 +353,7 @@ class MainWindow(FluentWindow):
                 getattr(self, "history_screen", None),
                 getattr(self, "translations_screen", None),
                 getattr(self, "descriptions_screen", None),
+                getattr(self, "account_screen", None),
                 getattr(self, "settings_screen", None),
             ):
                 if screen is not None and hasattr(screen, "retranslate_ui"):
@@ -349,7 +406,13 @@ class MainWindow(FluentWindow):
                 self.descriptions_screen = DescriptionsScreen(self)
                 self._add_screen_to_stack(self.descriptions_screen, self.i18n.tr("nav.descriptions"))
             self._show_screen(self.descriptions_screen)
-        elif index == 5:  # Settings
+        elif index == 5:  # Account
+            if not self.account_screen:
+                from GUI_Qt.screens.AccountScreen import AccountScreen
+                self.account_screen = AccountScreen(self)
+                self._add_screen_to_stack(self.account_screen, self.i18n.tr("nav.account"))
+            self._show_screen(self.account_screen)
+        elif index == 6:  # Settings
             if not self.settings_screen:
                 from GUI_Qt.screens.SettingsScreen import SettingsScreen
                 self.settings_screen = SettingsScreen(self)
@@ -416,6 +479,7 @@ class MainWindow(FluentWindow):
         from GUI_Qt.dialogs.MasterPasswordDialog import MasterPasswordSetupDialog
 
         def on_complete(master_password):
+            self._unlocked_master_password = master_password
             # Master password created, now show login
             self.show_login()
 
@@ -428,6 +492,12 @@ class MainWindow(FluentWindow):
         from GUI_Qt.dialogs.MasterPasswordDialog import MasterPasswordPromptDialog
 
         def on_success(email, password):
+            try:
+                # Prompt dialog caches this too, but keep it here for safety
+                if hasattr(self, "_unlocked_master_password") and self._unlocked_master_password:
+                    pass
+            except Exception:
+                pass
             # Master password verified, auto-login
             self._auto_login(email, password)
 
@@ -572,6 +642,14 @@ class MainWindow(FluentWindow):
             if password:
                 self.credential_manager.create_session(email, password)
 
+                # Persist encrypted credentials if master password is available
+                master = self.get_unlocked_master_password(parent=self.login_screen)
+                if master:
+                    try:
+                        self.credential_manager.save_credentials(email, password, master)
+                    except Exception:
+                        pass
+
         self.show_main()
 
     def logout(self):
@@ -611,8 +689,16 @@ class MainWindow(FluentWindow):
         else:
             setTheme(Theme.LIGHT)
 
-        # Apply global stylesheet for consistent styling
-        self.setStyleSheet(get_global_stylesheet())
+        # Apply global stylesheet for consistent styling (set at app-level so it
+        # reliably affects all widgets/screens).
+        try:
+            app = QApplication.instance()
+            if app is not None:
+                app.setStyleSheet(get_global_stylesheet())
+            else:
+                self.setStyleSheet(get_global_stylesheet())
+        except Exception:
+            self.setStyleSheet(get_global_stylesheet())
 
     def update_container_backgrounds(self):
         """Update main container and content stack backgrounds when theme changes"""

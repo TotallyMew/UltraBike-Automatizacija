@@ -31,7 +31,3 @@ class URLHandler:
         except requests.RequestException:
             return False
 
-    @staticmethod
-    def get_brand_url(brand_name):
-        name = brand_name.strip().lower().replace(" ", "")
-        raise RuntimeError("CLI URL input disabled: provide brand URL or code programmatically from GUI.")

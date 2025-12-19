@@ -5,9 +5,9 @@ Fluent Design System with Space Indigo/Lavender color scheme
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QFileDialog,
-    QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QFrame
+    QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QFrame, QSizePolicy
 )
-from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, Signal
+from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, Signal, QTimer, QEvent
 from PySide6.QtGui import QColor, QDragEnterEvent, QDropEvent
 from qfluentwidgets import (
     LineEdit, ComboBox, CheckBox, PrimaryPushButton, PushButton,
@@ -18,7 +18,7 @@ from qfluentwidgets import (
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment
 from Managers.DescriptionManager import DescriptionManager
-from GUI_Qt.styles.theme_config import COLORS, FONTS
+from GUI_Qt.styles.theme_config import COLORS, FONTS, COMPONENT_COLORS
 
 
 # Removed old ProductRow CardWidget class - replaced with modern table
@@ -61,18 +61,8 @@ class DropZoneWidget(QWidget):
         layout.addWidget(subtitle, 0, Qt.AlignmentFlag.AlignCenter)
         layout.addStretch()
 
-        # Style
-        self.setStyleSheet("""
-            DropZoneWidget {
-                background-color: transparent;
-                border: 2px dashed #8D99AE;
-                border-radius: 12px;
-            }
-            DropZoneWidget:hover {
-                border-color: #2B2D42;
-                background-color: rgba(139, 153, 174, 0.05);
-            }
-        """)
+        # Style (theme-consistent)
+        self._apply_style()
 
         # Make clickable
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -90,46 +80,49 @@ class DropZoneWidget(QWidget):
             urls = event.mimeData().urls()
             if len(urls) == 1 and urls[0].toLocalFile().endswith('.xlsx'):
                 event.acceptProposedAction()
-                self.setStyleSheet("""
-                    DropZoneWidget {
-                        background-color: rgba(139, 153, 174, 0.1);
-                        border: 2px solid #2B2D42;
-                        border-radius: 12px;
-                    }
-                """)
+                self._apply_style(is_drag_active=True)
 
     def dragLeaveEvent(self, event):
-        self.setStyleSheet("""
-            DropZoneWidget {
-                background-color: transparent;
-                border: 2px dashed #8D99AE;
-                border-radius: 12px;
-            }
-            DropZoneWidget:hover {
-                border-color: #2B2D42;
-                background-color: rgba(139, 153, 174, 0.05);
-            }
-        """)
+        self._apply_style()
 
     def dropEvent(self, event: QDropEvent):
         files = [u.toLocalFile() for u in event.mimeData().urls()]
         if files and files[0].endswith('.xlsx'):
             self.file_dropped.emit(files[0])
-        self.setStyleSheet("""
-            DropZoneWidget {
-                background-color: transparent;
-                border: 2px dashed #8D99AE;
-                border-radius: 12px;
-            }
-            DropZoneWidget:hover {
-                border-color: #2B2D42;
-                background-color: rgba(139, 153, 174, 0.05);
-            }
-        """)
+        self._apply_style()
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             self.file_dropped.emit("__browse__")  # Signal to open file dialog
+
+    def _apply_style(self, is_drag_active: bool = False):
+        is_dark = isDarkTheme()
+        border = COLORS['lavender_grey'] if is_dark else COLORS['space_indigo']
+        dashed = COLORS['lavender_grey']
+        hover_bg = f"rgba(141, 153, 174, {0.10 if is_dark else 0.06})"
+
+        if is_drag_active:
+            # Stronger visual state when file is being dragged over
+            self.setStyleSheet(f"""
+                DropZoneWidget {{
+                    background-color: {hover_bg};
+                    border: 2px solid {border};
+                    border-radius: 12px;
+                }}
+            """)
+            return
+
+        self.setStyleSheet(f"""
+            DropZoneWidget {{
+                background-color: transparent;
+                border: 2px dashed {dashed};
+                border-radius: 12px;
+            }}
+            DropZoneWidget:hover {{
+                border-color: {border};
+                background-color: {hover_bg};
+            }}
+        """)
 
 
 class BatchUploadScreen(QWidget):
@@ -140,6 +133,7 @@ class BatchUploadScreen(QWidget):
         self.main = main_window
         self.current_mode = "manual"
         self.row_counter = 0
+        self._base_table_rows = 5
 
         # Load descriptions
         desc_manager = DescriptionManager(main_window.db)
@@ -155,6 +149,60 @@ class BatchUploadScreen(QWidget):
 
         # Connect to theme change signal
         qconfig.themeChangedFinished.connect(self._on_theme_changed)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        QTimer.singleShot(0, self._ensure_table_fills_viewport)
+
+    def eventFilter(self, obj, event):
+        if hasattr(self, "table") and obj is self.table.viewport() and event.type() == QEvent.Type.Resize:
+            QTimer.singleShot(0, self._ensure_table_fills_viewport)
+        return super().eventFilter(obj, event)
+
+    def _ensure_table_fills_viewport(self):
+        """Add empty rows so the table fills its visible height.
+
+        This prevents a large blank area under the last row on big windows.
+        """
+        if not hasattr(self, "table"):
+            return
+        if not self.table.isVisible():
+            return
+        if hasattr(self, "excel_empty") and self.excel_empty.isVisible():
+            return
+
+        viewport = self.table.viewport()
+        if viewport is None:
+            return
+        viewport_height = viewport.height()
+        if viewport_height <= 0:
+            return
+
+        row_height = self.table.verticalHeader().defaultSectionSize() or 56
+        target_rows = (viewport_height + row_height - 1) // row_height + 1
+        target_rows = max(self._base_table_rows, int(target_rows))
+        target_rows = min(target_rows, 50)
+
+        current_rows = self.table.rowCount()
+        if current_rows >= target_rows:
+            return
+
+        self.table.setRowCount(target_rows)
+        for row in range(current_rows, target_rows):
+            self._setup_table_row(row)
+
+    def _find_row_for_sender(self, column: int, widget_type):
+        sender = self.sender()
+        if sender is None:
+            return None
+        for row in range(self.table.rowCount()):
+            cell = self.table.cellWidget(row, column)
+            if not cell:
+                continue
+            w = cell.findChild(widget_type)
+            if w is sender:
+                return row
+        return None
 
     def _init_ui(self):
         """Initialize UI with proper Fluent Design"""
@@ -287,7 +335,7 @@ class BatchUploadScreen(QWidget):
         self.table = QTableWidget()
         self.table.setColumnCount(7)
         self.table.setHorizontalHeaderLabels(["", "", "", "", "", "", ""])
-        self.table.setRowCount(5)
+        self.table.setRowCount(self._base_table_rows)
 
         # Apply table styling
         self._update_table_theme()
@@ -299,8 +347,12 @@ class BatchUploadScreen(QWidget):
         self.table.horizontalHeader().setStretchLastSection(False)
         self.table.horizontalHeader().setMinimumHeight(48)
         self.table.verticalHeader().setVisible(False)
-        self.table.verticalHeader().setDefaultSectionSize(56)  # Taller rows for better alignment
+        # Slightly taller rows prevent border clipping on high-DPI systems
+        self.table.verticalHeader().setDefaultSectionSize(60)
         self.table.setShowGrid(True)
+
+        # Auto-fill rows when the table viewport resizes
+        self.table.viewport().installEventFilter(self)
 
         # Enable corner clipping for rounded borders
         self.table.setCornerButtonEnabled(False)
@@ -316,19 +368,21 @@ class BatchUploadScreen(QWidget):
         header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)    # Delete - fixed
 
         # Set minimum widths for stretching columns
-        self.table.setColumnWidth(0, 120)  # Brand minimum
+        self.table.setColumnWidth(0, 180)  # Brand minimum (avoid placeholder truncation)
         self.table.setColumnWidth(1, 140)  # Code fixed
-        self.table.setColumnWidth(3, 150)  # Description minimum
+        self.table.setColumnWidth(3, 200)  # Description minimum
         self.table.setColumnWidth(6, 60)   # Delete fixed
 
         # Populate initial rows
-        for row in range(5):
+        for row in range(self._base_table_rows):
             self._setup_table_row(row)
+
+        # Fill remaining visible area with extra empty rows (useful on 1080p+).
+        QTimer.singleShot(0, self._ensure_table_fills_viewport)
 
         # Table container with max-width for better layout on large screens
         table_container = QWidget()
         table_container.setStyleSheet("background: transparent;")
-        table_container.setMaximumWidth(1600)  # Larger for batch operations
         table_container_layout = QVBoxLayout(table_container)
         table_container_layout.setContentsMargins(0, 0, 0, 0)
         table_container_layout.addWidget(self.table, 1)
@@ -343,22 +397,12 @@ class BatchUploadScreen(QWidget):
 
         layout.addWidget(content_card, 1)
 
-        # === STATUS BAR ===
-        status_card = CardWidget()
-        status_card.setBorderRadius(8)
-        status_layout = QHBoxLayout(status_card)
-        status_layout.setContentsMargins(20, 14, 20, 14)
-
+        # === ACTION BAR ===
+        actions = QHBoxLayout()
         self.status_label = BodyLabel("")
         self.status_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
 
-        status_layout.addWidget(self.status_label)
-        status_layout.addStretch()
-
-        layout.addWidget(status_card)
-
-        # === ACTION BAR ===
-        actions = QHBoxLayout()
+        actions.addWidget(self.status_label)
         actions.addStretch()
 
         self.start_btn = PrimaryPushButton("")
@@ -441,31 +485,39 @@ class BatchUploadScreen(QWidget):
         def create_centered_widget(widget):
             container = QWidget()
             container.setStyleSheet("background: transparent;")
+            container.setProperty("ubTableCell", True)
             layout = QHBoxLayout(container)
-            layout.setContentsMargins(8, 4, 8, 4)
-            layout.addWidget(widget)
+            # Inset widgets from gridlines so their borders are never clipped/overdrawn
+            layout.setContentsMargins(10, 6, 10, 6)
+            layout.setSpacing(0)
+            layout.addWidget(widget, 1)
+            layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
             return container
 
         # Brand combo
         brand_combo = ComboBox()
         brand_combo.addItems(self.brands)
         brand_combo.setPlaceholderText(self.main.i18n.tr("batch.select_brand"))
-        brand_combo.setFixedHeight(36)
-        brand_combo.currentTextChanged.connect(lambda brand, r=row: self._on_brand_change(r, brand))
+        brand_combo.setMinimumHeight(36)
+        brand_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        brand_combo.setMinimumWidth(160)
+        brand_combo.currentTextChanged.connect(self._on_brand_change)
         brand_combo.currentTextChanged.connect(self._validate)
         self.table.setCellWidget(row, 0, create_centered_widget(brand_combo))
 
         # Product code
         code_field = LineEdit()
         code_field.setPlaceholderText(self.main.i18n.tr("upload.code.placeholder"))
-        code_field.setFixedHeight(36)
+        code_field.setMinimumHeight(36)
+        code_field.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         code_field.textChanged.connect(lambda text, field=code_field: self._on_code_changed(text, field))
         self.table.setCellWidget(row, 1, create_centered_widget(code_field))
 
         # URL
         url_field = LineEdit()
         url_field.setPlaceholderText(self.main.i18n.tr("upload.url.placeholder"))
-        url_field.setFixedHeight(36)
+        url_field.setMinimumHeight(36)
+        url_field.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         url_field.textChanged.connect(lambda text, field=url_field: self._on_url_changed(text, field))
         self.table.setCellWidget(row, 2, create_centered_widget(url_field))
 
@@ -474,7 +526,8 @@ class BatchUploadScreen(QWidget):
         desc_combo.addItem("")
         desc_combo.addItems(self.descriptions)
         desc_combo.setPlaceholderText(self.main.i18n.tr("batch.optional"))
-        desc_combo.setFixedHeight(36)
+        desc_combo.setMinimumHeight(36)
+        desc_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         desc_combo.currentTextChanged.connect(self._validate)
         self.table.setCellWidget(row, 3, create_centered_widget(desc_combo))
 
@@ -507,7 +560,7 @@ class BatchUploadScreen(QWidget):
         delete_btn = TransparentToolButton(FluentIcon.DELETE)
         delete_btn.setToolTip(self.main.i18n.tr("batch.row.remove.tip"))
         delete_btn.setFixedSize(36, 36)
-        delete_btn.clicked.connect(lambda: self._remove_row(row))
+        delete_btn.clicked.connect(self._remove_row)
         delete_container = QWidget()
         delete_container.setStyleSheet("background: transparent;")
         delete_layout = QHBoxLayout(delete_container)
@@ -525,8 +578,11 @@ class BatchUploadScreen(QWidget):
         widget = cell_widget.findChild(widget_type)
         return widget if widget else (cell_widget if isinstance(cell_widget, widget_type) else None)
 
-    def _on_brand_change(self, row, brand):
+    def _on_brand_change(self, brand):
         """Handle brand change to show/hide frameset checkbox"""
+        row = self._find_row_for_sender(0, ComboBox)
+        if row is None:
+            return
         checkbox = self._get_widget_from_cell(row, 4, CheckBox)
         if checkbox:
             is_pinarello = brand == "Pinarello"
@@ -554,6 +610,7 @@ class BatchUploadScreen(QWidget):
         else:
             self.table.setVisible(True)
             self.excel_empty.setVisible(False)
+            QTimer.singleShot(0, self._ensure_table_fills_viewport)
 
     def _has_valid_rows(self):
         """Check if table has any valid data"""
@@ -573,19 +630,25 @@ class BatchUploadScreen(QWidget):
         current_rows = self.table.rowCount()
         self.table.setRowCount(current_rows + 1)
         self._setup_table_row(current_rows)
+        QTimer.singleShot(0, self._ensure_table_fills_viewport)
         self._validate()
 
-    def _remove_row(self, row):
+    def _remove_row(self):
         """Remove a row from table"""
+        row = self._find_row_for_sender(6, TransparentToolButton)
+        if row is None:
+            return
         if self.table.rowCount() > 1:
             self.table.removeRow(row)
+            QTimer.singleShot(0, self._ensure_table_fills_viewport)
             self._validate()
 
     def _clear_all(self):
         """Clear all rows"""
-        self.table.setRowCount(5)
-        for row in range(5):
+        self.table.setRowCount(self._base_table_rows)
+        for row in range(self._base_table_rows):
             self._setup_table_row(row)
+        QTimer.singleShot(0, self._ensure_table_fills_viewport)
         self._validate()
 
     def _toggle_all_framesets(self, state):
@@ -867,6 +930,57 @@ class BatchUploadScreen(QWidget):
         if not items:
             return
 
+        # If batch includes brands that use external credentials, ensure master is unlocked
+        master_password = getattr(self.main, "_unlocked_master_password", None)
+        try:
+            needs_master = False
+            for it in items:
+                if it.get('brand') == 'Basso':
+                    if not self.main.credential_manager.has_external_credentials('basso'):
+                        InfoBar.error(
+                            title=self.main.i18n.tr("common.error"),
+                            content=self.main.i18n.tr("account.brand_missing", brand='Basso'),
+                            orient=Qt.Orientation.Horizontal,
+                            isClosable=True,
+                            position=InfoBarPosition.TOP,
+                            duration=5000,
+                            parent=self
+                        )
+                        return
+                    needs_master = True
+
+                if it.get('brand') == 'Lee Cougan':
+                    if not self.main.credential_manager.has_external_credentials('leecougan'):
+                        InfoBar.error(
+                            title=self.main.i18n.tr("common.error"),
+                            content=self.main.i18n.tr("account.brand_missing", brand='Lee Cougan'),
+                            orient=Qt.Orientation.Horizontal,
+                            isClosable=True,
+                            position=InfoBarPosition.TOP,
+                            duration=5000,
+                            parent=self
+                        )
+                        return
+                    needs_master = True
+
+                if needs_master:
+                    break
+            if needs_master:
+                master_password = self.main.get_unlocked_master_password(parent=self)
+                if not master_password:
+                    InfoBar.error(
+                        title=self.main.i18n.tr("common.error"),
+                        content=self.main.i18n.tr("master.invalid.content"),
+                        orient=Qt.Orientation.Horizontal,
+                        isClosable=True,
+                        position=InfoBarPosition.TOP,
+                        duration=4000,
+                        parent=self
+                    )
+                    return
+        except Exception:
+            pass
+
         # Process
         from Utilities.BatchProcessor import BatchProcessor
 
@@ -877,8 +991,8 @@ class BatchUploadScreen(QWidget):
         )
 
         InfoBar.info(
-            title="Batch Upload Started",
-            content=f"Processing {len(items)} products...",
+            title=self.main.i18n.tr("batch.run.started.title"),
+            content=self.main.i18n.tr("batch.run.started.content", count=len(items)),
             orient=Qt.Orientation.Horizontal,
             isClosable=True,
             position=InfoBarPosition.TOP,
@@ -886,11 +1000,11 @@ class BatchUploadScreen(QWidget):
             parent=self
         )
 
-        batch_processor.process_batch(items)
+        batch_processor.process_batch(items, master_password=master_password)
 
         InfoBar.success(
-            title="Batch Complete",
-            content="Check history for results",
+            title=self.main.i18n.tr("batch.run.complete.title"),
+            content=self.main.i18n.tr("batch.run.complete.content"),
             orient=Qt.Orientation.Horizontal,
             isClosable=True,
             position=InfoBarPosition.TOP,
@@ -901,15 +1015,23 @@ class BatchUploadScreen(QWidget):
     def _update_table_theme(self):
         """Update table styling based on current theme"""
         is_dark = isDarkTheme()
-        bg_color = COLORS['bg_dark'] if is_dark else COLORS['bg_light']
-        alt_bg = COLORS['bg_alt_dark'] if is_dark else COLORS['bg_alt_light']
-        border_color = COLORS['border_dark'] if is_dark else COLORS['border_light']
+        table_colors = COMPONENT_COLORS['table']
+        # Use slightly-tinted base rows so white inputs don't blend into the table.
+        bg_color = table_colors['row_alt_bg_dark'] if is_dark else table_colors['row_alt_bg_light']
+        alt_bg = table_colors['row_bg_dark'] if is_dark else table_colors['row_bg_light']
+        border_color = table_colors['border_dark'] if is_dark else table_colors['border_light']
 
         # Header colors: lavender_grey for dark mode, space_indigo for light mode
         header_bg = COLORS['lavender_grey'] if is_dark else COLORS['space_indigo']
         header_text = COLORS['space_indigo'] if is_dark else COLORS['text_white']
 
         text_color = COLORS['text_primary_dark'] if is_dark else COLORS['text_primary_light']
+
+        # Stronger default borders for inputs embedded inside the table.
+        # This avoids "border disappears" issues against light table backgrounds.
+        embedded_input_border = (
+            "rgba(141, 153, 174, 0.55)" if is_dark else "rgba(43, 45, 66, 0.30)"
+        )
 
         self.table.setStyleSheet(f"""
             QTableWidget {{
@@ -945,6 +1067,16 @@ class BatchUploadScreen(QWidget):
             }}
             QHeaderView::section:last {{
                 border-top-right-radius: 8px;
+            }}
+
+            /* Inputs inside table cells: add contrast + prevent gridline overlap */
+            QTableWidget QWidget[ubTableCell="true"] LineEdit,
+            QTableWidget QWidget[ubTableCell="true"] PasswordLineEdit,
+            QTableWidget QWidget[ubTableCell="true"] SearchLineEdit,
+            QTableWidget QWidget[ubTableCell="true"] QLineEdit,
+            QTableWidget QWidget[ubTableCell="true"] ComboBox,
+            QTableWidget QWidget[ubTableCell="true"] QComboBox {{
+                border: 1px solid {embedded_input_border};
             }}
 
             /* Custom scrollbar styling */

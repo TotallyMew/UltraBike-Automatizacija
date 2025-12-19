@@ -17,14 +17,15 @@ class FeatureUploader:
         
         self._log("Switching to Lithuanian")
         self.languageSwitcher.switchTo("lt")
-        self.writer.fillFields(ltData, lang="lt", first_language=True)
+        keep_mask = self.writer.fillFields(ltData, lang="lt", first_language=True)
         
         self._log("Switching to English")
         self.languageSwitcher.switchTo("en")
-        self.writer.fillFields(enData, lang="en", first_language=False)
+        self.writer.fillFields(enData, lang="en", first_language=False, keep_mask=keep_mask)
         
         self._log("Switching to Latvian")
         self.languageSwitcher.switchTo("lv")
-        self.writer.fillFields(lvData, lang="lv", first_language=False)
+        self.writer.fillFields(lvData, lang="lv", first_language=False, keep_mask=keep_mask)
         
         self._log("All language features uploaded successfully")
+        return getattr(self.writer, "skipped_features", [])

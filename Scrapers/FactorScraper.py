@@ -78,7 +78,7 @@ def scrapeAndTranslateToFileFactor(bicycleUrlOrCode, outputFile, db_manager=None
                         if size_match:
                             size = size_match.group(1)
                             
-                            for subKey in ["Front Rotors", "Rear Rotors"]:
+                            for subKey in ["FRONT ROTORS", "REAR ROTORS"]:
                                 translatedKey = keyTranslations.get(subKey, subKey)
                                 translatedValue = translation_handler.translate_first_word(
                                     valueTranslations.get(size.upper(), size), valueTranslations
@@ -87,7 +87,7 @@ def scrapeAndTranslateToFileFactor(bicycleUrlOrCode, outputFile, db_manager=None
                                 uniqueKeys.add(translatedKey)
                             continue
                     else:
-                        for subKey in ["Front Rotors", "Rear Rotors"]:
+                        for subKey in ["FRONT ROTORS", "REAR ROTORS"]:
                             translatedKey = keyTranslations.get(subKey, subKey)
                             translatedValue = translation_handler.translate_first_word(
                                 valueTranslations.get(value.upper(), value), valueTranslations
@@ -97,7 +97,7 @@ def scrapeAndTranslateToFileFactor(bicycleUrlOrCode, outputFile, db_manager=None
                         continue
 
                 if key.lower() == "rotors":
-                    for subKey in ["Front Rotors", "Rear Rotors"]:
+                    for subKey in ["FRONT ROTORS", "REAR ROTORS"]:
                         translatedKey = keyTranslations.get(subKey, subKey)
                         translatedValue = translation_handler.translate_first_word(
                             valueTranslations.get(value.upper(), value), valueTranslations
@@ -107,7 +107,7 @@ def scrapeAndTranslateToFileFactor(bicycleUrlOrCode, outputFile, db_manager=None
                     continue
 
                 if key.lower() == "brake type":
-                    for subKey in ["Front Brakes", "Rear Brakes"]:
+                    for subKey in ["FRONT BRAKES", "REAR BRAKES"]:
                         translatedKey = keyTranslations.get(subKey, subKey)
                         translatedValue = translation_handler.translate_first_word(
                             valueTranslations.get(value.upper(), value), valueTranslations

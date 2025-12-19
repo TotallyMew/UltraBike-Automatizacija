@@ -3,7 +3,7 @@ Settings Screen
 Application settings with Fluent Design System
 """
 
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFileDialog
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFileDialog, QSizePolicy
 from PySide6.QtCore import Qt
 from qfluentwidgets import (
     CardWidget, TitleLabel, StrongBodyLabel, BodyLabel, CaptionLabel,
@@ -235,15 +235,17 @@ class SettingsScreen(QWidget):
         lang_selector_layout = QHBoxLayout()
         lang_label = BodyLabel(translate(self._preview_lang_code, "settings.language.label"))
         self._ui["lang_label"] = lang_label
-        lang_label.setFixedWidth(100)
+        lang_label.setMinimumWidth(100)
 
         self.language_combo = ComboBox()
         # NOTE: QFluentWidgets ComboBox placeholder behavior can mask index 0.
         # Insert a dummy first item so real languages are not at index 0.
-        self.language_combo.addItem("")
+        # We keep it as a visible (localized) placeholder option.
+        self.language_combo.addItem(translate(self._preview_lang_code, "settings.language.placeholder"))
         self.language_combo.addItems(["English", "Lithuanian"])
-        self.language_combo.setPlaceholderText(translate(self._preview_lang_code, "settings.language.placeholder"))
-        self.language_combo.setFixedWidth(200)
+        self.language_combo.setPlaceholderText("")
+        self.language_combo.setMinimumWidth(200)
+        self.language_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.language_combo.currentTextChanged.connect(self._on_language_change)
 
         lang_selector_layout.addWidget(lang_label)
@@ -283,11 +285,12 @@ class SettingsScreen(QWidget):
         browser_selector_layout = QHBoxLayout()
         browser_label = BodyLabel(translate(self._preview_lang_code, "settings.browser.label"))
         self._ui["browser_label"] = browser_label
-        browser_label.setFixedWidth(100)
+        browser_label.setMinimumWidth(100)
 
         self.browser_combo = ComboBox()
         self.browser_combo.addItems(["Chrome", "Firefox", "Edge"])
-        self.browser_combo.setFixedWidth(200)
+        self.browser_combo.setMinimumWidth(200)
+        self.browser_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         browser_selector_layout.addWidget(browser_label)
         browser_selector_layout.addWidget(self.browser_combo)
@@ -372,6 +375,25 @@ class SettingsScreen(QWidget):
         extended_mode_layout.addStretch()
         extended_mode_layout.addWidget(self.extended_mode_switch)
         features_layout.addLayout(extended_mode_layout)
+
+        # Auto-delete pabaigta*.txt toggle
+        auto_delete_layout = QHBoxLayout()
+        auto_delete_info = QVBoxLayout()
+        auto_delete_label = BodyLabel(translate(self._preview_lang_code, "settings.features.auto_delete_pabaigta.title"))
+        self._ui["auto_delete_label"] = auto_delete_label
+        auto_delete_label.setStyleSheet("font-weight: 500;")
+        auto_delete_sublabel = CaptionLabel(translate(self._preview_lang_code, "settings.features.auto_delete_pabaigta.desc"))
+        self._ui["auto_delete_sublabel"] = auto_delete_sublabel
+        auto_delete_sublabel.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        auto_delete_info.addWidget(auto_delete_label)
+        auto_delete_info.addWidget(auto_delete_sublabel)
+
+        self.auto_delete_pabaigta_switch = SwitchButton()
+
+        auto_delete_layout.addLayout(auto_delete_info)
+        auto_delete_layout.addStretch()
+        auto_delete_layout.addWidget(self.auto_delete_pabaigta_switch)
+        features_layout.addLayout(auto_delete_layout)
 
         layout.addWidget(features_card)
 
@@ -573,6 +595,7 @@ class SettingsScreen(QWidget):
         self.download_images_switch.setChecked(self.main.settings.get('download_images', False))
         self.auto_save_switch.setChecked(self.main.settings.get('auto_save', True))
         self.extended_mode_switch.setChecked(self.main.settings.get('extended_mode', True))
+        self.auto_delete_pabaigta_switch.setChecked(self.main.settings.get('auto_delete_pabaigta_files', False))
 
         # Load theme
         theme = self.main.settings.get('theme', 'light')
@@ -589,8 +612,8 @@ class SettingsScreen(QWidget):
         if self._loading:
             return
 
-        # Ignore dummy/empty item.
-        if not language:
+        # Ignore dummy placeholder item.
+        if self.language_combo.currentIndex() == 0:
             return
 
         # Live preview ONLY within Settings screen.
@@ -645,7 +668,12 @@ class SettingsScreen(QWidget):
             self._ui["lang_label"].setText(tr("settings.language.label"))
 
         # Placeholders
-        # Intentionally no placeholder for language_combo (see _init_ui note).
+        # Update language placeholder item (index 0)
+        if hasattr(self, "language_combo") and self.language_combo.count() > 0:
+            try:
+                self.language_combo.setItemText(0, tr("settings.language.placeholder"))
+            except Exception:
+                pass
         if hasattr(self, "kross_path_field"):
             self.kross_path_field.setPlaceholderText(tr("settings.paths.placeholder"))
         if hasattr(self, "repo_path_field"):
@@ -672,6 +700,10 @@ class SettingsScreen(QWidget):
             self._ui["extended_mode_label"].setText(tr("settings.features.extended.title"))
         if "extended_mode_sublabel" in self._ui:
             self._ui["extended_mode_sublabel"].setText(tr("settings.features.extended.desc"))
+        if "auto_delete_label" in self._ui:
+            self._ui["auto_delete_label"].setText(tr("settings.features.auto_delete_pabaigta.title"))
+        if "auto_delete_sublabel" in self._ui:
+            self._ui["auto_delete_sublabel"].setText(tr("settings.features.auto_delete_pabaigta.desc"))
 
         if "theme_title" in self._ui:
             self._ui["theme_title"].setText(tr("settings.appearance.title"))
@@ -767,6 +799,7 @@ class SettingsScreen(QWidget):
             download_images = self.download_images_switch.isChecked()
             auto_save = self.auto_save_switch.isChecked()
             extended_mode = self.extended_mode_switch.isChecked()
+            auto_delete_pabaigta = self.auto_delete_pabaigta_switch.isChecked()
             theme_is_dark = self.theme_switch.isChecked()
             theme_name = 'dark' if theme_is_dark else 'light'
             kross_path = self.kross_path_field.text()
@@ -778,6 +811,7 @@ class SettingsScreen(QWidget):
             self.main.settings.set('download_images', download_images)
             self.main.settings.set('auto_save', auto_save)
             self.main.settings.set('extended_mode', extended_mode)
+            self.main.settings.set('auto_delete_pabaigta_files', auto_delete_pabaigta)
             self.main.settings.set('theme', theme_name)
 
             if kross_path:

@@ -11,11 +11,6 @@ from Utilities.TranslationHandler import TranslationHandler, load_translations, 
 
 internalCounter = 0
 
-def loadCredentials(driver):
-    web_handler = WebInteractionHandler(driver)
-    username, password = web_handler.load_credentials("Assets/credentials.txt")
-    return username, password
-
 def process_special_values(raw_key: str, raw_val: str, target_language: str = 'lt') -> str:
     """Process special value cases with language-specific handling"""
     processed_val = raw_val
@@ -37,8 +32,10 @@ def process_special_values(raw_key: str, raw_val: str, target_language: str = 'l
     
     return processed_val
 
-def scrapeAndTranslateToFileBasso(bicycleUrlOrCode, outputFile, driver, db_manager):
-    username, password = loadCredentials(driver)
+def scrapeAndTranslateToFileBasso(bicycleUrlOrCode, outputFile, driver, db_manager, credentials=None):
+    if not (credentials and len(credentials) >= 2 and credentials[0] and credentials[1]):
+        raise RuntimeError("Missing Basso credentials. Configure them in Account -> Basso.")
+    username, password = credentials[0], credentials[1]
 
     translation_handler = TranslationHandler(db_manager)
     # Component names (keys)

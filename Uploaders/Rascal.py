@@ -4,9 +4,9 @@ from Scrapers.RascalScraper import scrapeAndTranslateToFileRascal
 class Rascal(ProductUploader):
     def scrape(self):
         # Get variant choice (if multiple variants exist)
-        # For now, None = prompt user in scraper (CLI mode)
-        # Later in GUI, this will come from dropdown
-        variant_index = None  # Let scraper prompt user
+        # GUI does not currently expose variant selection.
+        # If the page contains multiple variants, the scraper will raise a clear error.
+        variant_index = None
         
         self.translationManager.prepareTranslationFiles(
             scrape_func=scrapeAndTranslateToFileRascal,

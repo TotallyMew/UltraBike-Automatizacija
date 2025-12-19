@@ -94,8 +94,15 @@ class HistoryItemCard(CardWidget):
     def __init__(self, row, tr, parent=None):
         super().__init__(parent)
         self.tr = tr
+        self._expanded = False
         self.setBorderRadius(8)
         self.setMinimumHeight(160)  # Increased to prevent clipping
+
+        self._details_json = None
+        try:
+            self._details_json = row['details_json'] if 'details_json' in row.keys() else None
+        except Exception:
+            self._details_json = None
 
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
 
@@ -194,12 +201,42 @@ class HistoryItemCard(CardWidget):
             failed_label.setAlignment(Qt.AlignmentFlag.AlignRight)
             right_layout.addWidget(failed_label)
 
+        # Expand details toggle (always visible so users can discover it)
+        self._details_btn = None
+        try:
+            self._details_btn = TransparentToolButton(FluentIcon.DOWN, self)
+            self._details_btn.setFixedSize(28, 28)
+            self._details_btn.setToolTip(self.tr("history.details"))
+            self._details_btn.clicked.connect(self._toggle_details)
+            right_layout.addWidget(self._details_btn, 0, Qt.AlignmentFlag.AlignRight)
+        except Exception:
+            self._details_btn = None
+
         right_widget = QWidget()
         right_widget.setLayout(right_layout)
         right_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         top_row.addWidget(right_widget, 1)  # Stretch factor 1
 
         main_layout.addLayout(top_row)
+
+        # --- Details section (collapsed by default) ---
+        self._details_card = CardWidget()
+        self._details_card.setVisible(False)
+        self._details_card.setStyleSheet(
+            f"background-color: {'rgba(141,153,174,0.10)' if isDarkTheme() else 'rgba(43,45,66,0.04)'};"
+            f"border: 1px solid {COLORS['border_dark'] if isDarkTheme() else COLORS['border_light']};"
+        )
+        details_layout = QVBoxLayout(self._details_card)
+        details_layout.setContentsMargins(12, 10, 12, 10)
+        details_layout.setSpacing(6)
+
+        self._details_label = BodyLabel("")
+        self._details_label.setWordWrap(True)
+        self._details_label.setStyleSheet(
+            f"font-size: 11px; color: {COLORS['text_primary_dark'] if isDarkTheme() else COLORS['text_primary_light']};"
+        )
+        details_layout.addWidget(self._details_label)
+        main_layout.addWidget(self._details_card)
 
         # --- BOTTOM ROW: URL/Code ---
         url_or_code = row['url_or_code'] if 'url_or_code' in row.keys() else None
@@ -248,6 +285,51 @@ class HistoryItemCard(CardWidget):
             error_layout.addWidget(error_icon)
             error_layout.addWidget(error_label, 1)
             main_layout.addWidget(error_card)
+
+    def _toggle_details(self):
+        self._expanded = not self._expanded
+        self._details_card.setVisible(self._expanded)
+
+        if self._details_btn is not None:
+            try:
+                self._details_btn.setIcon(FluentIcon.UP if self._expanded else FluentIcon.DOWN)
+            except Exception:
+                pass
+
+        if self._expanded:
+            self._details_label.setText(self._format_details(self._details_json))
+
+    def _format_details(self, details_json: str) -> str:
+        if not details_json:
+            return self.tr("history.details.empty")
+        try:
+            import json
+            data = json.loads(details_json) or {}
+        except Exception:
+            return str(details_json)
+
+        lines = []
+        skipped = data.get("skipped_features")
+        if isinstance(skipped, list) and skipped:
+            # Show up to a reasonable number; keep UI compact
+            shown = skipped[:30]
+            items = []
+            for item in shown:
+                try:
+                    items.append(str(item.get("key") or ""))
+                except Exception:
+                    continue
+            items = [s for s in items if s]
+            if items:
+                lines.append(self.tr("history.details.skipped_features") + ":")
+                lines.append("\n".join(f"- {k}" for k in items))
+                if len(skipped) > len(shown):
+                    lines.append(self.tr("history.details.more", count=len(skipped) - len(shown)))
+
+        if not lines:
+            return self.tr("history.details.empty")
+
+        return "\n".join(lines)
 
 
 class HistoryScreen(QWidget):
@@ -300,13 +382,9 @@ class HistoryScreen(QWidget):
 
         # Using FluentIcons for stats
         self.total_stat = StatCard("", "0", FluentIcon.FOLDER)
-        self.total_stat.setMaximumWidth(280)  # Prevent excessive stretching
         self.success_stat = StatCard("", "0%", FluentIcon.ACCEPT)
-        self.success_stat.setMaximumWidth(280)
         self.duration_stat = StatCard("", "0s", FluentIcon.HISTORY)
-        self.duration_stat.setMaximumWidth(280)
         self.today_stat = StatCard("", "0", FluentIcon.CALENDAR)
-        self.today_stat.setMaximumWidth(280)
 
         stats_container.addWidget(self.total_stat, 1)
         stats_container.addWidget(self.success_stat, 1)
@@ -325,28 +403,28 @@ class HistoryScreen(QWidget):
         # Brand filter
         self.brand_label = BodyLabel("")
         brand_label = self.brand_label
-        brand_label.setFixedWidth(50)
         brand_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
         self.brand_filter = ComboBox()
-        self.brand_filter.setFixedWidth(140)
+        self.brand_filter.setMinimumWidth(140)
+        self.brand_filter.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.brand_filter.currentTextChanged.connect(self.refresh_history)
 
         # Status filter
         self.status_label = BodyLabel("")
         status_label = self.status_label
-        status_label.setFixedWidth(50)
         status_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
         self.status_filter = ComboBox()
-        self.status_filter.setFixedWidth(120)
+        self.status_filter.setMinimumWidth(120)
+        self.status_filter.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.status_filter.currentTextChanged.connect(self.refresh_history)
 
         # Date filter
         self.period_label = BodyLabel("")
         date_label = self.period_label
-        date_label.setFixedWidth(50)
         date_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
         self.date_filter = ComboBox()
-        self.date_filter.setFixedWidth(140)
+        self.date_filter.setMinimumWidth(140)
+        self.date_filter.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.date_filter.currentTextChanged.connect(self.refresh_history)
 
         # Refresh button
@@ -523,7 +601,7 @@ class HistoryScreen(QWidget):
         query = """
             SELECT brand, product_code, url_or_code, status, duration_seconds,
                    features_uploaded, images_uploaded, error_message,
-                   failed_stage, processed_at
+                   failed_stage, details_json, processed_at
             FROM processing_history
             WHERE 1=1
         """

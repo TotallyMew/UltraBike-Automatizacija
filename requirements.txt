@@ -8,7 +8,6 @@ comtypes==1.4.13
 cryptography==46.0.3
 DateTime==6.0
 et_xmlfile==2.0.0
-flet==0.28.3
 h11==0.16.0
 httpcore==1.0.9
 httpx==0.28.1

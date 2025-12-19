@@ -31,6 +31,9 @@ class SettingsManager:
             ('auto_save', 'true', 'bool', 'processing',
              'Automatically save product updates after upload', 'true'),
 
+            ('auto_delete_pabaigta_files', 'false', 'bool', 'processing',
+             'Automatically delete generated pabaigta*.txt files after successful run', 'false'),
+
             # Browser
             ('browser_choice', 'Chrome', 'string', 'browser',
              'Preferred browser (Chrome/Firefox/Edge)', 'Chrome'),
@@ -165,3 +168,6 @@ class SettingsManager:
 
     def is_auto_save_enabled(self) -> bool:
         return self.get('auto_save', True)
+
+    def is_auto_delete_pabaigta_files_enabled(self) -> bool:
+        return self.get('auto_delete_pabaigta_files', False)

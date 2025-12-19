@@ -3,40 +3,89 @@ Global stylesheet overrides for consistent theming
 """
 
 from qfluentwidgets import isDarkTheme
+from GUI_Qt.styles.theme_config import COLORS, COMPONENT_COLORS
 
 
 def get_global_stylesheet():
     """Get global stylesheet with theme-aware colors"""
     is_dark = isDarkTheme()
+    input_colors = COMPONENT_COLORS['input']
+    btn_colors = COMPONENT_COLORS['button']
 
     return f"""
-        /* LineEdit - Match button border colors */
-        LineEdit {{
-            border: 1px solid {'rgba(255, 255, 255, 0.08)' if is_dark else 'rgba(0, 0, 0, 0.08)'};
-            border-bottom: 1px solid {'rgba(255, 255, 255, 0.08)' if is_dark else 'rgba(0, 0, 0, 0.08)'};
+        /* =====================
+           Inputs (global)
+           ===================== */
+
+        /* QFluent LineEdit / PasswordLineEdit / SearchLineEdit */
+        LineEdit, PasswordLineEdit, SearchLineEdit, QLineEdit {{
+            background-color: {input_colors['bg_dark'] if is_dark else input_colors['bg_light']};
+            color: {input_colors['text_dark'] if is_dark else input_colors['text_light']};
+            border: 1px solid {input_colors['border_dark'] if is_dark else input_colors['border_light']};
+            border-bottom: 1px solid {input_colors['border_dark'] if is_dark else input_colors['border_light']};
+            border-radius: 6px;
+            padding: 8px 12px;
         }}
 
-        LineEdit:hover {{
-            border: 1px solid {'rgba(255, 255, 255, 0.13)' if is_dark else 'rgba(0, 0, 0, 0.13)'};
-            border-bottom: 1px solid {'rgba(255, 255, 255, 0.13)' if is_dark else 'rgba(0, 0, 0, 0.13)'};
+        LineEdit:hover, PasswordLineEdit:hover, SearchLineEdit:hover, QLineEdit:hover {{
+            border: 1px solid {'rgba(141, 153, 174, 0.55)' if is_dark else 'rgba(43, 45, 66, 0.35)'};
+            border-bottom: 1px solid {'rgba(141, 153, 174, 0.55)' if is_dark else 'rgba(43, 45, 66, 0.35)'};
         }}
 
-        LineEdit:focus {{
-            border: 1px solid {'#8D99AE' if is_dark else '#2B2D42'};
-            border-bottom: 1px solid {'#8D99AE' if is_dark else '#2B2D42'};
+        LineEdit:focus, PasswordLineEdit:focus, SearchLineEdit:focus, QLineEdit:focus {{
+            border: 1px solid {COLORS['lavender_grey'] if is_dark else COLORS['space_indigo']};
+            border-bottom: 1px solid {COLORS['lavender_grey'] if is_dark else COLORS['space_indigo']};
         }}
 
-        /* ComboBox - Match button border colors */
-        ComboBox {{
-            border: 1px solid {'rgba(255, 255, 255, 0.08)' if is_dark else 'rgba(0, 0, 0, 0.08)'};
+        /* Placeholder text */
+        LineEdit::placeholder, PasswordLineEdit::placeholder, SearchLineEdit::placeholder, QLineEdit::placeholder {{
+            color: {input_colors['placeholder_dark'] if is_dark else input_colors['placeholder_light']};
         }}
 
-        ComboBox:hover {{
-            border: 1px solid {'rgba(255, 255, 255, 0.13)' if is_dark else 'rgba(0, 0, 0, 0.13)'};
+        /* ComboBox - make the control itself readable */
+        ComboBox, QComboBox {{
+            background-color: {input_colors['bg_dark'] if is_dark else input_colors['bg_light']};
+            color: {input_colors['text_dark'] if is_dark else input_colors['text_light']};
+            border: 1px solid {input_colors['border_dark'] if is_dark else input_colors['border_light']};
+            border-radius: 6px;
+            padding: 6px 10px;
         }}
 
-        ComboBox:focus {{
-            border: 1px solid {'#8D99AE' if is_dark else '#2B2D42'};
+        ComboBox:hover, QComboBox:hover {{
+            border: 1px solid {'rgba(141, 153, 174, 0.55)' if is_dark else 'rgba(43, 45, 66, 0.35)'};
+        }}
+
+        ComboBox:focus, QComboBox:focus {{
+            border: 1px solid {COLORS['lavender_grey'] if is_dark else COLORS['space_indigo']};
+        }}
+
+        /* ComboBox dropdown list */
+        QComboBox QAbstractItemView {{
+            background-color: {COLORS['bg_dark'] if is_dark else COLORS['bg_light']};
+            color: {COLORS['text_primary_dark'] if is_dark else COLORS['text_primary_light']};
+            border: 1px solid {COLORS['border_dark'] if is_dark else COLORS['border_light']};
+            selection-background-color: {btn_colors['secondary_bg_dark'] if is_dark else btn_colors['secondary_bg_light']};
+            selection-color: {COLORS['text_primary_dark'] if is_dark else COLORS['text_primary_light']};
+            outline: 0;
+        }}
+
+        QComboBox QAbstractItemView::item {{
+            padding: 8px 10px;
+        }}
+
+        QComboBox QAbstractItemView::item:hover {{
+            background-color: {'rgba(141, 153, 174, 0.20)' if is_dark else 'rgba(43, 45, 66, 0.08)'};
+        }}
+
+        /* CardWidget - add subtle separation in light theme */
+        CardWidget {{
+            border-radius: 8px;
+            border: 1px solid {COLORS['border_dark'] if is_dark else "rgba(141, 153, 174, 0.28)"};
+        }}
+
+        /* Avoid white-on-white scroll areas in light theme */
+        QScrollArea {{
+            background: transparent;
         }}
 
         /* Global ScrollBar Styling - Fluent Design System */

@@ -1,83 +1,75 @@
-import json
-import os
 from Database.SessionManager import SessionManager
 from Database.DatabaseManager import DatabaseManager
 
+
 class CredentialManager:
     def __init__(self, db_manager=None):
-        # Legacy JSON path (for migration)
-        self.login_path = "Config/LoginConfig/loginInfo.json"
-        
         # Database setup
-        if db_manager:
-            self.db = db_manager
-        else:
-            self.db = DatabaseManager()
-        
+        self.db = db_manager if db_manager else DatabaseManager()
         self.session_manager = SessionManager(self.db)
-    
-    def save_credentials(self, email: str, password: str, master_password: str = None) -> None:
-        """
-        Save credentials to database (encrypted)
-        If master_password provided, encrypts with it
-        Otherwise uses session key
-        """
-        if master_password:
-            # Encrypt with master password
-            self.session_manager.store_credentials(email, password, master_password)
-        else:
-            # Just update plaintext JSON for now (legacy)
-            credentials = self.load_credentials_json()
-            credentials[email] = password
-            
-            with open(self.login_path, 'w') as f:
-                json.dump(credentials, f)
-    
-    def load_credentials_json(self) -> dict:
-        """Load credentials from legacy JSON file"""
+
+    # --- PrestaShop credentials (encrypted with master password) ---
+
+    def save_credentials(self, email: str, password: str, master_password: str) -> None:
+        """Store PrestaShop credentials encrypted with master password."""
+        if not master_password:
+            raise ValueError("Master password is required to store credentials.")
+        self.session_manager.store_credentials(email, password, master_password)
+
+    def get_credentials_with_master(self, master_password: str) -> tuple:
+        """Decrypt and return (email, password) using master password."""
+        return self.session_manager.get_credentials(master_password)
+
+    def get_last_saved_email(self) -> str:
+        """Get last stored PrestaShop email without decrypting password."""
         try:
-            with open(self.login_path, 'r') as f:
-                return json.load(f)
-        except FileNotFoundError:
-            return {}
-    
+            cursor = self.db.conn.cursor()
+            row = cursor.execute(
+                "SELECT email FROM credentials ORDER BY updated_at DESC LIMIT 1"
+            ).fetchone()
+            return row[0] if row and row[0] else ""
+        except Exception:
+            return ""
+
+    # --- Master password ---
+
+    def create_master_password(self, master_password: str) -> None:
+        self.session_manager.set_master_password(master_password)
+
+    def has_master_password(self) -> bool:
+        return self.session_manager.has_master_password()
+
+    def verify_master_password(self, master_password: str) -> bool:
+        return self.session_manager.verify_master_password(master_password)
+
+    # --- 24h auto-login session (machine-encrypted) ---
+
+    def create_session(self, email: str, password: str) -> None:
+        self.session_manager.create_session(email, password)
+
     def get_saved_credentials(self) -> tuple:
-        """
-        Get saved credentials
-        Priority: 1) Session-based (encrypted), 2) JSON (legacy)
-        """
-        # Try session-based credentials first
+        """Session-only retrieval (database requires master password)."""
         if self.session_manager.validate_session():
             email, password = self.session_manager.get_credentials_from_session()
             if email and password:
                 return email, password
-        
-        # Fallback to legacy JSON
-        credentials = self.load_credentials_json()
-        
-        if not credentials:
-            return None, None
-            
-        if len(credentials) > 1:
-            # Multiple accounts - GUI must choose which to use
-            raise ValueError("Multiple saved accounts found; GUI must select which account to use.")
-        else:
-            # Single account
-            email = next(iter(credentials))
-            return email, credentials[email]
-    
-    def has_master_password(self) -> bool:
-        """Check if master password is set"""
-        return self.session_manager.has_master_password()
-    
-    def verify_master_password(self, master_password: str) -> bool:
-        """Verify master password"""
-        return self.session_manager.verify_master_password(master_password)
-    
-    def get_credentials_with_master(self, master_password: str) -> tuple:
-        """Get credentials using master password"""
-        return self.session_manager.get_credentials(master_password)
-    
-    def create_session(self, email: str, password: str) -> None:
-        """Create 24h session after successful login"""
-        self.session_manager.create_session(email, password)
+        return None, None
+
+    # --- External brand credentials (encrypted with master password) ---
+
+    def has_external_credentials(self, service_key: str) -> bool:
+        return self.session_manager.has_external_credentials(service_key)
+
+    def save_external_credentials(self, service_key: str, username: str, password: str, master_password: str) -> None:
+        if not master_password:
+            raise ValueError("Master password is required to store external credentials.")
+        self.session_manager.store_external_credentials(service_key, username, password, master_password)
+
+    def get_external_credentials_with_master(self, service_key: str, master_password: str) -> tuple:
+        return self.session_manager.get_external_credentials(service_key, master_password)
+
+    def get_external_username(self, service_key: str) -> str:
+        return self.session_manager.get_external_username(service_key)
+
+    def clear_external_credentials(self, service_key: str) -> None:
+        self.session_manager.clear_external_credentials(service_key)

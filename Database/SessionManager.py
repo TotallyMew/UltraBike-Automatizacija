@@ -14,7 +14,8 @@ import base64
 class SessionManager:
     def __init__(self, db_manager):
         self.db = db_manager
-        self.session_file = "session.dat"
+        from Utilities.AppPaths import get_default_session_path
+        self.session_file = str(get_default_session_path())
         self.session_duration_hours = 24
     
     def _get_machine_id(self):
@@ -57,6 +58,19 @@ class SessionManager:
         """).fetchone()
     
         return result is not None
+
+    def set_master_password(self, master_password: str) -> None:
+        """Persist master password hash in settings (no credentials stored)."""
+        master_hash = hashlib.sha256(master_password.encode()).hexdigest()
+        cursor = self.db.conn.cursor()
+        cursor.execute(
+            """
+            INSERT OR REPLACE INTO settings (key, value, updated_at)
+            VALUES ('master_password_hash', ?, ?)
+            """,
+            (master_hash, datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
+        )
+        self.db.conn.commit()
     
     def store_credentials(self, email: str, password: str, master_password: str):
         """Store encrypted credentials in database"""
@@ -86,6 +100,77 @@ class SessionManager:
             VALUES ('master_password_hash', ?, ?)
         """, (master_hash, datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
         
+        self.db.conn.commit()
+
+    def has_external_credentials(self, service_key: str) -> bool:
+        """Check if credentials exist for a given external service."""
+        cursor = self.db.conn.cursor()
+        result = cursor.execute(
+            "SELECT 1 FROM external_credentials WHERE service_key = ?",
+            (service_key,),
+        ).fetchone()
+        return result is not None
+
+    def store_external_credentials(self, service_key: str, username: str, password: str, master_password: str) -> None:
+        """Store encrypted external-service credentials in database."""
+        salt = secrets.token_hex(16)
+        combined_key = hashlib.sha256(f"{master_password}{salt}".encode()).digest()
+        fernet_key = base64.urlsafe_b64encode(combined_key)
+        f = Fernet(fernet_key)
+        encrypted_password = f.encrypt(password.encode()).decode()
+
+        cursor = self.db.conn.cursor()
+        cursor.execute(
+            """
+            INSERT OR REPLACE INTO external_credentials
+            (service_key, username, encrypted_password, salt, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (service_key, username, encrypted_password, salt, datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
+        )
+        self.db.conn.commit()
+
+    def get_external_credentials(self, service_key: str, master_password: str) -> tuple:
+        """Decrypt and return (username, password) for external service."""
+        if not self.verify_master_password(master_password):
+            return None, None
+
+        cursor = self.db.conn.cursor()
+        row = cursor.execute(
+            """
+            SELECT username, encrypted_password, salt
+            FROM external_credentials
+            WHERE service_key = ?
+            """,
+            (service_key,),
+        ).fetchone()
+
+        if not row:
+            return None, None
+
+        username, encrypted_password, salt = row
+        try:
+            combined_key = hashlib.sha256(f"{master_password}{salt}".encode()).digest()
+            fernet_key = base64.urlsafe_b64encode(combined_key)
+            f = Fernet(fernet_key)
+            password = f.decrypt(encrypted_password.encode()).decode()
+            return username, password
+        except Exception:
+            return None, None
+
+    def get_external_username(self, service_key: str) -> str:
+        """Return saved username for an external service without decrypting password."""
+        cursor = self.db.conn.cursor()
+        row = cursor.execute(
+            "SELECT username FROM external_credentials WHERE service_key = ?",
+            (service_key,),
+        ).fetchone()
+        return row[0] if row else ""
+
+    def clear_external_credentials(self, service_key: str) -> None:
+        """Delete external credentials for a given service."""
+        cursor = self.db.conn.cursor()
+        cursor.execute("DELETE FROM external_credentials WHERE service_key = ?", (service_key,))
         self.db.conn.commit()
     
     def verify_master_password(self, master_password: str) -> bool:

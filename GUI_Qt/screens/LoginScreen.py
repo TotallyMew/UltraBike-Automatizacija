@@ -7,8 +7,10 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout
 from PySide6.QtCore import Qt, QThread, Signal
 from qfluentwidgets import (
     LineEdit, PasswordLineEdit, ComboBox, PrimaryPushButton,
-    IndeterminateProgressRing, BodyLabel, TitleLabel, InfoBar, InfoBarPosition
+    IndeterminateProgressRing, BodyLabel, TitleLabel, InfoBar, InfoBarPosition, CardWidget, isDarkTheme
 )
+
+from GUI_Qt.styles.theme_config import COLORS, FONTS
 
 from Config.BrowserConfig.BrowserManager import BrowserManager
 from Config.LoginConfig.LoginHandler import LoginHandler
@@ -75,6 +77,16 @@ class LoginScreen(QWidget):
     def _init_ui(self):
         """Initialize UI components"""
 
+        # Background to match the rest of the app
+        is_dark = isDarkTheme()
+        bg_color = COLORS['space_indigo'] if is_dark else COLORS['platinum']
+        self.setStyleSheet(f"""
+            LoginScreen {{
+                background-color: {bg_color};
+                font-family: {FONTS['family']};
+            }}
+        """)
+
         # Main layout with proper centering
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -82,8 +94,8 @@ class LoginScreen(QWidget):
         # Add top stretch
         main_layout.addStretch(1)
 
-        # Center container
-        center_container = QWidget()
+        # Center container (card for better contrast in light theme)
+        center_container = CardWidget()
         center_container.setMaximumWidth(400)
         center_layout = QVBoxLayout(center_container)
         center_layout.setSpacing(24)

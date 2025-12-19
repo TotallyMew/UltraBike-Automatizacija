@@ -214,8 +214,21 @@ class MasterPasswordPromptDialog(QWidget):
 
         # Verify master password
         if self.main.credential_manager.verify_master_password(password):
-            # Get saved credentials
-            email, saved_password = self.main.credential_manager.get_saved_credentials()
+            # Cache unlocked master password for this run
+            try:
+                self.main._unlocked_master_password = password
+            except Exception:
+                pass
+
+            # Decrypt credentials from DB using master password
+            email, saved_password = self.main.credential_manager.get_credentials_with_master(password)
+
+            # Fallback: if credentials haven't been stored in DB yet, try legacy saved creds
+            if not email or not saved_password:
+                try:
+                    email, saved_password = self.main.credential_manager.get_saved_credentials()
+                except Exception:
+                    pass
 
             # Show success
             InfoBar.success(

@@ -8,12 +8,7 @@ from bs4 import BeautifulSoup
 from Utilities.TranslationHandler import TranslationHandler, load_translations, load_value_translations
 from Utilities.WebIntercationHandler import WebInteractionHandler
 
-def loadCredentials(driver):
-    web_handler = WebInteractionHandler(driver)
-    username, password = web_handler.load_credentials("Assets/credentials.txt")
-    return username, password
-
-def scrapeAndTranslateToFileLeeCougan(target_code, outputFile, driver, db_manager=None):
+def scrapeAndTranslateToFileLeeCougan(target_code, outputFile, driver, db_manager=None, credentials=None):
     translation_handler = TranslationHandler(db_manager)
     
     # Component names (keys)
@@ -25,7 +20,9 @@ def scrapeAndTranslateToFileLeeCougan(target_code, outputFile, driver, db_manage
     valueTranslations.update(translation_handler.get_translations_by_category("EN", "LT", "color"))
     valueTranslations.update(translation_handler.get_translations_by_category("EN", "LT", "property"))
 
-    username, password = loadCredentials(driver)
+    if not (credentials and len(credentials) >= 2 and credentials[0] and credentials[1]):
+        raise RuntimeError("Missing Lee Cougan credentials. Configure them in Account -> Lee Cougan.")
+    username, password = credentials[0], credentials[1]
 
     close_driver_at_end = False
     if driver is None:

@@ -18,11 +18,10 @@ class WebInteractionHandler:
         self.driver = driver
 
     def load_credentials(self, file_path):
-        with open(file_path, "r", encoding="utf-8") as f:
-            lines = f.read().splitlines()
-            if len(lines) < 2:
-                raise ValueError("Credentials file must have at least 2 lines (username and password)")
-            return lines[0], lines[1]
+        raise RuntimeError(
+            "Plaintext credential files are no longer supported. "
+            "Please save credentials in the Account screen."
+        )
 
     def add_brand_name(self, brand_name):
         try:

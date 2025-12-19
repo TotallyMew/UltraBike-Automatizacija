@@ -14,10 +14,6 @@ from Utilities.TranslationHandler import TranslationHandler
 from Utilities.WebIntercationHandler import WebInteractionHandler
 from Utilities.ErrorManager import ErrorManager
 
-def getCode():
-    """CLI helper for getting product code"""
-    raise RuntimeError("CLI disabled: caller must provide `ultraBikeCode` parameter from GUI.")
-
 class ProductUploader(ABC):
     def set_retry_callback(self, callback):
         # Set callback for navigation manager and any other retry points
@@ -26,13 +22,13 @@ class ProductUploader(ABC):
         self._retry_callback = callback
 
     def __init__(self, *args, **kwargs):
-        """Flexible initializer supporting both legacy CLI signature and GUI keyword-style calls.
+        """Flexible initializer.
 
-        Legacy (positional): (driver, brandName, ultraBikeCode=None, bicycleUrlOrCode=None,
-        db_manager=None, brand_options=None, logger=None, batch_id=None)
+        Legacy positional signature is still accepted for compatibility:
+            (driver, brandName, ultraBikeCode=None, bicycleUrlOrCode=None, ...)
 
-        GUI-style (keywords): db=..., settings_manager=..., product_code=..., url_or_code=...,
-        description_name=..., include_disclaimer=..., is_frameset=..., logger=...
+        Preferred GUI style uses keyword args:
+            driver=..., db=..., product_code=..., url_or_code=..., ...
         """
 
         # Detect legacy positional usage
@@ -47,6 +43,7 @@ class ProductUploader(ABC):
             # Legacy positional form
             driver = args[0]
             brandName = args[1]
+            master_password = kwargs.pop('master_password', None)
             ultraBikeCode = kwargs.pop('ultraBikeCode', None)
             bicycleUrlOrCode = kwargs.pop('bicycleUrlOrCode', None)
             db_manager = kwargs.pop('db_manager', kwargs.pop('db', None))
@@ -58,6 +55,9 @@ class ProductUploader(ABC):
             db_manager = kwargs.pop('db', kwargs.pop('db_manager', None))
             logger = kwargs.pop('logger', None)
             settings_manager = kwargs.pop('settings_manager', None)
+
+            # Optional master password for decrypting credentials during this run
+            master_password = kwargs.pop('master_password', None)
 
             # Product identifiers
             ultraBikeCode = kwargs.pop('product_code', kwargs.pop('productCode', kwargs.pop('ultraBikeCode', None)))
@@ -85,7 +85,6 @@ class ProductUploader(ABC):
                 try:
                     db_manager = settings_manager.db
                 except Exception as e:
-                    from Utilities.ErrorManager import ErrorManager
                     ErrorManager.show_error("UNEXPECTED_ERROR", error=str(e))
                     db_manager = None
 
@@ -102,7 +101,6 @@ class ProductUploader(ABC):
                     # Provide a retry_callback that returns False to avoid CLI prompts
                     driver = bm.setup_browser(browser_choice, retry_callback=lambda: False)
                 except Exception as e:
-                    from Utilities.ErrorManager import ErrorManager
                     ErrorManager.show_error("UNEXPECTED_ERROR", error=str(e))
                     driver = None
 
@@ -112,6 +110,9 @@ class ProductUploader(ABC):
         self.brandName = brandName
         self.brand_options = brand_options or {}
         self.batch_id = batch_id
+
+        # Optional: used for decrypting external credentials (Basso / Lee Cougan)
+        self.master_password = master_password if 'master_password' in locals() else None
 
         # Debug: brand_options can be logged if needed
 
@@ -140,7 +141,6 @@ class ProductUploader(ABC):
             self.session_manager = SessionManager(self.db)
             self.settings_manager = SettingsManager(self.db)
         except Exception as e:
-            from Utilities.ErrorManager import ErrorManager
             ErrorManager.show_error("UNEXPECTED_ERROR", error=str(e))
             self.session_manager = SessionManager(self.db)
             self.settings_manager = SettingsManager(self.db)
@@ -206,6 +206,14 @@ class ProductUploader(ABC):
             # Add to recent products cache
             self._cache_recent_product()
 
+            # Optional cleanup: delete generated pabaigta*.txt files
+            try:
+                if self.settings_manager.is_auto_delete_pabaigta_files_enabled():
+                    self.translationManager.cleanup_generated_files()
+            except Exception as e:
+                # Cleanup must never turn a success into a failure
+                self._log_error("Auto-delete pabaigta files failed", exception=e)
+
             self._log("Upload process completed successfully", duration=f"{duration:.2f}s")
             ErrorManager.show_success(f"Dviratis {self.ultraBikeCode} sėkmingai apdorotas!")
 
@@ -213,25 +221,26 @@ class ProductUploader(ABC):
             duration = time.time() - self.start_time if self.start_time else 0
             self._record_failure(str(e), duration)
             self._log_error("Upload process failed", exception=e, code=self.ultraBikeCode)
-            from Utilities.ErrorManager import ErrorManager
             ErrorManager.show_error("UNEXPECTED_ERROR", error=str(e))
             raise
 
     def _record_success(self, duration):
         """Record successful upload to database"""
         cursor = self.db.conn.cursor()
+        details_json = getattr(self, "_details_json", None)
         cursor.execute("""
             INSERT INTO processing_history 
             (brand, product_code, url_or_code, status, duration_seconds, 
-             features_uploaded, images_uploaded, processed_at)
-            VALUES (?, ?, ?, 'success', ?, ?, ?, datetime('now'))
+             features_uploaded, images_uploaded, details_json, processed_at)
+            VALUES (?, ?, ?, 'success', ?, ?, ?, ?, datetime('now'))
         """, (
             self.brandName, 
             self.ultraBikeCode, 
             self.bicycleUrlOrCode, 
             duration,
             self.features_uploaded,
-            self.images_uploaded
+            self.images_uploaded,
+            details_json
         ))
         self.db.conn.commit()
         self._log("Success recorded in database")
@@ -239,17 +248,19 @@ class ProductUploader(ABC):
     def _record_failure(self, error_message, duration):
         """Record failed upload to database"""
         cursor = self.db.conn.cursor()
+        details_json = getattr(self, "_details_json", None)
         cursor.execute("""
             INSERT INTO processing_history 
             (brand, product_code, url_or_code, status, error_message, 
-             duration_seconds, processed_at)
-            VALUES (?, ?, ?, 'failed', ?, ?, datetime('now'))
+             duration_seconds, details_json, processed_at)
+            VALUES (?, ?, ?, 'failed', ?, ?, ?, datetime('now'))
         """, (
             self.brandName, 
             self.ultraBikeCode, 
             self.bicycleUrlOrCode, 
             error_message,
-            duration
+            duration,
+            details_json
         ))
         self.db.conn.commit()
         self._log("Failure recorded in database")
@@ -358,8 +369,6 @@ class ProductUploader(ABC):
                     append_disclaimer=True
                 )
 
-                from Utilities.ErrorManager import ErrorManager
-
                 if success:
                     self._log("Standalone disclaimer uploaded successfully")
                     ErrorManager.show_success("Disclaimer įkeltas!")
@@ -371,7 +380,6 @@ class ProductUploader(ABC):
                 import traceback
                 # Debug: Exception in uploadDescription (standalone)
                 self._log_error("Standalone disclaimer upload failed", exception=e)
-                from Utilities.ErrorManager import ErrorManager
                 ErrorManager.show_warning(f"Disclaimer įkėlimo klaida: {str(e)}")
             return
 
@@ -392,8 +400,6 @@ class ProductUploader(ABC):
                 append_disclaimer=append_disclaimer
             )
 
-            from Utilities.ErrorManager import ErrorManager
-
             # Debug: upload_to_prestashop returned: {success}
 
             if success:
@@ -410,7 +416,6 @@ class ProductUploader(ABC):
             import traceback
             # Debug: Exception in uploadDescription
             self._log_error("Description upload failed", exception=e)
-            from Utilities.ErrorManager import ErrorManager
             ErrorManager.show_warning(f"Aprašymo įkėlimo klaida: {str(e)}")
 
 
@@ -426,7 +431,20 @@ class ProductUploader(ABC):
             self.features_uploaded = sum(len(table) for table in ltData)
             
             self._log("Feature data loaded", lt_count=len(ltData), en_count=len(enData))
-            self.featureUploader.uploadAllLanguages(ltData, enData, lvData)
+            skipped = self.featureUploader.uploadAllLanguages(ltData, enData, lvData)
+            try:
+                if skipped:
+                    import json
+                    details = {}
+                    if getattr(self, "_details_json", None):
+                        try:
+                            details = json.loads(self._details_json) or {}
+                        except Exception:
+                            details = {}
+                    details["skipped_features"] = skipped
+                    self._details_json = json.dumps(details, ensure_ascii=False)
+            except Exception as e:
+                self._log_error("Failed to store skipped feature details", exception=e)
             self._log("Features uploaded successfully", count=self.features_uploaded)
         except Exception as e:
             self._log_error("Feature upload failed", exception=e)

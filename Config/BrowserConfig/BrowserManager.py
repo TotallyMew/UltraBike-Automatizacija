@@ -26,25 +26,18 @@ class BrowserManager:
     def __init__(self):
         self.internet_checker = InternetChecker()
 
-    def setup_browser(self, browser_choice, retry_callback=None):
-        """
-        Setup browser with optional retry callback for GUI compatibility
+    def setup_browser(self, browser_choice, retry_callback):
+        """Setup browser.
 
-        Args:
-            browser_choice: Browser to use (chrome, firefox, edge)
-            retry_callback: Optional callback for internet retry. If None, uses CLI prompts.
-                          Should return True to retry, False to cancel.
+        This project is GUI-only. `retry_callback` must be provided and should
+        return True to retry (when offline) or False to cancel.
         """
+        if retry_callback is None:
+            raise ValueError("retry_callback is required")
         while True:
             if not self.internet_checker.check_connection():
-                if retry_callback is not None:
-                    # GUI mode - use callback
-                    if not retry_callback():
-                        return None
-                else:
-                    # CLI mode - use prompts
-                    if not self._prompt_retry_internet():
-                        return None
+                if not retry_callback():
+                    return None
                 continue
 
             try:
@@ -56,10 +49,7 @@ class BrowserManager:
                 elif browser_choice == "edge":
                     return self._setup_edge()
                 else:
-                    browser_choice = self._handle_unsupported_browser()
-                    if browser_choice is None:
-                        return None
-                    continue
+                    raise ValueError(f"Unsupported browser_choice: {browser_choice}")
             except Exception as e:
                 # Error: Error setting up browser: {e}
                 # Error: Closing program, browser not found.
@@ -90,8 +80,3 @@ class BrowserManager:
             options=options
         )
 
-    def _handle_unsupported_browser(self):
-        raise RuntimeError("CLI browser selection disabled: provide a valid 'browser_choice' or a GUI retry_callback.")
-
-    def _prompt_retry_internet(self):
-        raise RuntimeError("CLI internet retry prompt disabled: provide a 'retry_callback' from GUI.")
