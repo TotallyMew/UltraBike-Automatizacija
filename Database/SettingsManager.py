@@ -73,19 +73,13 @@ class SettingsManager:
         """
         Get setting value (automatically converts type)
         """
-        # Use Row factory for dictionary-like access
-        self.db.conn.row_factory = lambda cursor, row: {
-            col[0]: row[idx] for idx, col in enumerate(cursor.description)
-        }
+        # Database already has sqlite3.Row factory set
         cursor = self.db.conn.cursor()
         result = cursor.execute("""
             SELECT value, value_type
             FROM settings
             WHERE key = ?
         """, (key,)).fetchone()
-
-        # Reset row factory
-        self.db.conn.row_factory = None
 
         if not result:
             return default

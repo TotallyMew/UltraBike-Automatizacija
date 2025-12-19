@@ -9,7 +9,7 @@ from qfluentwidgets import (
     CardWidget, TitleLabel, StrongBodyLabel, BodyLabel, CaptionLabel,
     ComboBox, SwitchButton, FluentIcon, InfoBar, InfoBarPosition,
     isDarkTheme, setTheme, Theme, PushButton, LineEdit, ScrollArea,
-    PrimaryPushButton
+    PrimaryPushButton, qconfig
 )
 from GUI_Qt.styles.theme_config import COLORS
 
@@ -29,6 +29,9 @@ class SettingsScreen(QWidget):
         self._init_ui()
         self._load_settings()
         self._loading = False  # Re-enable notifications after load
+
+        # Connect to theme change signal
+        qconfig.themeChangedFinished.connect(self._on_theme_changed)
 
     def _init_ui(self):
         """Initialize UI"""
@@ -52,8 +55,8 @@ class SettingsScreen(QWidget):
         self.content_widget.setObjectName("contentWidget")
         self.content_widget.setStyleSheet(f"#contentWidget {{ background-color: {bg_color}; }}")
         layout = QVBoxLayout(self.content_widget)
-        layout.setContentsMargins(20, 20, 20, 20)  # Reduced from 40 to 20
-        layout.setSpacing(20)  # Reduced from 24 to 20
+        layout.setContentsMargins(40, 20, 40, 20)  # Proper side margins
+        layout.setSpacing(20)
 
         # Header
         header = QHBoxLayout()
@@ -466,6 +469,9 @@ class SettingsScreen(QWidget):
         if self.scroll:
             self._update_scroll_style()
 
+        # Update main window containers
+        self.main.update_container_backgrounds()
+
         # Update batch upload screen table if it exists
         if self.main.batch_upload_screen:
             self.main.batch_upload_screen._update_table_theme()
@@ -532,3 +538,19 @@ class SettingsScreen(QWidget):
                 duration=4000,
                 parent=self
             )
+
+    def _on_theme_changed(self):
+        """Handle theme change event from other screens"""
+        is_dark = isDarkTheme()
+        bg_color = COLORS['space_indigo'] if is_dark else COLORS['platinum']
+
+        # Update main background
+        self.setStyleSheet(f"SettingsScreen {{ background-color: {bg_color}; }}")
+
+        # Update content widget background
+        if self.content_widget:
+            self.content_widget.setStyleSheet(f"#contentWidget {{ background-color: {bg_color}; }}")
+
+        # Update scroll area styling
+        if self.scroll:
+            self._update_scroll_style()

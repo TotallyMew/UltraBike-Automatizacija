@@ -13,7 +13,7 @@ from qfluentwidgets import (
     LineEdit, ComboBox, CheckBox, PrimaryPushButton, PushButton,
     BodyLabel, TitleLabel, StrongBodyLabel, CaptionLabel,
     TransparentToolButton, FluentIcon, InfoBar, InfoBarPosition,
-    ScrollArea, CardWidget, PillPushButton, isDarkTheme, TransparentPushButton, IconWidget
+    ScrollArea, CardWidget, PillPushButton, isDarkTheme, TransparentPushButton, IconWidget, qconfig
 )
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment
@@ -140,11 +140,14 @@ class BatchUploadScreen(QWidget):
 
         self._init_ui()
 
+        # Connect to theme change signal
+        qconfig.themeChangedFinished.connect(self._on_theme_changed)
+
     def _init_ui(self):
         """Initialize UI with proper Fluent Design"""
         # Apply background color and font
         is_dark = isDarkTheme()
-        bg_color = '#16172b' if is_dark else COLORS['platinum']
+        bg_color = COLORS['space_indigo'] if is_dark else COLORS['platinum']
 
         self.setStyleSheet(f"""
             BatchUploadScreen {{
@@ -155,7 +158,7 @@ class BatchUploadScreen(QWidget):
         self.setAutoFillBackground(True)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)  # Reduced margins for better screen fit
+        layout.setContentsMargins(40, 20, 40, 20)  # Fluent standard: 40px sides
         layout.setSpacing(20)
 
         # === HEADER SECTION ===
@@ -259,7 +262,7 @@ class BatchUploadScreen(QWidget):
         content_card = CardWidget()
         content_card.setBorderRadius(8)
         content_layout = QVBoxLayout(content_card)
-        content_layout.setContentsMargins(20, 20, 20, 20)
+        content_layout.setContentsMargins(24, 20, 24, 20)  # Fluent standard card padding
         content_layout.setSpacing(16)
 
         # Modern Fluent table
@@ -284,29 +287,35 @@ class BatchUploadScreen(QWidget):
         # Enable corner clipping for rounded borders
         self.table.setCornerButtonEnabled(False)
 
-        # Column widths
+        # Column widths - responsive design
         header = self.table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
-        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
-        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)  # Brand - flexible
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)    # Code - fixed
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)  # URL - flexible
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)  # Description - flexible
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)  # Frameset - auto
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)  # Disclaimer - auto
+        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)    # Delete - fixed
 
-        self.table.setColumnWidth(0, 160)  # Brand (wider)
-        self.table.setColumnWidth(1, 150)  # Code (wider)
-        # Column 2 stretches (URL)
-        self.table.setColumnWidth(3, 180)  # Description (wider)
-        self.table.setColumnWidth(4, 100)  # Frameset (wider)
-        self.table.setColumnWidth(5, 110)  # Disclaimer (wider)
-        self.table.setColumnWidth(6, 60)   # Delete (wider)
+        # Set minimum widths for stretching columns
+        self.table.setColumnWidth(0, 120)  # Brand minimum
+        self.table.setColumnWidth(1, 140)  # Code fixed
+        self.table.setColumnWidth(3, 150)  # Description minimum
+        self.table.setColumnWidth(6, 60)   # Delete fixed
 
         # Populate initial rows
         for row in range(5):
             self._setup_table_row(row)
 
-        content_layout.addWidget(self.table, 1)
+        # Table container with max-width for better layout on large screens
+        table_container = QWidget()
+        table_container.setStyleSheet("background: transparent;")
+        table_container.setMaximumWidth(1600)  # Larger for batch operations
+        table_container_layout = QVBoxLayout(table_container)
+        table_container_layout.setContentsMargins(0, 0, 0, 0)
+        table_container_layout.addWidget(self.table, 1)
+
+        content_layout.addWidget(table_container, 1)
 
         # Excel drop zone
         self.excel_empty = DropZoneWidget()
@@ -516,42 +525,10 @@ class BatchUploadScreen(QWidget):
 
     def _on_code_changed(self, text, field):
         """Handle product code field change with validation"""
-        # Apply visual feedback
-        if text.strip():
-            field.setStyleSheet(f"""
-                LineEdit {{
-                    border-left: 3px solid {COLORS['success']};
-                }}
-            """)
-        elif text:  # Has text but only whitespace
-            field.setStyleSheet(f"""
-                LineEdit {{
-                    border-left: 3px solid {COLORS['error']};
-                }}
-            """)
-        else:  # Empty
-            field.setStyleSheet("")
-
         self._validate()
 
     def _on_url_changed(self, text, field):
         """Handle URL field change with validation"""
-        # Apply visual feedback
-        if text.strip():
-            field.setStyleSheet(f"""
-                LineEdit {{
-                    border-left: 3px solid {COLORS['success']};
-                }}
-            """)
-        elif text:  # Has text but only whitespace
-            field.setStyleSheet(f"""
-                LineEdit {{
-                    border-left: 3px solid {COLORS['error']};
-                }}
-            """)
-        else:  # Empty
-            field.setStyleSheet("")
-
         self._validate()
 
     def _validate(self):
@@ -836,7 +813,11 @@ class BatchUploadScreen(QWidget):
         bg_color = COLORS['bg_dark'] if is_dark else COLORS['bg_light']
         alt_bg = COLORS['bg_alt_dark'] if is_dark else COLORS['bg_alt_light']
         border_color = COLORS['border_dark'] if is_dark else COLORS['border_light']
-        header_bg = COLORS['space_indigo']
+
+        # Header colors: lavender_grey for dark mode, space_indigo for light mode
+        header_bg = COLORS['lavender_grey'] if is_dark else COLORS['space_indigo']
+        header_text = COLORS['space_indigo'] if is_dark else COLORS['text_white']
+
         text_color = COLORS['text_primary_dark'] if is_dark else COLORS['text_primary_light']
 
         self.table.setStyleSheet(f"""
@@ -855,15 +836,16 @@ class BatchUploadScreen(QWidget):
                 border: none;
             }}
             QTableWidget::item:selected {{
-                background-color: rgba(139, 153, 174, 0.15);
+                background-color: {COLORS['lavender_grey']};
+                color: {COLORS['space_indigo'] if is_dark else COLORS['text_white']};
             }}
             QHeaderView::section {{
                 background-color: {header_bg};
-                color: {COLORS['lavender_grey']};
+                color: {header_text};
                 padding: 12px 12px;
                 border: none;
                 font-weight: 600;
-                font-size: 11px;
+                font-size: 13px;
                 letter-spacing: 0.5px;
                 text-transform: uppercase;
             }}
@@ -921,3 +903,18 @@ class BatchUploadScreen(QWidget):
                 background: none;
             }}
         """)
+
+    def _on_theme_changed(self):
+        """Handle theme change event"""
+        is_dark = isDarkTheme()
+        bg_color = COLORS['space_indigo'] if is_dark else COLORS['platinum']
+
+        self.setStyleSheet(f"""
+            BatchUploadScreen {{
+                background-color: {bg_color};
+                font-family: {FONTS['family']};
+            }}
+        """)
+
+        # Update table theme
+        self._update_table_theme()

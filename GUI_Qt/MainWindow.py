@@ -348,6 +348,7 @@ class MainWindow(FluentWindow):
 
         # Create main content container with top bar and content area
         main_container = QWidget()
+        main_container.setObjectName("mainContainer")
         main_layout = QVBoxLayout(main_container)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
@@ -355,6 +356,25 @@ class MainWindow(FluentWindow):
 
         # Create our own stacked widget for content screens
         self.content_stack = QStackedWidget()
+        self.content_stack.setObjectName("contentStack")
+
+        # Apply background colors to containers
+        from qfluentwidgets import isDarkTheme
+        from GUI_Qt.styles.theme_config import COLORS
+        is_dark = isDarkTheme()
+        bg_color = COLORS['space_indigo'] if is_dark else COLORS['platinum']
+
+        main_container.setStyleSheet(f"""
+            #mainContainer {{
+                background-color: {bg_color};
+            }}
+        """)
+        self.content_stack.setStyleSheet(f"""
+            #contentStack {{
+                background-color: {bg_color};
+            }}
+        """)
+
         main_layout.addWidget(self.content_stack, 1)
 
         # Add main container to FluentWindow's stackedWidget
@@ -416,3 +436,33 @@ class MainWindow(FluentWindow):
 
         # Apply global stylesheet for consistent styling
         self.setStyleSheet(get_global_stylesheet())
+
+    def update_container_backgrounds(self):
+        """Update main container and content stack backgrounds when theme changes"""
+        from qfluentwidgets import isDarkTheme
+        from GUI_Qt.styles.theme_config import COLORS
+
+        if not hasattr(self, 'content_stack'):
+            return
+
+        is_dark = isDarkTheme()
+        bg_color = COLORS['space_indigo'] if is_dark else COLORS['platinum']
+
+        # Find and update main container
+        for i in range(self.stackedWidget.count()):
+            widget = self.stackedWidget.widget(i)
+            if widget.objectName() == "mainContainer":
+                widget.setStyleSheet(f"""
+                    #mainContainer {{
+                        background-color: {bg_color};
+                    }}
+                """)
+                break
+
+        # Update content stack
+        if hasattr(self, 'content_stack'):
+            self.content_stack.setStyleSheet(f"""
+                #contentStack {{
+                    background-color: {bg_color};
+                }}
+            """)

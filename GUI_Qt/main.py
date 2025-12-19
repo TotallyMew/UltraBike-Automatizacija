@@ -17,6 +17,7 @@ from qfluentwidgets import setTheme, Theme
 
 from GUI_Qt.MainWindow import MainWindow
 from GUI_Qt.styles.theme_config import apply_theme
+from PySide6.QtGui import QIcon,QPixmap
 
 
 def main():
@@ -32,11 +33,20 @@ def main():
     app.setApplicationName("UltraBike Automatizacija")
     app.setOrganizationName("UltraBike")
 
+    icon_path = os.path.join(project_root, "might work.ico")
+    print("icon exists:", os.path.isfile(icon_path))        # -> True
+    print("absolute path:", os.path.abspath(icon_path))
+        #Set the application icon
+    icon_path = os.path.join(project_root, "might work.ico")  # path to your ICO
+    app.setWindowIcon(QIcon(icon_path))
+    print(QPixmap(icon_path).isNull())  
+
     # Apply Fluent Design theme
     apply_theme(app)
 
     # Create and show main window
     window = MainWindow()
+    window.setWindowIcon(QIcon(icon_path))
     window.show()
 
     # Run application

@@ -4,12 +4,13 @@ Single product upload with Space Indigo/Lavender Grey color scheme
 """
 
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QGridLayout
-from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtCore import Qt, QThread, Signal, QEvent
+from PySide6.QtGui import QFont
 from qfluentwidgets import (
     LineEdit, ComboBox, CheckBox, PrimaryPushButton, PushButton,
     IndeterminateProgressRing, BodyLabel, TitleLabel, CaptionLabel,
     InfoBar, InfoBarPosition, TransparentToolButton, FluentIcon,
-    CardWidget, isDarkTheme, StrongBodyLabel
+    CardWidget, isDarkTheme, StrongBodyLabel, qconfig
 )
 from uploaderFactory import getUploaderClass
 from Managers.DescriptionManager import DescriptionManager
@@ -36,7 +37,7 @@ class UploadWorker(QThread):
 
 
 class UploadScreen(QWidget):
-    """Main upload screen with Fluent Design"""
+    """Main upload screen with Fluent Design and responsive scaling"""
 
     def __init__(self, main_window, parent=None):
         super().__init__(parent)
@@ -50,14 +51,21 @@ class UploadScreen(QWidget):
             "TREK", "Rondo", "Octane", "Rascal", "Lee Cougan"
         ]
 
+        # Store references for responsive scaling
+        self.form_card = None
+        self.current_scale = 1.0
+
         self._init_ui()
         self._load_descriptions()
+
+        # Connect to theme change signal
+        qconfig.themeChangedFinished.connect(self._on_theme_changed)
 
     def _init_ui(self):
         """Initialize UI with Fluent Design"""
         # Apply background color
         is_dark = isDarkTheme()
-        bg_color = '#16172b' if is_dark else COLORS['platinum']
+        bg_color = COLORS['space_indigo'] if is_dark else COLORS['platinum']
 
         self.setStyleSheet(f"""
             UploadScreen {{
@@ -69,7 +77,7 @@ class UploadScreen(QWidget):
 
         # Main layout
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setContentsMargins(40, 20, 40, 20)  # Fluent standard: 40px sides
         main_layout.setSpacing(20)
 
         # === HEADER SECTION ===
@@ -94,18 +102,19 @@ class UploadScreen(QWidget):
         main_layout.addLayout(header)
 
         # === FORM CARD ===
-        form_card = CardWidget()
-        form_card.setBorderRadius(8)
-        form_card.setMaximumWidth(700)
+        self.form_card = CardWidget()
+        self.form_card.setBorderRadius(8)
+        self.form_card.setMinimumWidth(600)  # Minimum comfortable width
+        # Remove max-width to allow full responsiveness
 
-        card_layout = QVBoxLayout(form_card)
+        card_layout = QVBoxLayout(self.form_card)
         card_layout.setContentsMargins(32, 32, 32, 32)
         card_layout.setSpacing(24)
 
         # Form grid
         form_grid = QGridLayout()
-        form_grid.setSpacing(16)
-        form_grid.setVerticalSpacing(20)
+        form_grid.setSpacing(20)  # Horizontal spacing - Fluent standard
+        form_grid.setVerticalSpacing(24)  # Vertical spacing - Fluent standard
 
         row = 0
 
@@ -265,8 +274,28 @@ class UploadScreen(QWidget):
 
         card_layout.addLayout(action_row)
 
-        main_layout.addWidget(form_card)
-        main_layout.addStretch()
+        # Center form card horizontally while allowing it to scale
+        card_container = QHBoxLayout()
+        card_container.addStretch()
+        card_container.addWidget(self.form_card, 1)  # 1 = allow scaling
+        card_container.addStretch()
+
+        main_layout.addLayout(card_container)
+        main_layout.addStretch()  # Push content up
+
+    def resizeEvent(self, event):
+        """Handle window resize to adjust card width dynamically"""
+        super().resizeEvent(event)
+
+        # Calculate available width (total width minus margins and stretches)
+        available_width = self.width() - 80  # 40px margins on each side
+
+        # Set card width to use ~85% of available width - don't be afraid to use space!
+        target_width = int(available_width * 0.85)
+        target_width = max(700, min(target_width, 1600))  # Clamp between 700-1600px
+
+        if self.form_card:
+            self.form_card.setFixedWidth(target_width)
 
     def _load_descriptions(self):
         """Load descriptions from database"""
@@ -297,68 +326,14 @@ class UploadScreen(QWidget):
 
     def _on_code_changed(self, text):
         """Handle product code field change with validation"""
-        is_valid = bool(text.strip())
-
-        # Apply visual feedback
-        if text.strip():
-            self.code_field.setStyleSheet(f"""
-                LineEdit {{
-                    border-left: 3px solid {COLORS['success']};
-                }}
-            """)
-        elif text:  # Has text but only whitespace
-            self.code_field.setStyleSheet(f"""
-                LineEdit {{
-                    border-left: 3px solid {COLORS['error']};
-                }}
-            """)
-        else:  # Empty
-            self.code_field.setStyleSheet("")
-
         self._check_form_valid()
 
     def _on_url_changed(self, text):
         """Handle URL field change with validation"""
-        is_valid = bool(text.strip())
-
-        # Apply visual feedback
-        if text.strip():
-            self.url_field.setStyleSheet(f"""
-                LineEdit {{
-                    border-left: 3px solid {COLORS['success']};
-                }}
-            """)
-        elif text:  # Has text but only whitespace
-            self.url_field.setStyleSheet(f"""
-                LineEdit {{
-                    border-left: 3px solid {COLORS['error']};
-                }}
-            """)
-        else:  # Empty
-            self.url_field.setStyleSheet("")
-
         self._check_form_valid()
 
     def _on_description_changed(self, text):
         """Handle description dropdown change with validation"""
-        is_valid = bool(text and text != "Select description...")
-
-        # Apply visual feedback
-        if is_valid:
-            self.description_combo.setStyleSheet(f"""
-                ComboBox {{
-                    border-left: 3px solid {COLORS['success']};
-                }}
-            """)
-        elif text:  # Has text but it's the placeholder
-            self.description_combo.setStyleSheet(f"""
-                ComboBox {{
-                    border-left: 3px solid {COLORS['error']};
-                }}
-            """)
-        else:  # Empty
-            self.description_combo.setStyleSheet("")
-
         self._check_form_valid()
 
     def _check_form_valid(self):
@@ -367,14 +342,21 @@ class UploadScreen(QWidget):
         url = self.url_field.text().strip()
         description = self.description_combo.currentText()
 
-        is_valid = bool(
-            code and
-            url and
-            description and
-            description != "Select description..."
-        )
+        # Description is optional - only check code and URL
+        is_valid = bool(code and url)
+
+        # Debug logging
+        print(f"[UploadScreen] Validation check:")
+        print(f"  Code: '{code}' (valid: {bool(code)})")
+        print(f"  URL: '{url}' (valid: {bool(url)})")
+        print(f"  Description: '{description}' (optional)")
+        print(f"  Overall valid: {is_valid}")
+        print(f"  Button enabled before: {self.upload_button.isEnabled()}")
 
         self.upload_button.setEnabled(is_valid)
+
+        print(f"  Button enabled after: {self.upload_button.isEnabled()}")
+        print()
 
     def _show_disclaimer_info(self):
         """Show disclaimer information"""
@@ -489,3 +471,15 @@ class UploadScreen(QWidget):
                 position=InfoBarPosition.TOP,
                 duration=5000
             )
+
+    def _on_theme_changed(self):
+        """Handle theme change event"""
+        is_dark = isDarkTheme()
+        bg_color = COLORS['space_indigo'] if is_dark else COLORS['platinum']
+
+        self.setStyleSheet(f"""
+            UploadScreen {{
+                background-color: {bg_color};
+                font-family: {FONTS['family']};
+            }}
+        """)

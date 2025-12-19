@@ -13,7 +13,7 @@ from qfluentwidgets import (
     CardWidget, PushButton, LineEdit, ComboBox, TransparentToolButton,
     FluentIcon, TitleLabel, StrongBodyLabel, BodyLabel, CaptionLabel,
     InfoBar, InfoBarPosition, isDarkTheme, SearchLineEdit,
-    PrimaryPushButton, MessageBox, Dialog
+    PrimaryPushButton, MessageBox, Dialog, qconfig
 )
 from GUI_Qt.styles.theme_config import COLORS, FONTS
 
@@ -159,11 +159,14 @@ class TranslationsScreen(QWidget):
         self._init_ui()
         self._load_translations()
 
+        # Connect to theme change signal
+        qconfig.themeChangedFinished.connect(self._on_theme_changed)
+
     def _init_ui(self):
         """Initialize UI with Fluent Design"""
         # Apply background color
         is_dark = isDarkTheme()
-        bg_color = '#16172b' if is_dark else COLORS['platinum']
+        bg_color = COLORS['space_indigo'] if is_dark else COLORS['platinum']
 
         self.setStyleSheet(f"""
             TranslationsScreen {{
@@ -175,7 +178,7 @@ class TranslationsScreen(QWidget):
 
         # Main layout
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setContentsMargins(40, 20, 40, 20)  # Fluent standard: 40px sides
         layout.setSpacing(20)
 
         # === HEADER SECTION ===
@@ -214,26 +217,27 @@ class TranslationsScreen(QWidget):
         toolbar_card = CardWidget()
         toolbar_card.setBorderRadius(8)
         toolbar_layout = QHBoxLayout(toolbar_card)
-        toolbar_layout.setContentsMargins(20, 16, 20, 16)
-        toolbar_layout.setSpacing(12)
+        toolbar_layout.setContentsMargins(24, 20, 24, 20)  # Fluent standard card padding
+        toolbar_layout.setSpacing(16)  # Fluent 4px increment
 
-        # Search bar
+        # Search bar - flexible width with min/max constraints
         self.search_input = SearchLineEdit()
         self.search_input.setPlaceholderText("Search translations...")
-        self.search_input.setFixedWidth(300)
+        self.search_input.setMinimumWidth(200)
+        self.search_input.setMaximumWidth(400)
         self.search_input.textChanged.connect(self._apply_filters)
 
-        # Brand filter
+        # Brand filter - flexible width
         brand_label = BodyLabel("Brand:")
         brand_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
-        brand_label.setFixedWidth(50)
 
         self.brand_filter = ComboBox()
         self.brand_filter.addItems([
             "All", "KROSS", "Pinarello", "Basso", "Factor",
             "TREK", "Rondo", "Octane", "Rascal", "Lee Cougan"
         ])
-        self.brand_filter.setFixedWidth(140)
+        self.brand_filter.setMinimumWidth(120)
+        self.brand_filter.setMaximumWidth(180)
         self.brand_filter.currentTextChanged.connect(self._apply_filters)
 
         # Add button
@@ -272,7 +276,21 @@ class TranslationsScreen(QWidget):
         # Apply table styling
         self._update_table_theme()
 
-        layout.addWidget(self.table, 1)
+        # Table container with max-width for better layout on large screens
+        table_container = QWidget()
+        table_container.setStyleSheet("background: transparent;")
+        table_container.setMaximumWidth(1400)
+        table_container_layout = QVBoxLayout(table_container)
+        table_container_layout.setContentsMargins(0, 0, 0, 0)
+        table_container_layout.addWidget(self.table, 1)
+
+        # Center table container
+        table_wrapper = QHBoxLayout()
+        table_wrapper.addStretch()
+        table_wrapper.addWidget(table_container, 1)
+        table_wrapper.addStretch()
+
+        layout.addLayout(table_wrapper, 1)
 
         # === PAGINATION ===
         pagination_card = CardWidget()
@@ -305,7 +323,11 @@ class TranslationsScreen(QWidget):
         bg_color = COLORS['bg_dark'] if is_dark else COLORS['bg_light']
         alt_bg = COLORS['bg_alt_dark'] if is_dark else COLORS['bg_alt_light']
         border_color = COLORS['border_dark'] if is_dark else COLORS['border_light']
-        header_bg = COLORS['space_indigo']
+
+        # Header colors: lavender_grey for dark mode, space_indigo for light mode
+        header_bg = COLORS['lavender_grey'] if is_dark else COLORS['space_indigo']
+        header_text = COLORS['space_indigo'] if is_dark else COLORS['text_white']
+
         text_color = COLORS['text_primary_dark'] if is_dark else COLORS['text_primary_light']
 
         self.table.setStyleSheet(f"""
@@ -322,19 +344,19 @@ class TranslationsScreen(QWidget):
             }}
             QTableWidget::item:selected {{
                 background-color: {COLORS['lavender_grey']};
-                color: white;
+                color: {COLORS['space_indigo'] if is_dark else COLORS['text_white']};
             }}
             QTableWidget::item:hover {{
                 background-color: {'rgba(141, 153, 174, 0.1)' if is_dark else 'rgba(43, 45, 66, 0.05)'};
             }}
             QHeaderView::section {{
                 background-color: {header_bg};
-                color: {COLORS['lavender_grey']};
+                color: {header_text};
                 padding: 12px 8px;
                 border: none;
-                border-bottom: 2px solid {COLORS['lavender_grey']};
+                border-bottom: 2px solid {COLORS['lavender_grey'] if is_dark else 'rgba(141, 153, 174, 0.3)'};
                 font-weight: 600;
-                font-size: 13px;
+                font-size: 14px;
             }}
             QHeaderView::section:first {{
                 border-top-left-radius: 8px;
@@ -621,3 +643,18 @@ class TranslationsScreen(QWidget):
                     parent=self,
                     position=InfoBarPosition.TOP
                 )
+
+    def _on_theme_changed(self):
+        """Handle theme change event"""
+        is_dark = isDarkTheme()
+        bg_color = COLORS['space_indigo'] if is_dark else COLORS['platinum']
+
+        self.setStyleSheet(f"""
+            TranslationsScreen {{
+                background-color: {bg_color};
+                font-family: {FONTS['family']};
+            }}
+        """)
+
+        # Update table theme
+        self._update_table_theme()

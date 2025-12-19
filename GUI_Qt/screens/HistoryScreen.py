@@ -6,17 +6,48 @@ Space Indigo/Lavender Grey color scheme with FluentIcons
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFileDialog, QLabel
 )
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QPixmap, QIcon
+from PySide6.QtCore import Qt, QUrl
+from PySide6.QtGui import QPixmap, QIcon, QDesktopServices, QCursor
 from qfluentwidgets import (
     ComboBox, PushButton, TransparentToolButton, FluentIcon,
     BodyLabel, TitleLabel, StrongBodyLabel, CardWidget, CaptionLabel,
-    InfoBar, InfoBarPosition, ScrollArea, isDarkTheme, IconWidget
+    InfoBar, InfoBarPosition, ScrollArea, isDarkTheme, IconWidget, qconfig
 )
 from datetime import datetime, timedelta
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 from GUI_Qt.styles.theme_config import COLORS, FONTS
+from PySide6.QtWidgets import QSizePolicy
+
+
+class ClickableLabel(BodyLabel):
+    """Clickable label that opens URLs in browser"""
+
+    def __init__(self, text, url, parent=None):
+        super().__init__(parent)
+        self.setText(text)
+        self.url = url
+        self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.setWordWrap(False)
+
+    def mousePressEvent(self, event):
+        """Open URL in default browser when clicked"""
+        if event.button() == Qt.MouseButton.LeftButton:
+            QDesktopServices.openUrl(QUrl(self.url))
+        super().mousePressEvent(event)
+
+    def enterEvent(self, event):
+        """Add underline on hover"""
+        current_style = self.styleSheet()
+        if 'text-decoration' not in current_style:
+            self.setStyleSheet(current_style + " text-decoration: underline;")
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        """Remove underline when not hovering"""
+        current_style = self.styleSheet()
+        self.setStyleSheet(current_style.replace(" text-decoration: underline;", ""))
+        super().leaveEvent(event)
 
 
 class StatCard(CardWidget):
@@ -54,77 +85,154 @@ class StatCard(CardWidget):
         layout.addLayout(text_layout, 1)
 
 
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy
+from PySide6.QtCore import Qt
+
 class HistoryItemCard(CardWidget):
-    """Single history item card with status indicator"""
+    """Single history item card with status indicator - improved layout"""
 
     def __init__(self, row, parent=None):
         super().__init__(parent)
         self.setBorderRadius(8)
+        self.setMinimumHeight(160)  # Increased to prevent clipping
 
-        layout = QVBoxLayout(self)
-        layout.setSpacing(8)
-        layout.setContentsMargins(20, 16, 20, 16)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
 
-        # Top row: status + info
+        main_layout = QVBoxLayout(self)
+        main_layout.setSpacing(12)
+        main_layout.setContentsMargins(32, 24, 32, 24)
+
+        # --- TOP ROW ---
         top_row = QHBoxLayout()
-        top_row.setSpacing(16)
+        top_row.setSpacing(24)
 
-        # Status indicator with FluentIcon
+        # STATUS ICON
         is_success = row['status'] == 'success'
         status_icon = FluentIcon.ACCEPT if is_success else FluentIcon.CANCEL
         status_color = COLORS['success'] if is_success else COLORS['error']
 
         icon_widget = IconWidget(status_icon)
-        icon_widget.setFixedSize(24, 24)
-        # Apply color via stylesheet
-        icon_widget.setStyleSheet(f"""
-            IconWidget {{
-                color: {status_color};
-                background: transparent;
-            }}
-        """)
+        icon_widget.setFixedSize(32, 32)
+        icon_widget.setStyleSheet(f"color: {status_color}; background: transparent;")
+        top_row.addWidget(icon_widget, 0, Qt.AlignmentFlag.AlignVCenter)
 
-        # Info column
-        info_layout = QVBoxLayout()
-        info_layout.setSpacing(4)
+        # LEFT: Brand / Product Code
+        left_section = QVBoxLayout()
+        left_section.setSpacing(2)
 
-        # Brand and product code
-        title = StrongBodyLabel(f"{row['brand']} - {row['product_code']}")
+        title = StrongBodyLabel(row['brand'])
+        title.setStyleSheet(f"font-size: 15px; font-weight: 600; color: {COLORS['text_primary_dark'] if isDarkTheme() else COLORS['text_primary_light']};")
 
-        # Details
-        duration = f"{row['duration_seconds']:.1f}s" if row['duration_seconds'] else "N/A"
-        features = str(row['features_uploaded']) if row['features_uploaded'] else "0"
-        images = str(row['images_uploaded']) if row['images_uploaded'] else "0"
+        product_code = BodyLabel(row['product_code'])
+        product_code.setStyleSheet(f"font-size: 12px; color: {COLORS['text_primary_dark'] if isDarkTheme() else COLORS['space_indigo']};")
 
-        stage_info = ""
-        if not is_success and row['failed_stage']:
-            stage_info = f" • Failed: {row['failed_stage']}"
+        left_section.addWidget(title)
+        left_section.addWidget(product_code)
 
-        details = BodyLabel(f"Duration: {duration} • Features: {features} • Images: {images}{stage_info}")
-        details.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
+        left_widget = QWidget()
+        left_widget.setLayout(left_section)
+        left_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+        top_row.addWidget(left_widget, 2)  # Stretch factor 2
 
-        # Timestamp
+        # VERTICAL SEPARATOR
+        sep1 = QWidget()
+        sep1.setFixedWidth(1)
+        sep1.setStyleSheet(f"background-color: {COLORS['border_dark'] if isDarkTheme() else COLORS['border_light']};")
+        top_row.addWidget(sep1)
+
+        # METRICS
+        metrics_layout = QHBoxLayout()
+        metrics_layout.setSpacing(24)
+
+        for label_text, value in [
+            ("Duration", f"{row['duration_seconds']:.1f}s" if row['duration_seconds'] else "N/A"),
+            ("Features", str(row['features_uploaded']) if 'features_uploaded' in row.keys() and row['features_uploaded'] else "0"),
+            ("Images", str(row['images_uploaded']) if 'images_uploaded' in row.keys() and row['images_uploaded'] else "0"),
+        ]:
+            v_layout = QVBoxLayout()
+            v_layout.setSpacing(2)
+            v_layout.setContentsMargins(0, 0, 0, 0)
+
+            label = CaptionLabel(label_text)
+            label.setStyleSheet(f"font-size: 10px; text-transform: uppercase; color: {COLORS['text_tertiary']};")
+            value_label = StrongBodyLabel(value)
+            value_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {COLORS['text_primary_dark'] if isDarkTheme() else COLORS['text_primary_light']};")
+            value_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+
+            v_layout.addWidget(label, 0, Qt.AlignmentFlag.AlignHCenter)
+            v_layout.addWidget(value_label, 1, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
+
+            container = QWidget()
+            container.setLayout(v_layout)
+            container.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+            metrics_layout.addWidget(container)
+
+        metrics_widget = QWidget()
+        metrics_widget.setLayout(metrics_layout)
+        metrics_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        top_row.addWidget(metrics_widget, 3)  # Stretch factor 3 to give metrics more room
+
+        # VERTICAL SEPARATOR
+        sep2 = QWidget()
+        sep2.setFixedWidth(1)
+        sep2.setStyleSheet(f"background-color: {COLORS['border_dark'] if isDarkTheme() else COLORS['border_light']};")
+        top_row.addWidget(sep2)
+
+        # RIGHT: Timestamp / Failed stage
+        right_layout = QVBoxLayout()
+        right_layout.setSpacing(2)
+        right_layout.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+
         timestamp = CaptionLabel(str(row['processed_at']))
-        timestamp.setStyleSheet(f"color: {COLORS['text_tertiary']}; font-size: 11px;")
+        timestamp.setStyleSheet(f"font-size: 11px; color: {COLORS['text_tertiary']};")
+        right_layout.addWidget(timestamp)
 
-        info_layout.addWidget(title)
-        info_layout.addWidget(details)
-        info_layout.addWidget(timestamp)
+        if not is_success and 'failed_stage' in row.keys() and row['failed_stage']:
+            failed_label = CaptionLabel(f"Failed: {row['failed_stage']}")
+            failed_label.setStyleSheet(f"font-size: 11px; color: {COLORS['error']}; font-weight: 500;")
+            failed_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+            right_layout.addWidget(failed_label)
 
-        top_row.addWidget(icon_widget)
-        top_row.addLayout(info_layout, 1)
+        right_widget = QWidget()
+        right_widget.setLayout(right_layout)
+        right_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+        top_row.addWidget(right_widget, 1)  # Stretch factor 1
 
-        layout.addLayout(top_row)
+        main_layout.addLayout(top_row)
 
-        # Error message if failed
-        if not is_success and row['error_message']:
+        # --- BOTTOM ROW: URL/Code ---
+        url_or_code = row['url_or_code'] if 'url_or_code' in row.keys() else None
+        if url_or_code:
+            main_layout.addSpacing(12)
+            divider = QWidget()
+            divider.setFixedHeight(1)
+            divider.setStyleSheet(f"background-color: {COLORS['border_dark'] if isDarkTheme() else COLORS['border_light']};")
+            main_layout.addWidget(divider)
+            main_layout.addSpacing(12)
+
+            url_layout = QHBoxLayout()
+            url_layout.setSpacing(10)
+
+            url_icon = IconWidget(FluentIcon.LINK)
+            url_icon.setFixedSize(16, 16)
+            url_icon.setStyleSheet(f"color: {COLORS['lavender_grey']};")
+
+            display_text = str(url_or_code)
+            if len(display_text) > 120:
+                display_text = display_text[:117] + "..."
+
+            url_label = ClickableLabel(display_text, str(url_or_code))
+            url_label.setStyleSheet(f"font-size: 12px; color: {COLORS['lavender_grey']}; font-family: {FONTS['family_mono']};")
+
+            url_layout.addWidget(url_icon)
+            url_layout.addWidget(url_label)
+            url_layout.addStretch()
+            main_layout.addLayout(url_layout)
+
+        # --- Error message ---
+        if not is_success and 'error_message' in row.keys() and row['error_message']:
             error_card = CardWidget()
-            error_card.setStyleSheet(f"""
-                CardWidget {{
-                    background-color: {'rgba(200, 29, 37, 0.08)' if isDarkTheme() else 'rgba(200, 29, 37, 0.05)'};
-                    border: 1px solid {COLORS['error']};
-                }}
-            """)
+            error_card.setStyleSheet(f"background-color: {'rgba(200,29,37,0.08)' if isDarkTheme() else 'rgba(200,29,37,0.05)'}; border: 1px solid {COLORS['error']};")
             error_layout = QHBoxLayout(error_card)
             error_layout.setContentsMargins(12, 8, 12, 8)
 
@@ -133,13 +241,12 @@ class HistoryItemCard(CardWidget):
             error_icon.setStyleSheet(f"color: {COLORS['error']};")
 
             error_label = BodyLabel(f"Error: {row['error_message']}")
-            error_label.setStyleSheet(f"color: {COLORS['error']}; font-size: 11px;")
+            error_label.setStyleSheet(f"font-size: 11px; color: {COLORS['error']};")
             error_label.setWordWrap(True)
 
             error_layout.addWidget(error_icon)
             error_layout.addWidget(error_label, 1)
-
-            layout.addWidget(error_card)
+            main_layout.addWidget(error_card)
 
 
 class HistoryScreen(QWidget):
@@ -155,11 +262,14 @@ class HistoryScreen(QWidget):
         self._init_ui()
         self.refresh_history()
 
+        # Connect to theme change signal
+        qconfig.themeChangedFinished.connect(self._on_theme_changed)
+
     def _init_ui(self):
         """Initialize UI with Fluent Design"""
         # Apply background color based on theme
         is_dark = isDarkTheme()
-        bg_color = '#16172b' if is_dark else COLORS['platinum']
+        bg_color = COLORS['space_indigo'] if is_dark else COLORS['platinum']
 
         # Force the background color
         self.setStyleSheet(f"""
@@ -172,7 +282,7 @@ class HistoryScreen(QWidget):
 
         # Main layout
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setContentsMargins(40, 20, 40, 20)  # Fluent standard: 40px sides
         layout.setSpacing(20)
 
         # === HEADER SECTION ===
@@ -188,13 +298,13 @@ class HistoryScreen(QWidget):
 
         # Using FluentIcons for stats
         self.total_stat = StatCard("Total Uploads", "0", FluentIcon.FOLDER)
-        self.total_stat.setMaximumWidth(300)
+        self.total_stat.setMaximumWidth(280)  # Prevent excessive stretching
         self.success_stat = StatCard("Success Rate", "0%", FluentIcon.ACCEPT)
-        self.success_stat.setMaximumWidth(300)
+        self.success_stat.setMaximumWidth(280)
         self.duration_stat = StatCard("Avg Duration", "0s", FluentIcon.HISTORY)
-        self.duration_stat.setMaximumWidth(300)
+        self.duration_stat.setMaximumWidth(280)
         self.today_stat = StatCard("Today", "0", FluentIcon.CALENDAR)
-        self.today_stat.setMaximumWidth(300)
+        self.today_stat.setMaximumWidth(280)
 
         stats_container.addWidget(self.total_stat, 1)
         stats_container.addWidget(self.success_stat, 1)
@@ -207,8 +317,8 @@ class HistoryScreen(QWidget):
         toolbar_card = CardWidget()
         toolbar_card.setBorderRadius(8)
         toolbar_layout = QHBoxLayout(toolbar_card)
-        toolbar_layout.setContentsMargins(20, 16, 20, 16)
-        toolbar_layout.setSpacing(12)
+        toolbar_layout.setContentsMargins(24, 20, 24, 20)  # Fluent standard card padding
+        toolbar_layout.setSpacing(16)  # Fluent 4px increment
 
         # Brand filter
         brand_label = BodyLabel("Brand:")
@@ -271,16 +381,29 @@ class HistoryScreen(QWidget):
                 border: none;
                 background: transparent;
             }
+            QScrollArea > QWidget > QWidget {
+                background: transparent;
+            }
         """)
+
+        # CRITICAL: Prevent viewport from clipping child widgets
+        viewport = scroll.viewport()
+        if viewport:
+            viewport.setAutoFillBackground(False)
+            viewport.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, False)
 
         self.history_container = QWidget()
         self.history_container.setStyleSheet("background: transparent;")
         self.history_layout = QVBoxLayout(self.history_container)
-        self.history_layout.setSpacing(12)
-        self.history_layout.setContentsMargins(0, 0, 0, 0)
+        self.history_layout.setSpacing(16)  # Spacing between cards
+        self.history_layout.setContentsMargins(5, 15, 5, 15)  # Generous margins to prevent any clipping
         self.history_layout.addStretch()
 
+        # No centering wrapper - let history items expand naturally
         scroll.setWidget(self.history_container)
+
+        # Add spacing between toolbar and scroll area
+        layout.addSpacing(16)
         layout.addWidget(scroll, 1)
 
         # === PAGINATION CONTROLS ===
@@ -325,10 +448,7 @@ class HistoryScreen(QWidget):
 
     def refresh_history(self):
         """Refresh history list based on filters"""
-        # Use Row factory to get dictionary-like results
-        self.main.db.conn.row_factory = lambda cursor, row: {
-            col[0]: row[idx] for idx, col in enumerate(cursor.description)
-        }
+        # Database already has sqlite3.Row factory set
         cursor = self.main.db.conn.cursor()
 
         # Build query with filters
@@ -375,9 +495,6 @@ class HistoryScreen(QWidget):
         # Execute query and store all results
         self.all_history = cursor.execute(query, params).fetchall()
         self.filtered_history = self.all_history
-
-        # Reset row factory to default
-        self.main.db.conn.row_factory = None
 
         # Reset to first page
         self.current_page = 0
@@ -593,3 +710,15 @@ class HistoryScreen(QWidget):
                 parent=self,
                 position=InfoBarPosition.TOP
             )
+
+    def _on_theme_changed(self):
+        """Handle theme change event"""
+        is_dark = isDarkTheme()
+        bg_color = COLORS['space_indigo'] if is_dark else COLORS['platinum']
+
+        self.setStyleSheet(f"""
+            HistoryScreen {{
+                background-color: {bg_color};
+                font-family: {FONTS['family']};
+            }}
+        """)

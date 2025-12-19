@@ -61,7 +61,7 @@ class DescriptionsScreen(QWidget):
 
         # Main layout
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setContentsMargins(40, 20, 40, 20)  # Fluent standard: 40px sides
         main_layout.setSpacing(16)
 
         # === HEADER ===
@@ -105,7 +105,8 @@ class DescriptionsScreen(QWidget):
         # LEFT PANEL - Description List
         left_panel = CardWidget()
         left_panel.setBorderRadius(8)
-        left_panel.setFixedWidth(300)
+        left_panel.setMinimumWidth(250)
+        left_panel.setMaximumWidth(350)  # Responsive width instead of fixed
 
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(16, 16, 16, 16)
@@ -152,11 +153,12 @@ class DescriptionsScreen(QWidget):
 
         left_layout.addLayout(list_btn_layout)
 
-        content_layout.addWidget(left_panel)
+        content_layout.addWidget(left_panel, 3)  # 30% of space
 
-        # RIGHT PANEL - Tabs with HTML Editors
+        # RIGHT PANEL - Tabs with HTML Editors (with max-width for readability)
         right_panel = CardWidget()
         right_panel.setBorderRadius(8)
+        right_panel.setMaximumWidth(1000)  # Prevent text editors from becoming too wide
 
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(16, 16, 16, 16)
@@ -196,7 +198,7 @@ class DescriptionsScreen(QWidget):
 
         right_layout.addLayout(action_layout)
 
-        content_layout.addWidget(right_panel, 1)
+        content_layout.addWidget(right_panel, 7)  # 70% of space
 
         main_layout.addLayout(content_layout, 1)
 
@@ -236,7 +238,7 @@ class DescriptionsScreen(QWidget):
                 border: 1px solid {COLORS['border_dark'] if is_dark else COLORS['border_light']};
                 border-radius: 6px;
                 font-family: {FONTS['family_mono']};
-                font-size: 13px;
+                font-size: 14px;
                 line-height: 1.5;
                 padding: 12px;
             }}
@@ -251,7 +253,7 @@ class DescriptionsScreen(QWidget):
         is_dark = isDarkTheme()
         self.description_list.setStyleSheet(f"""
             QListWidget {{
-                background-color: {'#1a1b2e' if is_dark else COLORS['bg_light']};
+                background-color: {COLORS['bg_dark'] if is_dark else COLORS['bg_light']};
                 border: 1px solid {COLORS['border_dark'] if is_dark else COLORS['border_light']};
                 border-radius: 6px;
                 padding: 4px;
@@ -265,11 +267,11 @@ class DescriptionsScreen(QWidget):
                 margin: 2px;
             }}
             QListWidget::item:hover {{
-                background-color: {'rgba(141, 153, 174, 0.15)' if is_dark else 'rgba(43, 45, 66, 0.05)'};
+                background-color: {'rgba(141, 153, 174, ' + COLORS['hover_opacity_dark'] + ')' if is_dark else 'rgba(43, 45, 66, ' + COLORS['hover_opacity_light'] + ')'};
             }}
             QListWidget::item:selected {{
                 background-color: {COLORS['lavender_grey']};
-                color: white;
+                color: {COLORS['text_white']};
             }}
         """)
 
@@ -281,10 +283,10 @@ class DescriptionsScreen(QWidget):
                 border: 1px solid {COLORS['border_dark'] if is_dark else COLORS['border_light']};
                 border-radius: 6px;
                 top: -1px;
-                background-color: {'#1a1b2e' if is_dark else COLORS['bg_light']};
+                background-color: {COLORS['bg_dark'] if is_dark else COLORS['bg_light']};
             }}
             QTabBar::tab {{
-                background-color: {'#15162a' if is_dark else COLORS['bg_light']};
+                background-color: {COLORS['bg_alt_dark'] if is_dark else COLORS['bg_light']};
                 color: {COLORS['text_secondary'] if not is_dark else COLORS['text_primary_dark']};
                 padding: 10px 20px;
                 border: 1px solid {COLORS['border_dark'] if is_dark else COLORS['border_light']};
@@ -340,8 +342,8 @@ class DescriptionsScreen(QWidget):
             if desc:
                 self.current_description_name = name
                 self.has_unsaved_changes = False
-                self.current_name_label.setText(f"Editing: {name}")
                 self.current_name_label.setVisible(True)
+                self._update_title_indicator()
 
                 # Get editors from tabs
                 lt_editor = self.lt_editor.findChild(QTextEdit)
@@ -463,8 +465,8 @@ class DescriptionsScreen(QWidget):
 
             if success:
                 self.has_unsaved_changes = False
-                self.current_name_label.setText(f"Editing: {self.current_description_name}")
                 self.delete_btn.setEnabled(True)
+                self._update_title_indicator()
 
                 InfoBar.success(
                     title="Saved",
@@ -526,8 +528,7 @@ class DescriptionsScreen(QWidget):
     def _apply_theme(self):
         """Apply theme to screen components"""
         is_dark = isDarkTheme()
-        # Use a darker shade of space indigo for better contrast in dark mode
-        bg_color = '#16172b' if is_dark else COLORS['platinum']
+        bg_color = COLORS['space_indigo'] if is_dark else COLORS['platinum']
 
         self.setStyleSheet(f"""
             DescriptionsScreen {{
