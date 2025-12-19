@@ -4,7 +4,18 @@
       "Bash(python GUI/main.py:*)",
       "Bash(timeout 5 python:*)",
       "Bash(python -u:*)",
-      "Bash(timeout 8 python:*)"
+      "Bash(timeout 8 python:*)",
+      "Bash(python -c:*)",
+      "Bash(python:*)",
+      "Bash(timeout 5 echo:*)",
+      "Bash(timeout 3 echo:*)",
+      "Bash(timeout 2 echo:*)",
+      "Bash(timeout 8 echo:*)",
+      "Bash(taskkill:*)",
+      "Bash(dir:*)",
+      "Bash(cat:*)",
+      "Bash(ls:*)",
+      "Bash(timeout 10 python:*)"
     ],
     "deny": [],
     "ask": []

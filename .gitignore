@@ -124,3 +124,7 @@ migrate_settings.py
 nul
 .claude/settings.local.json
 lines_of_code.py
+.claude/settings.local.json
+logo.ico
+might work.ico
+.claude/settings.local.json
