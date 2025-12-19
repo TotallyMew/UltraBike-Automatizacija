@@ -5,6 +5,11 @@
 *.pyo
 *.pyd
 __pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 *.so
 *.egg
 *.egg-info/
@@ -19,12 +24,12 @@ venv/
 env/
 ENV/
 .venv/
+.venv_build/
 
 # ==========================================
 # IDE & Editors
 # ==========================================
 # Visual Studio
-*.sln
 .vs/
 .vscode/
 
@@ -43,6 +48,7 @@ credentials.txt
 *credentials*.txt
 *password*.txt
 *secret*.txt
+Assets/credentials.txt
 
 # Environment files
 .env
@@ -62,12 +68,17 @@ credentials.txt
 # Temporary translation files
 pabaigta*.txt
 
-# PDFs
-*.pdf
+# Local runtime/test data directories (DB/session written here during dev/frozen tests)
+_fresh_data/
+_fresh_data_frozen/
 
-# User-specific settings (contains file paths)
+# User-specific settings (often contains file paths / machine specifics)
 Config/Settings/settings.txt
 settings.txt
+
+# Local session files
+session.dat
+session_*.enc
 
 # Downloaded images (if temporary)
 # Uncomment if you don't want to track downloaded bike images
@@ -95,6 +106,8 @@ $RECYCLE.BIN/
 # Logs & Databases
 # ==========================================
 *.log
+logs/
+GUI/logs/
 *.sql
 *.sqlite
 *.db
@@ -109,22 +122,24 @@ $RECYCLE.BIN/
 *.swo
 *~
 
-# Database (generated on first run)
-ultrabike.db
-*.db
+# SQLite journals/temp
 *.db-journal
-*.dat
-# Session files (machine-specific)
-session_*.enc
+*.db-wal
+*.db-shm
 
-# Test scripts (temporary development files)
-test_*.py
-import_translations_final.py
-migrate_settings.py
+# Other local data artifacts
+*.dat
+
+# AI assistant local settings
+.claude/
+
+# Local scratch files
 nul
-.claude/settings.local.json
-lines_of_code.py
-.claude/settings.local.json
-logo.ico
-might work.ico
-.claude/settings.local.json
+asdasdasdddd.xlsx
+lenteles.docx
+testas.docx
+
+# Windows build artifacts
+*.exe
+*.msi
+*.appx
