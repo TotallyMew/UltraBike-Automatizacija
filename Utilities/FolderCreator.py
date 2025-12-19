@@ -3,15 +3,34 @@ import re
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from Config.Settings.SettingsManager import SettingsManager
+from Database.DatabaseManager import DatabaseManager
+from Database.SettingsManager import SettingsManager
 from Utilities.ErrorManager import ErrorManager
 
 class FolderCreator:
-    def __init__(self, driver, logger=None):
+    def __init__(self, driver, logger=None, settings_manager=None, db_manager=None):
         self.driver = driver
         self.logger = logger
-        self.settings_manager = SettingsManager()
+        self._owns_db = False
+        self._db_manager = None
+
+        if settings_manager is not None:
+            self.settings_manager = settings_manager
+        else:
+            if db_manager is None:
+                db_manager = DatabaseManager()
+                self._owns_db = True
+            self._db_manager = db_manager
+            self.settings_manager = SettingsManager(db_manager)
+
         self.repository_path = self.settings_manager.get_repository_path()
+
+    def close(self):
+        if self._owns_db and self._db_manager is not None:
+            try:
+                self._db_manager.close()
+            finally:
+                self._db_manager = None
     
     def _log(self, message, **context):
         if self.logger:
@@ -79,9 +98,9 @@ class FolderCreator:
     
     def extract_model(self, full_name):
         """Extract model name (everything before first '/')"""
-        model_match = re.match(r"^(.*?)\s*\/", full_name)
-        if model_match:
-            return model_match.group(1).strip()
+        before_slash, sep, _ = full_name.partition("/")
+        if sep:
+            return before_slash.strip()
         return full_name.strip()
     
     def sanitize_folder_name(self, name):
@@ -140,14 +159,17 @@ class FolderCreator:
     
     def run(self):
         """Main execution flow"""
-        self._log("Starting folder creator", repository=self.repository_path)
-        
-        if not self.navigate_to_products():
-            return
-        
-        products = self.scrape_first_page()
-        
-        if not products:
-            return
-        
-        self.create_folder_structure(products)
+        try:
+            self._log("Starting folder creator", repository=self.repository_path)
+
+            if not self.navigate_to_products():
+                return
+
+            products = self.scrape_first_page()
+
+            if not products:
+                return
+
+            self.create_folder_structure(products)
+        finally:
+            self.close()

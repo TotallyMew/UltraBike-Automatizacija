@@ -1,16 +1,18 @@
 # managers/imageUploader.py
 
 from Utilities.ImageHandler import ImageHandler
-from Config.Settings.SettingsManager import SettingsManager
+from Database.DatabaseManager import DatabaseManager
+from Database.SettingsManager import SettingsManager
 from Utilities.ErrorManager import ErrorManager
 
 
 class ImageUploader:
-    def __init__(self, driver, brandName, logger=None):
+    def __init__(self, driver, brandName, logger=None, settings_manager=None):
         self.driver = driver
         self.brandName = brandName
         self.logger = logger
-        self.settings_manager = SettingsManager()
+        # Prefer DB-backed settings from GUI; fall back to DB defaults when used standalone.
+        self.settings_manager = settings_manager or SettingsManager(DatabaseManager())
         self.image_handler = ImageHandler(self.settings_manager, logger)
     
     def _log(self, message, **context):

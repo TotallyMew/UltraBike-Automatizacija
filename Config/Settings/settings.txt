@@ -1,7 +1,0 @@
-true
-C:\Users\User\Desktop\Darbas\Dviraciai\KROSS
-false
-C:\Users\User\Desktop
-true
-false
-C:\Users\User\Desktop\Darbas\Dviraciai\Pinarello Test Structure

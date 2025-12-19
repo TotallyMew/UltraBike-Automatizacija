@@ -146,7 +146,7 @@ class ProductUploader(ABC):
             self.settings_manager = SettingsManager(self.db)
 
         self.translationManager = TranslationManager(self.brandName, self.db, self.logger)
-        self.imageUploader = ImageUploader(self.driver, self.brandName, self.logger)
+        self.imageUploader = ImageUploader(self.driver, self.brandName, self.logger, settings_manager=self.settings_manager)
         self.featureUploader = FeatureUploader(self.driver, self.logger)
 
         # Description handling - always initialize manager (needed for standalone disclaimer)

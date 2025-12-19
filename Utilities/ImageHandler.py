@@ -12,7 +12,6 @@ from pywinauto.application import Application
 from pywinauto.keyboard import send_keys
 
 # Local application imports
-from Config.Settings.SettingsManager import SettingsManager
 from Config.BrowserConfig.WindowManager import WindowManager
 from Utilities.FileHandler import FileHandler
 from Utilities.ErrorManager import ErrorManager

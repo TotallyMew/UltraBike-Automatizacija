@@ -1,63 +1,65 @@
+from Database.DatabaseManager import DatabaseManager
+from Database.SettingsManager import SettingsManager as DbSettingsManager
+
+
 class SettingsManager:
-    def __init__(self, settings_file="Config/Settings/settings.txt"):
-        self.settings = []
+    """Legacy compatibility wrapper.
+
+    Historically this project stored settings in a text file using index-based
+    lookups. The app has migrated to DB-backed named settings.
+
+    This wrapper keeps older code working while ensuring there is a single
+    source of truth (the database).
+    """
+
+    _INDEX_TO_KEY = {
+        0: 'download_images',
+        1: 'kross_download_path',
+        2: 'extended_mode',
+        3: 'repository_path',
+    }
+
+    def __init__(self, settings_file="Config/Settings/settings.txt", db_manager=None):
         self.settings_file = settings_file
-        self.load_settings()
-    
-    def load_settings(self):
-        try:
-            with open(self.settings_file, 'r') as file:
-                for line in file:
-                    stripped_line = line.strip()
-                    if stripped_line.lower() == 'true':
-                        self.settings.append(True)
-                    elif stripped_line.lower() == 'false':
-                        self.settings.append(False)
-                    else:
-                        self.settings.append(stripped_line)
-        except FileNotFoundError:
-            # Warning: Settings file not found at {self.settings_file}
-            # Initialize with default settings
-            self.settings = [
-                False,  # Setting 0 - Download pictures and upload
-                "C:\\Default\\Path\\To\\KROSS",  # Setting 1 - KROSS path
-                False,  # Setting 2 - Extended mode
-                "C:\\Default\\Repository\\Path"  # Setting 3 - Repository path
-            ]
-    
+        self._owns_db = False
+
+        if db_manager is None:
+            db_manager = DatabaseManager()
+            self._owns_db = True
+
+        self._db_manager = db_manager
+        self._settings = DbSettingsManager(db_manager)
+
+    def close(self):
+        if self._owns_db and self._db_manager is not None:
+            try:
+                self._db_manager.close()
+            finally:
+                self._db_manager = None
+
     def get(self, index, default=None):
-        """Get setting by index (0-based)"""
-        try:
-            return self.settings[index]
-        except IndexError:
+        """Get setting by legacy index (0-based)."""
+        key = self._INDEX_TO_KEY.get(index)
+        if key is None:
             return default
-    
+        return self._settings.get(key, default)
+
     def reload_settings(self):
-        """Reload settings from file - used after user edits settings"""
-        self.settings = []
-        self.load_settings()
-    
+        """No-op: DB settings are read on demand."""
+        return
+
     def save_settings(self):
-        """Save current settings back to file"""
-        with open(self.settings_file, 'w') as file:
-            for setting in self.settings:
-                if isinstance(setting, bool):
-                    file.write('true\n' if setting else 'false\n')
-                else:
-                    file.write(f"{setting}\n")
-    
+        """No-op: settings are persisted via the DB settings manager."""
+        return
+
     def download_pictures_and_upload(self):
-        """Returns True/False for setting 0"""
-        return self.get(0, False)
-    
+        return self._settings.download_pictures_and_upload()
+
     def get_kross_path(self):
-        """Returns the KROSS path (setting 1)"""
-        return self.get(1, "C:\\Default\\Path\\To\\KROSS")
-    
+        return self._settings.get_kross_path()
+
     def is_extended_mode_enabled(self):
-        """Returns True/False for setting 2 - Extended mode toggle"""
-        return self.get(2, False)
-    
+        return self._settings.is_extended_mode_enabled()
+
     def get_repository_path(self):
-        """Returns repository path (setting 3)"""
-        return self.get(3, "C:\\Default\\Repository\\Path")
+        return self._settings.get_repository_path()

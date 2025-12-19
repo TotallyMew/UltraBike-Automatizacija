@@ -67,8 +67,12 @@ class MainWindow(FluentWindow):
         self.history_screen = None
         self.translations_screen = None
         self.descriptions_screen = None
+        self.batch_descriptions_screen = None
+        self.folder_creator_screen = None
+        self.basso_images_screen = None
         self.account_screen = None
         self.settings_screen = None
+        self.info_screen = None
 
         # Top bar reference
         self.top_bar = None
@@ -232,12 +236,36 @@ class MainWindow(FluentWindow):
             position=NavigationItemPosition.TOP
         )
 
+        self._nav_items["batch_descriptions"] = self.navigationInterface.addItem(
+            routeKey="batch_descriptions",
+            icon=FluentIcon.EDIT,
+            text=self.i18n.tr("nav.batch_descriptions"),
+            onClick=lambda: self._switch_to_screen(5),
+            position=NavigationItemPosition.TOP
+        )
+
+        self._nav_items["folders"] = self.navigationInterface.addItem(
+            routeKey="folders",
+            icon=FluentIcon.FOLDER,
+            text=self.i18n.tr("nav.folders"),
+            onClick=lambda: self._switch_to_screen(6),
+            position=NavigationItemPosition.TOP
+        )
+
+        self._nav_items["basso_images"] = self.navigationInterface.addItem(
+            routeKey="basso_images",
+            icon=FluentIcon.PHOTO,
+            text=self.i18n.tr("nav.basso_images"),
+            onClick=lambda: self._switch_to_screen(7),
+            position=NavigationItemPosition.TOP
+        )
+
         # Account / credentials
         self._nav_items["account"] = self.navigationInterface.addItem(
             routeKey="account",
             icon=FluentIcon.PEOPLE,
             text=self.i18n.tr("nav.account"),
-            onClick=lambda: self._switch_to_screen(5),
+            onClick=lambda: self._switch_to_screen(8),
             position=NavigationItemPosition.BOTTOM
         )
 
@@ -246,7 +274,15 @@ class MainWindow(FluentWindow):
             routeKey="settings",
             icon=FluentIcon.SETTING,
             text=self.i18n.tr("nav.settings"),
-            onClick=lambda: self._switch_to_screen(6),
+            onClick=lambda: self._switch_to_screen(9),
+            position=NavigationItemPosition.BOTTOM
+        )
+
+        self._nav_items["info"] = self.navigationInterface.addItem(
+            routeKey="info",
+            icon=FluentIcon.INFO,
+            text=self.i18n.tr("nav.info"),
+            onClick=lambda: self._switch_to_screen(10),
             position=NavigationItemPosition.BOTTOM
         )
 
@@ -262,8 +298,12 @@ class MainWindow(FluentWindow):
             self._set_nav_item_text("history", translate(lang_code, "nav.history"))
             self._set_nav_item_text("translations", translate(lang_code, "nav.translations"))
             self._set_nav_item_text("descriptions", translate(lang_code, "nav.descriptions"))
+            self._set_nav_item_text("batch_descriptions", translate(lang_code, "nav.batch_descriptions"))
+            self._set_nav_item_text("folders", translate(lang_code, "nav.folders"))
+            self._set_nav_item_text("basso_images", translate(lang_code, "nav.basso_images"))
             self._set_nav_item_text("account", translate(lang_code, "nav.account"))
             self._set_nav_item_text("settings", translate(lang_code, "nav.settings"))
+            self._set_nav_item_text("info", translate(lang_code, "nav.info"))
         except Exception:
             pass
 
@@ -342,8 +382,12 @@ class MainWindow(FluentWindow):
             self._set_nav_item_text("history", self.i18n.tr("nav.history"))
             self._set_nav_item_text("translations", self.i18n.tr("nav.translations"))
             self._set_nav_item_text("descriptions", self.i18n.tr("nav.descriptions"))
+            self._set_nav_item_text("batch_descriptions", self.i18n.tr("nav.batch_descriptions"))
+            self._set_nav_item_text("folders", self.i18n.tr("nav.folders"))
+            self._set_nav_item_text("basso_images", self.i18n.tr("nav.basso_images"))
             self._set_nav_item_text("account", self.i18n.tr("nav.account"))
             self._set_nav_item_text("settings", self.i18n.tr("nav.settings"))
+            self._set_nav_item_text("info", self.i18n.tr("nav.info"))
 
             # Notify screens if they implement live retranslation
             for screen in (
@@ -353,8 +397,12 @@ class MainWindow(FluentWindow):
                 getattr(self, "history_screen", None),
                 getattr(self, "translations_screen", None),
                 getattr(self, "descriptions_screen", None),
+                getattr(self, "batch_descriptions_screen", None),
+                getattr(self, "folder_creator_screen", None),
+                getattr(self, "basso_images_screen", None),
                 getattr(self, "account_screen", None),
                 getattr(self, "settings_screen", None),
+                getattr(self, "info_screen", None),
             ):
                 if screen is not None and hasattr(screen, "retranslate_ui"):
                     try:
@@ -406,18 +454,42 @@ class MainWindow(FluentWindow):
                 self.descriptions_screen = DescriptionsScreen(self)
                 self._add_screen_to_stack(self.descriptions_screen, self.i18n.tr("nav.descriptions"))
             self._show_screen(self.descriptions_screen)
-        elif index == 5:  # Account
+        elif index == 5:  # Batch descriptions
+            if not self.batch_descriptions_screen:
+                from GUI_Qt.screens.BatchDescriptionsScreen import BatchDescriptionsScreen
+                self.batch_descriptions_screen = BatchDescriptionsScreen(self)
+                self._add_screen_to_stack(self.batch_descriptions_screen, self.i18n.tr("nav.batch_descriptions"))
+            self._show_screen(self.batch_descriptions_screen)
+        elif index == 6:  # Folder creator
+            if not self.folder_creator_screen:
+                from GUI_Qt.screens.FolderCreatorScreen import FolderCreatorScreen
+                self.folder_creator_screen = FolderCreatorScreen(self)
+                self._add_screen_to_stack(self.folder_creator_screen, self.i18n.tr("nav.folders"))
+            self._show_screen(self.folder_creator_screen)
+        elif index == 7:  # Basso images
+            if not self.basso_images_screen:
+                from GUI_Qt.screens.BassoImageScreen import BassoImageScreen
+                self.basso_images_screen = BassoImageScreen(self)
+                self._add_screen_to_stack(self.basso_images_screen, self.i18n.tr("nav.basso_images"))
+            self._show_screen(self.basso_images_screen)
+        elif index == 8:  # Account
             if not self.account_screen:
                 from GUI_Qt.screens.AccountScreen import AccountScreen
                 self.account_screen = AccountScreen(self)
                 self._add_screen_to_stack(self.account_screen, self.i18n.tr("nav.account"))
             self._show_screen(self.account_screen)
-        elif index == 6:  # Settings
+        elif index == 9:  # Settings
             if not self.settings_screen:
                 from GUI_Qt.screens.SettingsScreen import SettingsScreen
                 self.settings_screen = SettingsScreen(self)
                 self._add_screen_to_stack(self.settings_screen, self.i18n.tr("nav.settings"))
             self._show_screen(self.settings_screen)
+        elif index == 10:  # Info
+            if not self.info_screen:
+                from GUI_Qt.screens.InfoScreen import InfoScreen
+                self.info_screen = InfoScreen(self)
+                self._add_screen_to_stack(self.info_screen, self.i18n.tr("nav.info"))
+            self._show_screen(self.info_screen)
 
     def _add_screen_to_stack(self, screen, name):
         """Add screen to content stack if not already added"""

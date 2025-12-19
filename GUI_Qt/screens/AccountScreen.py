@@ -35,6 +35,9 @@ class AccountScreen(QWidget):
         qconfig.themeChangedFinished.connect(self._apply_theme)
 
     def _init_ui(self):
+        # Ensure this screen paints its own background (important for dark mode)
+        self.setAutoFillBackground(True)
+
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
 
@@ -56,6 +59,7 @@ class AccountScreen(QWidget):
         # PrestaShop credentials
         self.prestashop_card = CardWidget()
         self.prestashop_card.setObjectName("accountCardPrestaShop")
+        self.prestashop_card.setBorderRadius(8)
         p_layout = QVBoxLayout(self.prestashop_card)
         p_layout.setContentsMargins(16, 16, 16, 16)
         p_layout.setSpacing(10)
@@ -92,6 +96,7 @@ class AccountScreen(QWidget):
         # External brand credentials
         self.brand_card = CardWidget()
         self.brand_card.setObjectName("accountCardExternal")
+        self.brand_card.setBorderRadius(8)
         b_layout = QVBoxLayout(self.brand_card)
         b_layout.setContentsMargins(16, 16, 16, 16)
         b_layout.setSpacing(14)
@@ -161,10 +166,8 @@ class AccountScreen(QWidget):
         is_dark = isDarkTheme()
         bg_color = COLORS['space_indigo'] if is_dark else COLORS['platinum']
         text_primary = COLORS['text_primary_dark'] if is_dark else COLORS['text_primary_light']
-        card_bg = COLORS['bg_dark'] if is_dark else COLORS['bg_light']
-        border = COLORS['border_dark'] if is_dark else COLORS['border_light']
 
-        # Screen + scroll must be themed explicitly; otherwise QScrollArea paints a default.
+        # Screen + scroll must be themed explicitly; otherwise QScrollArea/viewport can paint defaults.
         self.setStyleSheet(f"""
             AccountScreen {{
                 background-color: {bg_color};
@@ -178,20 +181,13 @@ class AccountScreen(QWidget):
 
             QScrollArea {{
                 border: none;
-                background: transparent;
+                background-color: {bg_color};
             }}
-            QScrollArea > QWidget {{
-                background: transparent;
+            QScrollArea QWidget#qt_scrollarea_viewport {{
+                background-color: {bg_color};
             }}
             QWidget#accountContent {{
-                background: transparent;
-            }}
-
-            /* Card styling scoped by objectName so it doesn't bleed into children */
-            CardWidget#accountCardPrestaShop, CardWidget#accountCardExternal {{
-                background-color: {card_bg};
-                border: 1px solid {border};
-                border-radius: 8px;
+                background-color: {bg_color};
             }}
         """)
 

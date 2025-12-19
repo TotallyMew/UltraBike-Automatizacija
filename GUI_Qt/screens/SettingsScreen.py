@@ -357,25 +357,6 @@ class SettingsScreen(QWidget):
         auto_save_layout.addWidget(self.auto_save_switch)
         features_layout.addLayout(auto_save_layout)
 
-        # Extended mode toggle
-        extended_mode_layout = QHBoxLayout()
-        extended_mode_info = QVBoxLayout()
-        extended_mode_label = BodyLabel(translate(self._preview_lang_code, "settings.features.extended.title"))
-        self._ui["extended_mode_label"] = extended_mode_label
-        extended_mode_label.setStyleSheet("font-weight: 500;")
-        extended_mode_sublabel = CaptionLabel(translate(self._preview_lang_code, "settings.features.extended.desc"))
-        self._ui["extended_mode_sublabel"] = extended_mode_sublabel
-        extended_mode_sublabel.setStyleSheet(f"color: {COLORS['text_secondary']};")
-        extended_mode_info.addWidget(extended_mode_label)
-        extended_mode_info.addWidget(extended_mode_sublabel)
-
-        self.extended_mode_switch = SwitchButton()
-
-        extended_mode_layout.addLayout(extended_mode_info)
-        extended_mode_layout.addStretch()
-        extended_mode_layout.addWidget(self.extended_mode_switch)
-        features_layout.addLayout(extended_mode_layout)
-
         # Auto-delete pabaigta*.txt toggle
         auto_delete_layout = QHBoxLayout()
         auto_delete_info = QVBoxLayout()
@@ -594,7 +575,6 @@ class SettingsScreen(QWidget):
         # Load feature toggles
         self.download_images_switch.setChecked(self.main.settings.get('download_images', False))
         self.auto_save_switch.setChecked(self.main.settings.get('auto_save', True))
-        self.extended_mode_switch.setChecked(self.main.settings.get('extended_mode', True))
         self.auto_delete_pabaigta_switch.setChecked(self.main.settings.get('auto_delete_pabaigta_files', False))
 
         # Load theme
@@ -696,10 +676,6 @@ class SettingsScreen(QWidget):
             self._ui["auto_save_label"].setText(tr("settings.features.autosave.title"))
         if "auto_save_sublabel" in self._ui:
             self._ui["auto_save_sublabel"].setText(tr("settings.features.autosave.desc"))
-        if "extended_mode_label" in self._ui:
-            self._ui["extended_mode_label"].setText(tr("settings.features.extended.title"))
-        if "extended_mode_sublabel" in self._ui:
-            self._ui["extended_mode_sublabel"].setText(tr("settings.features.extended.desc"))
         if "auto_delete_label" in self._ui:
             self._ui["auto_delete_label"].setText(tr("settings.features.auto_delete_pabaigta.title"))
         if "auto_delete_sublabel" in self._ui:
@@ -798,7 +774,6 @@ class SettingsScreen(QWidget):
             browser = self.browser_combo.currentText()
             download_images = self.download_images_switch.isChecked()
             auto_save = self.auto_save_switch.isChecked()
-            extended_mode = self.extended_mode_switch.isChecked()
             auto_delete_pabaigta = self.auto_delete_pabaigta_switch.isChecked()
             theme_is_dark = self.theme_switch.isChecked()
             theme_name = 'dark' if theme_is_dark else 'light'
@@ -810,7 +785,6 @@ class SettingsScreen(QWidget):
             self.main.settings.set('browser_choice', browser)
             self.main.settings.set('download_images', download_images)
             self.main.settings.set('auto_save', auto_save)
-            self.main.settings.set('extended_mode', extended_mode)
             self.main.settings.set('auto_delete_pabaigta_files', auto_delete_pabaigta)
             self.main.settings.set('theme', theme_name)
 
