@@ -302,6 +302,11 @@ class UploadScreen(QWidget):
         self.upload_button.setFixedHeight(40)
         self.upload_button.clicked.connect(self._handle_upload)
 
+        self.clear_button = PushButton("")
+        self.clear_button.setIcon(FluentIcon.DELETE)
+        self.clear_button.setFixedHeight(40)
+        self.clear_button.clicked.connect(self._clear_form)
+
         self.progress_ring = IndeterminateProgressRing()
         self.progress_ring.setFixedSize(32, 32)
         self.progress_ring.setVisible(False)
@@ -310,6 +315,7 @@ class UploadScreen(QWidget):
         # Theme-aware label/caption colors are applied below
 
         action_row.addWidget(self.upload_button)
+        action_row.addWidget(self.clear_button)
         action_row.addWidget(self.progress_ring)
         action_row.addWidget(self.status_label)
         action_row.addStretch()
@@ -407,6 +413,8 @@ class UploadScreen(QWidget):
         self.frameset_info_btn.setToolTip(tr("upload.frameset.tip"))
 
         self.upload_button.setText(tr("upload.button"))
+        self.clear_button.setText(tr("upload.clear"))
+        self.clear_button.setToolTip(tr("upload.clear.tip"))
 
     def _load_descriptions(self):
         """Load descriptions from database"""
@@ -559,6 +567,7 @@ class UploadScreen(QWidget):
 
         # UI updates
         self.upload_button.setEnabled(False)
+        self.clear_button.setEnabled(False)
         self.progress_ring.setVisible(True)
         self.status_label.setText(self.main.i18n.tr("upload.status.uploading"))
         self.status_label.setStyleSheet(f"color: {COLORS['lavender_grey']};")
@@ -623,6 +632,7 @@ class UploadScreen(QWidget):
         """Handle upload completion"""
         self.progress_ring.setVisible(False)
         self.upload_button.setEnabled(True)
+        self.clear_button.setEnabled(True)
 
         if success:
             self.status_label.setText(message)
@@ -636,12 +646,7 @@ class UploadScreen(QWidget):
                 duration=3000
             )
 
-            # Clear form
-            self.code_field.clear()
-            self.url_field.clear()
-            self.description_combo.setCurrentIndex(0)
-            self.disclaimer_checkbox.setChecked(False)
-            self.frameset_checkbox.setChecked(False)
+            # Keep form values after successful upload
 
         else:
             self.status_label.setText(message)
@@ -654,6 +659,16 @@ class UploadScreen(QWidget):
                 position=InfoBarPosition.TOP,
                 duration=5000
             )
+
+    def _clear_form(self) -> None:
+        """Clear user-editable fields (keeps selected brand)."""
+        self.code_field.clear()
+        self.url_field.clear()
+        self.description_combo.setCurrentIndex(0)
+        self.disclaimer_checkbox.setChecked(False)
+        self.frameset_checkbox.setChecked(False)
+        self.status_label.setText("")
+        self._check_form_valid()
 
     def _on_theme_changed(self):
         """Handle theme change event"""
