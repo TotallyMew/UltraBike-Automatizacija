@@ -12,6 +12,7 @@ from qfluentwidgets import (
     PrimaryPushButton, qconfig
 )
 from GUI_Qt.styles.theme_config import COLORS
+from GUI_Qt.styles.screen_theme import enforce_transparent_labels
 from GUI_Qt.i18n import normalize_language, translate
 
 
@@ -174,6 +175,7 @@ class SettingsScreen(QWidget):
     def _init_ui(self):
         """Initialize UI"""
         # Main layout
+        self.setAutoFillBackground(True)
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
@@ -203,6 +205,9 @@ class SettingsScreen(QWidget):
         header.addWidget(title_label)
         header.addStretch()
         layout.addLayout(header)
+
+        # Settings should NOT show text background bars.
+        enforce_transparent_labels(self)
 
         # === LANGUAGE CARD ===
         language_card = CardWidget()
@@ -722,6 +727,9 @@ class SettingsScreen(QWidget):
                 border: none;
                 background-color: {bg_color};
             }}
+            QScrollArea QWidget#qt_scrollarea_viewport {{
+                background-color: {bg_color};
+            }}
             QScrollBar:vertical {{
                 background: transparent;
                 width: 12px;
@@ -861,3 +869,6 @@ class SettingsScreen(QWidget):
         # Update scroll area styling
         if self.scroll:
             self._update_scroll_style()
+
+        # Settings should NOT show text background bars.
+        enforce_transparent_labels(self)

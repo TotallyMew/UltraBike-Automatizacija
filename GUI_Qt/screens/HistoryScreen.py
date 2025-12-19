@@ -17,6 +17,7 @@ from datetime import datetime, timedelta
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 from GUI_Qt.styles.theme_config import COLORS, FONTS
+from GUI_Qt.styles.screen_theme import apply_screen_theme, enforce_transparent_labels
 from PySide6.QtWidgets import QSizePolicy
 
 
@@ -125,22 +126,38 @@ class HistoryItemCard(CardWidget):
         top_row.addWidget(icon_widget, 0, Qt.AlignmentFlag.AlignVCenter)
 
         # LEFT: Brand / Product Code
-        left_section = QVBoxLayout()
+        pill_bg = (
+            "rgba(255, 255, 255, 0.06)" if isDarkTheme() else "rgba(43, 45, 66, 0.05)"
+        )
+
+        left_pill = QWidget()
+        left_pill.setObjectName("ub_history_left_pill")
+        left_pill.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        left_pill.setStyleSheet(
+            f"QWidget#ub_history_left_pill {{ background-color: {pill_bg}; border-radius: 8px; }}"
+        )
+        left_pill.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+
+        left_section = QVBoxLayout(left_pill)
         left_section.setSpacing(2)
+        left_section.setContentsMargins(10, 8, 10, 8)
 
         title = StrongBodyLabel(row['brand'])
-        title.setStyleSheet(f"font-size: 15px; font-weight: 600; color: {COLORS['text_primary_dark'] if isDarkTheme() else COLORS['text_primary_light']};")
+        title.setStyleSheet(
+            f"font-size: 15px; font-weight: 600; color: {COLORS['text_primary_dark'] if isDarkTheme() else COLORS['text_primary_light']};"
+            "background: transparent; border: none;"
+        )
 
         product_code = BodyLabel(row['product_code'])
-        product_code.setStyleSheet(f"font-size: 12px; color: {COLORS['text_primary_dark'] if isDarkTheme() else COLORS['space_indigo']};")
+        product_code.setStyleSheet(
+            f"font-size: 12px; color: {COLORS['text_primary_dark'] if isDarkTheme() else COLORS['space_indigo']};"
+            "background: transparent; border: none;"
+        )
 
         left_section.addWidget(title)
         left_section.addWidget(product_code)
 
-        left_widget = QWidget()
-        left_widget.setLayout(left_section)
-        left_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
-        top_row.addWidget(left_widget, 2)  # Stretch factor 2
+        top_row.addWidget(left_pill, 2, Qt.AlignmentFlag.AlignVCenter)  # Stretch factor 2
 
         # VERTICAL SEPARATOR
         sep1 = QWidget()
@@ -148,9 +165,18 @@ class HistoryItemCard(CardWidget):
         sep1.setStyleSheet(f"background-color: {COLORS['border_dark'] if isDarkTheme() else COLORS['border_light']};")
         top_row.addWidget(sep1)
 
-        # METRICS
-        metrics_layout = QHBoxLayout()
+        # METRICS (in a pill so it looks intentional)
+        metrics_pill = QWidget()
+        metrics_pill.setObjectName("ub_history_metrics_pill")
+        metrics_pill.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        metrics_pill.setStyleSheet(
+            f"QWidget#ub_history_metrics_pill {{ background-color: {pill_bg}; border-radius: 8px; }}"
+        )
+        metrics_pill.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
+        metrics_layout = QHBoxLayout(metrics_pill)
         metrics_layout.setSpacing(24)
+        metrics_layout.setContentsMargins(18, 10, 18, 10)
 
         for label_text, value in [
             (self.tr("history.metric.duration"), f"{row['duration_seconds']:.1f}s" if row['duration_seconds'] else self.tr("common.na")),
@@ -173,12 +199,10 @@ class HistoryItemCard(CardWidget):
             container = QWidget()
             container.setLayout(v_layout)
             container.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+            container.setStyleSheet("background: transparent; border: none;")
             metrics_layout.addWidget(container)
 
-        metrics_widget = QWidget()
-        metrics_widget.setLayout(metrics_layout)
-        metrics_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        top_row.addWidget(metrics_widget, 3)  # Stretch factor 3 to give metrics more room
+        top_row.addWidget(metrics_pill, 3, Qt.AlignmentFlag.AlignVCenter)  # Stretch factor 3
 
         # VERTICAL SEPARATOR
         sep2 = QWidget()
@@ -186,14 +210,94 @@ class HistoryItemCard(CardWidget):
         sep2.setStyleSheet(f"background-color: {COLORS['border_dark'] if isDarkTheme() else COLORS['border_light']};")
         top_row.addWidget(sep2)
 
-        # RIGHT: Timestamp / Failed stage
+        # RIGHT: Timestamp + expand toggle in a single pill
         right_layout = QVBoxLayout()
-        right_layout.setSpacing(2)
+        right_layout.setSpacing(6)
         right_layout.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        right_layout.setContentsMargins(0, 0, 0, 0)
 
-        timestamp = CaptionLabel(str(row['processed_at']))
-        timestamp.setStyleSheet(f"font-size: 11px; color: {COLORS['text_tertiary']};")
-        right_layout.addWidget(timestamp)
+        header_pill = QWidget()
+        header_pill.setObjectName("ub_history_header_pill")
+        header_pill.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        header_pill.setStyleSheet(
+            f"QWidget#ub_history_header_pill {{ background-color: {pill_bg}; border-radius: 8px; }}"
+        )
+        header_pill.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+
+        header_pill_layout = QHBoxLayout(header_pill)
+        # Match the vertical padding of the brand/code pill
+        header_pill_layout.setContentsMargins(10, 8, 10, 8)
+        header_pill_layout.setSpacing(8)
+
+        # Format timestamp as:
+        #   YYYY-MM-DD
+        #   HH:MM
+        try:
+            processed_at_raw = row['processed_at'] if 'processed_at' in row.keys() else None
+        except Exception:
+            processed_at_raw = None
+        dt_obj = None
+        if isinstance(processed_at_raw, datetime):
+            dt_obj = processed_at_raw
+        else:
+            try:
+                s = str(processed_at_raw)
+                # Handle common DB formats: "YYYY-MM-DD HH:MM:SS" and ISO
+                s = s.replace('Z', '').replace('T', ' ')
+                dt_obj = datetime.fromisoformat(s)
+            except Exception:
+                dt_obj = None
+
+        if dt_obj is not None:
+            date_text = dt_obj.strftime('%Y-%m-%d')
+            time_text = dt_obj.strftime('%H:%M')
+        else:
+            # Fallback: keep raw value but still avoid seconds when possible
+            raw = str(processed_at_raw)
+            date_text = raw
+            time_text = ""
+
+        ts_text_layout = QVBoxLayout()
+        ts_text_layout.setContentsMargins(0, 0, 0, 0)
+        ts_text_layout.setSpacing(0)
+
+        date_label = QLabel(date_text)
+        try:
+            date_label.setAutoFillBackground(False)
+            date_label.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
+            date_label.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+        except Exception:
+            pass
+        date_label.setStyleSheet(
+            f"font-size: 11px; color: {COLORS['text_tertiary']}; background: transparent; background-color: transparent; border: none;"
+        )
+
+        time_label = QLabel(time_text)
+        try:
+            time_label.setAutoFillBackground(False)
+            time_label.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
+            time_label.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+        except Exception:
+            pass
+        time_label.setStyleSheet(
+            f"font-size: 11px; color: {COLORS['text_tertiary']}; background: transparent; background-color: transparent; border: none;"
+        )
+
+        ts_text_layout.addWidget(date_label)
+        if time_text:
+            ts_text_layout.addWidget(time_label)
+
+        ts_text_widget = QWidget()
+        try:
+            ts_text_widget.setAutoFillBackground(False)
+            ts_text_widget.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
+            ts_text_widget.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+        except Exception:
+            pass
+        ts_text_widget.setLayout(ts_text_layout)
+        ts_text_widget.setStyleSheet("background: transparent; background-color: transparent; border: none;")
+
+        header_pill_layout.addWidget(ts_text_widget)
 
         if not is_success and 'failed_stage' in row.keys() and row['failed_stage']:
             failed_label = CaptionLabel(self.tr("history.failed_prefix", stage=row['failed_stage']))
@@ -201,21 +305,60 @@ class HistoryItemCard(CardWidget):
             failed_label.setAlignment(Qt.AlignmentFlag.AlignRight)
             right_layout.addWidget(failed_label)
 
-        # Expand details toggle (always visible so users can discover it)
+        # Expand details toggle (outside the pill)
         self._details_btn = None
         try:
             self._details_btn = TransparentToolButton(FluentIcon.DOWN, self)
-            self._details_btn.setFixedSize(28, 28)
+            self._details_btn.setFixedSize(26, 26)
             self._details_btn.setToolTip(self.tr("history.details"))
             self._details_btn.clicked.connect(self._toggle_details)
-            right_layout.addWidget(self._details_btn, 0, Qt.AlignmentFlag.AlignRight)
+            # Hard-disable any hover/pressed fill
+            self._details_btn.setStyleSheet(
+                "QToolButton { background: transparent; background-color: transparent; border: none; }"
+                "QToolButton:hover { background: transparent; background-color: transparent; }"
+                "QToolButton:pressed { background: transparent; background-color: transparent; }"
+            )
+            try:
+                self._details_btn.setAutoFillBackground(False)
+                self._details_btn.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
+                self._details_btn.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+            except Exception:
+                pass
         except Exception:
             self._details_btn = None
 
+        # Put the pill + arrow in a transparent wrapper to prevent any
+        # intermediate QWidget from painting a background (the "double bg").
+        top_right_row = QHBoxLayout()
+        top_right_row.setContentsMargins(0, 0, 0, 0)
+        top_right_row.setSpacing(4)
+        top_right_row.addWidget(header_pill, 0, Qt.AlignmentFlag.AlignVCenter)
+        if self._details_btn is not None:
+            top_right_row.addWidget(self._details_btn, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        top_right_widget = QWidget()
+        top_right_widget.setLayout(top_right_row)
+        top_right_widget.setStyleSheet("background: transparent; background-color: transparent; border: none;")
+        try:
+            top_right_widget.setAutoFillBackground(False)
+            top_right_widget.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
+            top_right_widget.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+        except Exception:
+            pass
+
+        right_layout.addWidget(top_right_widget, 0, Qt.AlignmentFlag.AlignRight)
+
         right_widget = QWidget()
         right_widget.setLayout(right_layout)
-        right_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
-        top_row.addWidget(right_widget, 1)  # Stretch factor 1
+        right_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+        right_widget.setStyleSheet("background: transparent; background-color: transparent; border: none;")
+        try:
+            right_widget.setAutoFillBackground(False)
+            right_widget.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
+            right_widget.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+        except Exception:
+            pass
+        top_row.addWidget(right_widget, 1, Qt.AlignmentFlag.AlignVCenter)  # Stretch factor 1
 
         main_layout.addLayout(top_row)
 
@@ -248,24 +391,39 @@ class HistoryItemCard(CardWidget):
             main_layout.addWidget(divider)
             main_layout.addSpacing(12)
 
-            url_layout = QHBoxLayout()
+            url_pill = QWidget()
+            url_pill.setObjectName("ub_history_url_pill")
+            url_pill.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+            url_pill.setStyleSheet(
+                f"QWidget#ub_history_url_pill {{ background-color: {pill_bg}; border-radius: 8px; }}"
+            )
+
+            url_layout = QHBoxLayout(url_pill)
             url_layout.setSpacing(10)
+            url_layout.setContentsMargins(10, 8, 10, 8)
 
             url_icon = IconWidget(FluentIcon.LINK)
             url_icon.setFixedSize(16, 16)
-            url_icon.setStyleSheet(f"color: {COLORS['lavender_grey']};")
+            url_icon.setStyleSheet(f"color: {COLORS['lavender_grey']}; background: transparent;")
 
             display_text = str(url_or_code)
             if len(display_text) > 120:
                 display_text = display_text[:117] + "..."
 
             url_label = ClickableLabel(display_text, str(url_or_code))
-            url_label.setStyleSheet(f"font-size: 12px; color: {COLORS['lavender_grey']}; font-family: {FONTS['family_mono']};")
+            url_label.setStyleSheet(
+                f"font-size: 12px; color: {COLORS['lavender_grey']}; font-family: {FONTS['family_mono']};"
+                " background: transparent; border: none;"
+            )
 
             url_layout.addWidget(url_icon)
-            url_layout.addWidget(url_label)
-            url_layout.addStretch()
-            main_layout.addLayout(url_layout)
+            url_layout.addWidget(url_label, 1)
+            main_layout.addWidget(url_pill)
+
+        # Keep all labels inside the card strictly transparent.
+        # This prevents QFluent from re-applying per-label backgrounds that
+        # show up as square corners inside rounded pill containers.
+        enforce_transparent_labels(self)
 
         # --- Error message ---
         if not is_success and 'error_message' in row.keys() and row['error_message']:
@@ -351,18 +509,7 @@ class HistoryScreen(QWidget):
 
     def _init_ui(self):
         """Initialize UI with Fluent Design"""
-        # Apply background color based on theme
-        is_dark = isDarkTheme()
-        bg_color = COLORS['space_indigo'] if is_dark else COLORS['platinum']
-
-        # Force the background color
-        self.setStyleSheet(f"""
-            HistoryScreen {{
-                background-color: {bg_color};
-                font-family: {FONTS['family']};
-            }}
-        """)
-        self.setAutoFillBackground(True)
+        apply_screen_theme(self, "HistoryScreen", transparent_labels=True)
 
         # Main layout
         layout = QVBoxLayout(self)
@@ -449,10 +596,10 @@ class HistoryScreen(QWidget):
         layout.addWidget(toolbar_card)
 
         # === HISTORY LIST ===
-        scroll = ScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setStyleSheet("""
+        self.scroll = ScrollArea()
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.scroll.setStyleSheet("""
             QScrollArea {
                 border: none;
                 background: transparent;
@@ -463,7 +610,7 @@ class HistoryScreen(QWidget):
         """)
 
         # CRITICAL: Prevent viewport from clipping child widgets
-        viewport = scroll.viewport()
+        viewport = self.scroll.viewport()
         if viewport:
             viewport.setAutoFillBackground(False)
             viewport.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, False)
@@ -476,11 +623,17 @@ class HistoryScreen(QWidget):
         self.history_layout.addStretch()
 
         # No centering wrapper - let history items expand naturally
-        scroll.setWidget(self.history_container)
+        self.scroll.setWidget(self.history_container)
 
         # Add spacing between toolbar and scroll area
         layout.addSpacing(16)
-        layout.addWidget(scroll, 1)
+        layout.addWidget(self.scroll, 1)
+
+        # Re-apply once scroll + content exist
+        apply_screen_theme(self, "HistoryScreen", scroll=self.scroll, content=self.history_container, transparent_labels=True)
+
+        # Enforce transparent label painting (QFluent can re-style labels after construction)
+        enforce_transparent_labels(self)
 
         # === PAGINATION CONTROLS ===
         pagination_card = CardWidget()
@@ -857,12 +1010,11 @@ class HistoryScreen(QWidget):
 
     def _on_theme_changed(self):
         """Handle theme change event"""
-        is_dark = isDarkTheme()
-        bg_color = COLORS['space_indigo'] if is_dark else COLORS['platinum']
-
-        self.setStyleSheet(f"""
-            HistoryScreen {{
-                background-color: {bg_color};
-                font-family: {FONTS['family']};
-            }}
-        """)
+        apply_screen_theme(
+            self,
+            "HistoryScreen",
+            scroll=getattr(self, "scroll", None),
+            content=getattr(self, "history_container", None),
+            transparent_labels=False,
+            label_radius_px=6,
+        )

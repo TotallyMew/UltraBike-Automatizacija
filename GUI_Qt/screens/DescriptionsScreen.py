@@ -280,7 +280,7 @@ class DescriptionsScreen(QWidget):
         is_dark = isDarkTheme()
         self.description_list.setStyleSheet(f"""
             QListWidget {{
-                background-color: {COLORS['bg_dark'] if is_dark else COLORS['bg_light']};
+                background-color: {COLORS['bg_alt_dark'] if is_dark else COLORS['bg_light']};
                 border: 1px solid {COLORS['border_dark'] if is_dark else COLORS['border_light']};
                 border-radius: 6px;
                 padding: 4px;
@@ -310,7 +310,7 @@ class DescriptionsScreen(QWidget):
                 border: 1px solid {COLORS['border_dark'] if is_dark else COLORS['border_light']};
                 border-radius: 6px;
                 top: -1px;
-                background-color: {COLORS['bg_dark'] if is_dark else COLORS['bg_light']};
+                background-color: {COLORS['bg_alt_dark'] if is_dark else COLORS['bg_light']};
             }}
             QTabBar::tab {{
                 background-color: {COLORS['bg_alt_dark'] if is_dark else COLORS['bg_light']};

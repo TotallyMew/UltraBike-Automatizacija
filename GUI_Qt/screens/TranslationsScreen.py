@@ -367,7 +367,7 @@ class TranslationsScreen(QWidget):
     def _update_table_theme(self):
         """Update table styling based on current theme"""
         is_dark = isDarkTheme()
-        bg_color = COLORS['bg_dark'] if is_dark else COLORS['bg_light']
+        bg_color = COLORS['bg_alt_dark'] if is_dark else COLORS['bg_light']
         alt_bg = COLORS['bg_alt_dark'] if is_dark else COLORS['bg_alt_light']
         border_color = COLORS['border_dark'] if is_dark else COLORS['border_light']
 

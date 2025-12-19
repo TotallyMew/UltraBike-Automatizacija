@@ -2,7 +2,7 @@
 Manage credentials for PrestaShop and external brand portals.
 """
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QTimer, Qt
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout
 from qfluentwidgets import (
     ScrollArea,
@@ -19,12 +19,17 @@ from qfluentwidgets import (
 
 from GUI_Qt.styles.theme_config import COLORS, FONTS
 from qfluentwidgets import isDarkTheme, qconfig
+from GUI_Qt.styles.screen_theme import apply_screen_theme, enforce_transparent_labels
 
 
 class AccountScreen(QWidget):
     def __init__(self, main_window, parent=None):
         super().__init__(parent)
         self.main = main_window
+
+        # Auto-clear any decrypted passwords after a short delay.
+        self._password_autoclear_ms = 30_000
+        self._password_view_token = 0
 
         self._ui = {}
         self._init_ui()
@@ -33,6 +38,10 @@ class AccountScreen(QWidget):
 
         # Keep styling consistent when theme changes
         qconfig.themeChangedFinished.connect(self._apply_theme)
+
+    def hideEvent(self, event):
+        super().hideEvent(event)
+        self._clear_sensitive_fields()
 
     def _init_ui(self):
         # Ensure this screen paints its own background (important for dark mode)
@@ -163,38 +172,49 @@ class AccountScreen(QWidget):
         self._apply_theme()
 
     def _apply_theme(self):
-        is_dark = isDarkTheme()
-        bg_color = COLORS['space_indigo'] if is_dark else COLORS['platinum']
-        text_primary = COLORS['text_primary_dark'] if is_dark else COLORS['text_primary_light']
+        text_primary = COLORS['text_primary_dark'] if isDarkTheme() else COLORS['text_primary_light']
 
-        # Screen + scroll must be themed explicitly; otherwise QScrollArea/viewport can paint defaults.
-        self.setStyleSheet(f"""
-            AccountScreen {{
-                background-color: {bg_color};
-                font-family: {FONTS['family']};
-            }}
+        apply_screen_theme(
+            self,
+            "AccountScreen",
+            scroll=getattr(self, "scroll", None),
+            content=getattr(self, "content", None),
+            transparent_labels=True,
+        )
 
-            /* Keep all text labels transparent (prevents "text background blocks") */
-            QLabel, BodyLabel, StrongBodyLabel, TitleLabel, CaptionLabel {{
-                background: transparent;
-            }}
-
-            QScrollArea {{
-                border: none;
-                background-color: {bg_color};
-            }}
-            QScrollArea QWidget#qt_scrollarea_viewport {{
-                background-color: {bg_color};
-            }}
-            QWidget#accountContent {{
-                background-color: {bg_color};
-            }}
-        """)
+        # Account should NOT show text background bars.
+        enforce_transparent_labels(self)
 
         # Ensure the title uses the correct text color (TitleLabel sometimes inherits poorly).
         try:
             if 'title' in self._ui:
                 self._ui['title'].setStyleSheet(f"color: {text_primary};")
+        except Exception:
+            pass
+
+    def _clear_sensitive_fields(self):
+        try:
+            self.ps_password.clear()
+        except Exception:
+            pass
+        try:
+            self.basso_password.clear()
+        except Exception:
+            pass
+        try:
+            self.lc_password.clear()
+        except Exception:
+            pass
+
+    def _schedule_password_autoclear(self, token: int):
+        def _maybe_clear():
+            # Only clear if nothing newer was viewed.
+            if token != self._password_view_token:
+                return
+            self._clear_sensitive_fields()
+
+        try:
+            QTimer.singleShot(self._password_autoclear_ms, _maybe_clear)
         except Exception:
             pass
 
@@ -327,6 +347,11 @@ class AccountScreen(QWidget):
                 return
             self.ps_email.setText(email)
             self.ps_password.setText(password)
+
+            # Auto-clear decrypted password after a short delay.
+            self._password_view_token += 1
+            self._schedule_password_autoclear(self._password_view_token)
+
             InfoBar.success(
                 title=self.main.i18n.tr("common.success"),
                 content=self.main.i18n.tr("account.loaded"),
@@ -423,6 +448,10 @@ class AccountScreen(QWidget):
             else:
                 self.lc_username.setText(username)
                 self.lc_password.setText(password)
+
+            # Auto-clear decrypted password after a short delay.
+            self._password_view_token += 1
+            self._schedule_password_autoclear(self._password_view_token)
 
             InfoBar.success(
                 title=self.main.i18n.tr("common.success"),
