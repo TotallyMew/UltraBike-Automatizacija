@@ -14,18 +14,9 @@ def scrapeAndTranslateToFilePinarello(bicycleUrlOrCode, outputFile, frameset_onl
     valueTranslations.update(translation_handler.get_translations_by_category("EN", "LT", "color"))
     valueTranslations.update(translation_handler.get_translations_by_category("EN", "LT", "property"))
 
-    # Determine mode
+    # Determine mode - GUI must provide frameset_only
     if frameset_only is None:
-        while True:
-            choice = input("Pasirinkite: (1) Frameset, (2) Pilnas dviratis: ").strip()
-            if choice == "1":
-                frameset_only = True
-                break
-            elif choice == "2":
-                frameset_only = False
-                break
-            else:
-                print("Neteisingas pasirinkimas. Įveskite 1 arba 2.")
+        raise ValueError("frameset_only parameter is required (True/False). GUI must supply it.")
     
     if frameset_only:
         allowed_fields = {"FRAME", "FORK", "SEATPOST", "SEAT CLAMP"}

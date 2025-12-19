@@ -18,12 +18,13 @@ class LoginWorker(QThread):
     """Background worker for login process"""
     finished = Signal(bool, str, object)  # success, message, driver
 
-    def __init__(self, email, password, browser_choice, credential_manager):
+    def __init__(self, email, password, browser_choice, credential_manager, tr):
         super().__init__()
         self.email = email
         self.password = password
         self.browser_choice = browser_choice
         self.credential_manager = credential_manager
+        self.tr = tr
         self.driver = None
 
     def run(self):
@@ -37,7 +38,7 @@ class LoginWorker(QThread):
             )
 
             if self.driver is None:
-                self.finished.emit(False, "Failed to initialize browser", None)
+                self.finished.emit(False, self.tr("login.browser_init_failed"), None)
                 return
 
             # Attempt login
@@ -49,11 +50,11 @@ class LoginWorker(QThread):
             )
 
             if success:
-                self.finished.emit(True, "Login successful", self.driver)
+                self.finished.emit(True, self.tr("login.ok"), self.driver)
             else:
                 if self.driver:
                     self.driver.quit()
-                self.finished.emit(False, "Invalid credentials", None)
+                self.finished.emit(False, self.tr("login.invalid_credentials"), None)
 
         except Exception as e:
             if self.driver:
@@ -89,11 +90,13 @@ class LoginScreen(QWidget):
         center_layout.setContentsMargins(40, 40, 40, 40)
 
         # Title
-        title = TitleLabel("UltraBike Automation")
+        self.title_label = TitleLabel("")
+        title = self.title_label
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         center_layout.addWidget(title)
 
-        subtitle = BodyLabel("Prisijunkite prie PrestaShop")
+        self.subtitle_label = BodyLabel("")
+        subtitle = self.subtitle_label
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         center_layout.addWidget(subtitle)
 
@@ -106,9 +109,9 @@ class LoginScreen(QWidget):
         email_row_layout.setSpacing(8)
         email_row_layout.setContentsMargins(0, 0, 0, 0)
 
-        email_label = BodyLabel("El. paštas:")
+        self.email_label = BodyLabel("")
+        email_label = self.email_label
         self.email_field = LineEdit()
-        self.email_field.setPlaceholderText("jusu@email.lt")
         self.email_field.textChanged.connect(self._check_form_valid)
 
         email_row_layout.addWidget(email_label)
@@ -121,9 +124,9 @@ class LoginScreen(QWidget):
         password_row_layout.setSpacing(8)
         password_row_layout.setContentsMargins(0, 0, 0, 0)
 
-        password_label = BodyLabel("Slaptažodis:")
+        self.password_label = BodyLabel("")
+        password_label = self.password_label
         self.password_field = PasswordLineEdit()
-        self.password_field.setPlaceholderText("••••••••")
         self.password_field.textChanged.connect(self._check_form_valid)
 
         password_row_layout.addWidget(password_label)
@@ -136,7 +139,8 @@ class LoginScreen(QWidget):
         browser_row_layout.setSpacing(8)
         browser_row_layout.setContentsMargins(0, 0, 0, 0)
 
-        browser_label = BodyLabel("Naršyklė:")
+        self.browser_label = BodyLabel("")
+        browser_label = self.browser_label
         self.browser_combo = ComboBox()
         self.browser_combo.addItems(["Chrome", "Firefox", "Edge"])
         self.browser_combo.setCurrentText(self.main.settings.get_browser_choice() or "Chrome")
@@ -154,7 +158,7 @@ class LoginScreen(QWidget):
         button_row_layout.setSpacing(12)
         button_row_layout.setContentsMargins(0, 0, 0, 0)
 
-        self.login_button = PrimaryPushButton("Prisijungti")
+        self.login_button = PrimaryPushButton("")
         self.login_button.setEnabled(False)
         self.login_button.clicked.connect(self._handle_login)
 
@@ -178,6 +182,19 @@ class LoginScreen(QWidget):
         main_layout.addStretch(1)
 
         self.setLayout(main_layout)
+
+        self.retranslate_ui()
+
+    def retranslate_ui(self):
+        tr = self.main.i18n.tr
+        self.title_label.setText(tr("login.title"))
+        self.subtitle_label.setText(tr("login.subtitle"))
+        self.email_label.setText(tr("login.email"))
+        self.email_field.setPlaceholderText(tr("login.email.placeholder"))
+        self.password_label.setText(tr("login.password"))
+        self.password_field.setPlaceholderText(tr("login.password.placeholder"))
+        self.browser_label.setText(tr("login.browser"))
+        self.login_button.setText(tr("login.button"))
 
     def _check_form_valid(self):
         """Check if form is valid and enable/disable login button"""
@@ -207,7 +224,7 @@ class LoginScreen(QWidget):
         self.password = password
 
         # Start login worker
-        self.login_worker = LoginWorker(email, password, browser, self.main.credential_manager)
+        self.login_worker = LoginWorker(email, password, browser, self.main.credential_manager, self.main.i18n.tr)
         self.login_worker.finished.connect(self._on_login_complete)
         self.login_worker.start()
 
@@ -223,8 +240,8 @@ class LoginScreen(QWidget):
         if success:
             # Show success message
             InfoBar.success(
-                title="Success",
-                content="Login successful!",
+                title=self.main.i18n.tr("login.success.title"),
+                content=self.main.i18n.tr("login.success.content"),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
@@ -237,7 +254,7 @@ class LoginScreen(QWidget):
         else:
             # Show error message
             InfoBar.error(
-                title="Login Failed",
+                title=self.main.i18n.tr("login.failed.title"),
                 content=message,
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,

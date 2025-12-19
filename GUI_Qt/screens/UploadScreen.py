@@ -18,22 +18,44 @@ from GUI_Qt.styles.theme_config import COLORS, FONTS
 
 
 class UploadWorker(QThread):
-    """Background worker for upload process"""
+    """Background worker for upload process with non-blocking retry support"""
     finished = Signal(bool, str)  # success, message
     progress = Signal(str)  # status updates
+    retry_request = Signal(str)  # operation_name
+    retry_response = Signal(object)  # result from dialog (True, False, or new code)
 
-    def __init__(self, uploader):
+    def __init__(self, uploader, tr):
         super().__init__()
         self.uploader = uploader
+        self.tr = tr
+        self._retry_result = None
+        self._waiting_for_retry = False
+        self.retry_response.connect(self._on_retry_response)
 
     def run(self):
-        """Perform upload in background thread"""
+        """Perform upload in background thread, using non-blocking retry."""
         try:
-            self.progress.emit("Starting upload...")
+            self.progress.emit(self.tr("upload.status.starting"))
+            # Patch uploader and navigation handler to use our non-blocking retry
+            self.uploader.set_retry_callback(self._request_retry)
             self.uploader.run()
-            self.finished.emit(True, "Upload completed successfully!")
+            self.finished.emit(True, self.tr("upload.done"))
         except Exception as e:
-            self.finished.emit(False, f"Upload failed: {str(e)}")
+            self.finished.emit(False, self.tr("upload.failed", error=str(e)))
+
+    def _request_retry(self, operation_name):
+        """Called by uploader/navigation handler when a retry is needed."""
+        self._retry_result = None
+        self._waiting_for_retry = True
+        self.retry_request.emit(operation_name)
+        # Wait for response from GUI, but yield to event loop
+        while self._waiting_for_retry:
+            self.msleep(50)
+        return self._retry_result
+
+    def _on_retry_response(self, result):
+        self._retry_result = result
+        self._waiting_for_retry = False
 
 
 class UploadScreen(QWidget):
@@ -41,6 +63,8 @@ class UploadScreen(QWidget):
 
     def __init__(self, main_window, parent=None):
         super().__init__(parent)
+        # Connect upload worker retry signal to dialog handler
+        self._active_retry_dialog = None
         self.main = main_window
         self.upload_worker = None
         self.description_manager = DescriptionManager(self.main.db)
@@ -91,7 +115,8 @@ class UploadScreen(QWidget):
         title_icon.setFixedSize(32, 32)
         title_icon.setEnabled(False)
 
-        title_label = TitleLabel("Upload Product")
+        self.title_label = TitleLabel("")
+        title_label = self.title_label
 
         title_container.addWidget(title_icon)
         title_container.addWidget(title_label)
@@ -119,9 +144,11 @@ class UploadScreen(QWidget):
         row = 0
 
         # Brand selection
-        brand_label = BodyLabel("Brand")
+        self.brand_label = BodyLabel("")
+        brand_label = self.brand_label
         brand_label.setStyleSheet(f"font-weight: 500; color: {COLORS['text_secondary']};")
-        brand_caption = CaptionLabel("Select the product manufacturer")
+        self.brand_caption = CaptionLabel("")
+        brand_caption = self.brand_caption
         brand_caption.setStyleSheet(f"color: {COLORS['text_tertiary']};")
 
         self.brand_combo = ComboBox()
@@ -134,13 +161,14 @@ class UploadScreen(QWidget):
         row += 2
 
         # Product code
-        code_label = BodyLabel("Product Code")
+        self.code_label = BodyLabel("")
+        code_label = self.code_label
         code_label.setStyleSheet(f"font-weight: 500; color: {COLORS['text_secondary']};")
-        code_caption = CaptionLabel("Internal product identifier (e.g., UB-XXXX)")
+        self.code_caption = CaptionLabel("")
+        code_caption = self.code_caption
         code_caption.setStyleSheet(f"color: {COLORS['text_tertiary']};")
 
         self.code_field = LineEdit()
-        self.code_field.setPlaceholderText("UB-XXXX")
         self.code_field.textChanged.connect(self._on_code_changed)
 
         form_grid.addWidget(code_label, row, 0)
@@ -149,13 +177,14 @@ class UploadScreen(QWidget):
         row += 2
 
         # URL/Code input
-        url_label = BodyLabel("Product URL or Code")
+        self.url_label = BodyLabel("")
+        url_label = self.url_label
         url_label.setStyleSheet(f"font-weight: 500; color: {COLORS['text_secondary']};")
-        url_caption = CaptionLabel("Manufacturer's product URL or code")
+        self.url_caption = CaptionLabel("")
+        url_caption = self.url_caption
         url_caption.setStyleSheet(f"color: {COLORS['text_tertiary']};")
 
         self.url_field = LineEdit()
-        self.url_field.setPlaceholderText("https://... or product code")
         self.url_field.textChanged.connect(self._on_url_changed)
 
         form_grid.addWidget(url_label, row, 0)
@@ -165,11 +194,11 @@ class UploadScreen(QWidget):
 
         # Description dropdown
         desc_label_row = QHBoxLayout()
-        desc_label = BodyLabel("Description Template")
+        self.desc_label = BodyLabel("")
+        desc_label = self.desc_label
         desc_label.setStyleSheet(f"font-weight: 500; color: {COLORS['text_secondary']};")
 
         self.refresh_desc_button = TransparentToolButton(FluentIcon.SYNC, self)
-        self.refresh_desc_button.setToolTip("Refresh descriptions")
         self.refresh_desc_button.setFixedSize(24, 24)
         self.refresh_desc_button.clicked.connect(self._load_descriptions)
 
@@ -177,7 +206,8 @@ class UploadScreen(QWidget):
         desc_label_row.addWidget(self.refresh_desc_button)
         desc_label_row.addStretch()
 
-        desc_caption = CaptionLabel("Select a description template")
+        self.desc_caption = CaptionLabel("")
+        desc_caption = self.desc_caption
         desc_caption.setStyleSheet(f"color: {COLORS['text_tertiary']};")
 
         self.description_combo = ComboBox()
@@ -210,7 +240,8 @@ class UploadScreen(QWidget):
         options_layout.setContentsMargins(20, 16, 20, 16)
         options_layout.setSpacing(12)
 
-        options_title = StrongBodyLabel("Upload Options")
+        self.options_title = StrongBodyLabel("")
+        options_title = self.options_title
         options_title.setStyleSheet(f"color: {COLORS['text_secondary']};")
         options_layout.addWidget(options_title)
 
@@ -218,9 +249,9 @@ class UploadScreen(QWidget):
         disclaimer_row = QHBoxLayout()
         disclaimer_row.setSpacing(8)
 
-        self.disclaimer_checkbox = CheckBox("Include disclaimer")
+        self.disclaimer_checkbox = CheckBox("")
         disclaimer_info = TransparentToolButton(FluentIcon.INFO, self)
-        disclaimer_info.setToolTip("Adds disclaimer text to product description")
+        self.disclaimer_info_btn = disclaimer_info
         disclaimer_info.setFixedSize(20, 20)
         disclaimer_info.clicked.connect(self._show_disclaimer_info)
 
@@ -236,9 +267,9 @@ class UploadScreen(QWidget):
         frameset_layout.setContentsMargins(0, 0, 0, 0)
         frameset_layout.setSpacing(8)
 
-        self.frameset_checkbox = CheckBox("Frameset only")
+        self.frameset_checkbox = CheckBox("")
         frameset_info = TransparentToolButton(FluentIcon.INFO, self)
-        frameset_info.setToolTip("Upload as frameset (Pinarello only)")
+        self.frameset_info_btn = frameset_info
         frameset_info.setFixedSize(20, 20)
 
         frameset_layout.addWidget(self.frameset_checkbox)
@@ -254,7 +285,7 @@ class UploadScreen(QWidget):
         action_row = QHBoxLayout()
         action_row.setSpacing(12)
 
-        self.upload_button = PrimaryPushButton("Upload Product")
+        self.upload_button = PrimaryPushButton("")
         self.upload_button.setIcon(FluentIcon.UP)
         self.upload_button.setEnabled(False)
         self.upload_button.setFixedHeight(40)
@@ -283,6 +314,35 @@ class UploadScreen(QWidget):
         main_layout.addLayout(card_container)
         main_layout.addStretch()  # Push content up
 
+        self.retranslate_ui()
+
+    def retranslate_ui(self):
+        tr = self.main.i18n.tr
+        self.title_label.setText(tr("upload.title"))
+
+        self.brand_label.setText(tr("upload.brand.label"))
+        self.brand_caption.setText(tr("upload.brand.caption"))
+
+        self.code_label.setText(tr("upload.code.label"))
+        self.code_caption.setText(tr("upload.code.caption"))
+        self.code_field.setPlaceholderText(tr("upload.code.placeholder"))
+
+        self.url_label.setText(tr("upload.url.label"))
+        self.url_caption.setText(tr("upload.url.caption"))
+        self.url_field.setPlaceholderText(tr("upload.url.placeholder"))
+
+        self.desc_label.setText(tr("upload.desc.label"))
+        self.desc_caption.setText(tr("upload.desc.caption"))
+        self.refresh_desc_button.setToolTip(tr("upload.desc.refresh"))
+
+        self.options_title.setText(tr("upload.options.title"))
+        self.disclaimer_checkbox.setText(tr("upload.disclaimer"))
+        self.disclaimer_info_btn.setToolTip(tr("upload.disclaimer.tip"))
+        self.frameset_checkbox.setText(tr("upload.frameset"))
+        self.frameset_info_btn.setToolTip(tr("upload.frameset.tip"))
+
+        self.upload_button.setText(tr("upload.button"))
+
     def resizeEvent(self, event):
         """Handle window resize to adjust card width dynamically"""
         super().resizeEvent(event)
@@ -302,7 +362,7 @@ class UploadScreen(QWidget):
         try:
             descriptions = self.description_manager.list_descriptions()
             self.description_combo.clear()
-            self.description_combo.addItem("Select description...")
+            self.description_combo.addItem(self.main.i18n.tr("upload.desc.select"))
 
             for desc in descriptions:
                 self.description_combo.addItem(desc['name'])
@@ -311,8 +371,8 @@ class UploadScreen(QWidget):
 
         except Exception as e:
             InfoBar.error(
-                title="Load Failed",
-                content=f"Failed to load descriptions: {str(e)}",
+                title=self.main.i18n.tr("upload.load_failed.title"),
+                content=self.main.i18n.tr("upload.load_failed.content", error=str(e)),
                 parent=self,
                 position=InfoBarPosition.TOP
             )
@@ -346,23 +406,17 @@ class UploadScreen(QWidget):
         is_valid = bool(code and url)
 
         # Debug logging
-        print(f"[UploadScreen] Validation check:")
-        print(f"  Code: '{code}' (valid: {bool(code)})")
-        print(f"  URL: '{url}' (valid: {bool(url)})")
-        print(f"  Description: '{description}' (optional)")
-        print(f"  Overall valid: {is_valid}")
-        print(f"  Button enabled before: {self.upload_button.isEnabled()}")
+        # Debug: Validation check and button state
 
         self.upload_button.setEnabled(is_valid)
 
-        print(f"  Button enabled after: {self.upload_button.isEnabled()}")
-        print()
+        # Debug: Button enabled after and end of validation
 
     def _show_disclaimer_info(self):
         """Show disclaimer information"""
         InfoBar.info(
-            title="Disclaimer Information",
-            content="The disclaimer adds important legal and warranty information to the product description.",
+            title=self.main.i18n.tr("upload.disclaimer.info.title"),
+            content=self.main.i18n.tr("upload.disclaimer.info.content"),
             parent=self,
             position=InfoBarPosition.TOP,
             duration=4000
@@ -372,8 +426,8 @@ class UploadScreen(QWidget):
         """Handle upload button click"""
         if self.upload_worker and self.upload_worker.isRunning():
             InfoBar.warning(
-                title="Upload in Progress",
-                content="Please wait for the current upload to complete",
+                title=self.main.i18n.tr("upload.in_progress.title"),
+                content=self.main.i18n.tr("upload.in_progress.content"),
                 parent=self,
                 position=InfoBarPosition.TOP
             )
@@ -392,7 +446,7 @@ class UploadScreen(QWidget):
             uploader_class = getUploaderClass(brand)
         except ValueError as e:
             InfoBar.error(
-                title="Invalid Brand",
+                title=self.main.i18n.tr("upload.invalid_brand.title"),
                 content=str(e),
                 parent=self,
                 position=InfoBarPosition.TOP
@@ -402,6 +456,7 @@ class UploadScreen(QWidget):
         # Create uploader instance
         try:
             uploader = uploader_class(
+                driver=self.main.driver,
                 db=self.main.db,
                 settings_manager=self.main.settings,
                 product_code=code,
@@ -412,25 +467,75 @@ class UploadScreen(QWidget):
             )
         except Exception as e:
             InfoBar.error(
-                title="Uploader Error",
-                content=f"Failed to create uploader: {str(e)}",
+                title=self.main.i18n.tr("upload.uploader_error.title"),
+                content=self.main.i18n.tr("upload.uploader_error.content", error=str(e)),
                 parent=self,
                 position=InfoBarPosition.TOP
             )
             return
 
         # Start upload in background
-        self.upload_worker = UploadWorker(uploader)
+        self.upload_worker = UploadWorker(uploader, self.main.i18n.tr)
         self.upload_worker.progress.connect(self._on_upload_progress)
         self.upload_worker.finished.connect(self._on_upload_finished)
+        self.upload_worker.retry_request.connect(self._on_retry_request)
 
         # UI updates
         self.upload_button.setEnabled(False)
         self.progress_ring.setVisible(True)
-        self.status_label.setText("Uploading...")
+        self.status_label.setText(self.main.i18n.tr("upload.status.uploading"))
         self.status_label.setStyleSheet(f"color: {COLORS['lavender_grey']};")
 
         self.upload_worker.start()
+
+    def _on_retry_request(self, operation_name):
+        # Show non-blocking Fluent dialog for retry with code entry
+        if self._active_retry_dialog:
+            self._active_retry_dialog.close()
+        from qfluentwidgets import MessageBox
+        from PySide6.QtWidgets import QLineEdit
+        dialog = MessageBox(
+            self.main.i18n.tr("upload.retry.title"),
+            self.main.i18n.tr("upload.retry.content"),
+            self
+        )
+        # Remove default content label and add input
+        try:
+            dialog.textLayout.removeWidget(dialog.contentLabel)
+            dialog.contentLabel.deleteLater()
+        except Exception:
+            pass
+        input_widget = QLineEdit()
+        input_widget.setPlaceholderText(self.main.i18n.tr("upload.retry.placeholder"))
+        input_widget.setMinimumWidth(420)
+        input_widget.setStyleSheet(f"""
+            background-color: {COLORS['lavender_grey']};
+            color: #22223b;
+            padding: 10px 12px;
+            border-radius: 8px;
+            font-size: 15px;
+            font-family: {FONTS['family']};
+            margin-top: 8px;
+        """)
+        dialog.textLayout.addWidget(input_widget)
+        dialog.yesButton.setText(self.main.i18n.tr("upload.retry.yes"))
+        dialog.cancelButton.setText(self.main.i18n.tr("upload.retry.cancel"))
+
+        def _on_finished(result_code):
+            from PySide6.QtWidgets import QDialog
+            if result_code == QDialog.Accepted:
+                new_code = input_widget.text().strip()
+                if new_code:
+                    self.upload_worker.retry_response.emit(new_code)
+                else:
+                    self.upload_worker.retry_response.emit(True)
+            else:
+                self.upload_worker.retry_response.emit(False)
+            self._active_retry_dialog = None
+
+        dialog.finished.connect(_on_finished)
+        dialog.show()
+        self._active_retry_dialog = dialog
 
     def _on_upload_progress(self, message):
         """Handle upload progress updates"""
@@ -446,7 +551,7 @@ class UploadScreen(QWidget):
             self.status_label.setStyleSheet(f"color: {COLORS['success']};")
 
             InfoBar.success(
-                title="Upload Successful",
+                title=self.main.i18n.tr("upload.success.title"),
                 content=message,
                 parent=self,
                 position=InfoBarPosition.TOP,
@@ -465,7 +570,7 @@ class UploadScreen(QWidget):
             self.status_label.setStyleSheet(f"color: {COLORS['error']};")
 
             InfoBar.error(
-                title="Upload Failed",
+                title=self.main.i18n.tr("upload.failed.title"),
                 content=message,
                 parent=self,
                 position=InfoBarPosition.TOP,

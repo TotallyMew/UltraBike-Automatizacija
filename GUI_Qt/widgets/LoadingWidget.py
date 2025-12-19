@@ -11,10 +11,11 @@ from qfluentwidgets import IndeterminateProgressRing, BodyLabel, TitleLabel
 class LoadingWidget(QWidget):
     """Loading screen with spinner and message"""
 
-    def __init__(self, message="Loading...", parent=None):
+    def __init__(self, message=None, tr=None, parent=None):
         super().__init__(parent)
 
-        self.message = message
+        self.tr = tr or (lambda k, **kw: k.format(**kw) if kw else k)
+        self.message = message if message is not None else self.tr("loading.default")
         self._init_ui()
 
     def _init_ui(self):
@@ -25,7 +26,7 @@ class LoadingWidget(QWidget):
         layout.setSpacing(24)
 
         # Title
-        title = TitleLabel("UltraBike")
+        title = TitleLabel(self.tr("loading.title"))
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
 

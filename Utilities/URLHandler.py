@@ -34,18 +34,4 @@ class URLHandler:
     @staticmethod
     def get_brand_url(brand_name):
         name = brand_name.strip().lower().replace(" ", "")
-        while True:
-            if name in ["leecougan", "basso"]:
-                return input(f"Įveskite {brand_name.title()} kodą: ")
-            else:
-                url = input(f"Įveskite {brand_name.title()} url: ")
-                
-                if not URLHandler.is_valid_url(url):
-                    print("Neteisingas URL formatas arba svetainė nepasiekiama. Patikrinkite adresą ir bandykite dar kartą.")
-                    continue
-                
-                if not URLHandler.is_website_accessible(url):
-                    print("Svetainė nepasiekiama. Patikrinkite URL arba jūsų interneto ryšį.")
-                    continue
-                
-                return url
+        raise RuntimeError("CLI URL input disabled: provide brand URL or code programmatically from GUI.")

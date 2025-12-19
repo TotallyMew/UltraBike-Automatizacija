@@ -217,7 +217,8 @@ class UploadScreen:
                 self.page.update()
 
         except Exception as e:
-            print(f"Failed to load descriptions: {e}")
+            # Error: Failed to load descriptions: {e}
+            pass
     
 
     #FLET BUG WORKAROUND - cannot clear dropdown selection directly

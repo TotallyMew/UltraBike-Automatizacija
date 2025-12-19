@@ -16,30 +16,118 @@ from Utilities.ErrorManager import ErrorManager
 
 def getCode():
     """CLI helper for getting product code"""
-    code = input("Iveskite koda: ")
-    return code
+    raise RuntimeError("CLI disabled: caller must provide `ultraBikeCode` parameter from GUI.")
 
 class ProductUploader(ABC):
-    def __init__(self, driver, brandName, ultraBikeCode=None, bicycleUrlOrCode=None, db_manager=None, brand_options=None, logger=None, batch_id = None):
-        print(f"DEBUG baseUploader.__init__: brand_options = {brand_options}")
-        
+    def set_retry_callback(self, callback):
+        # Set callback for navigation manager and any other retry points
+        if hasattr(self, 'navigation_manager') and self.navigation_manager:
+            self.navigation_manager.set_retry_callback(callback)
+        self._retry_callback = callback
+
+    def __init__(self, *args, **kwargs):
+        """Flexible initializer supporting both legacy CLI signature and GUI keyword-style calls.
+
+        Legacy (positional): (driver, brandName, ultraBikeCode=None, bicycleUrlOrCode=None,
+        db_manager=None, brand_options=None, logger=None, batch_id=None)
+
+        GUI-style (keywords): db=..., settings_manager=..., product_code=..., url_or_code=...,
+        description_name=..., include_disclaimer=..., is_frameset=..., logger=...
+        """
+
+        # Detect legacy positional usage
+        driver = None
+        brandName = None
+        db_manager = None
+        brand_options = None
+        logger = None
+        batch_id = None
+
+        if len(args) >= 2:
+            # Legacy positional form
+            driver = args[0]
+            brandName = args[1]
+            ultraBikeCode = kwargs.pop('ultraBikeCode', None)
+            bicycleUrlOrCode = kwargs.pop('bicycleUrlOrCode', None)
+            db_manager = kwargs.pop('db_manager', kwargs.pop('db', None))
+            brand_options = kwargs.pop('brand_options', None)
+            logger = kwargs.pop('logger', None)
+            batch_id = kwargs.pop('batch_id', None)
+        else:
+            # GUI-style kwargs
+            db_manager = kwargs.pop('db', kwargs.pop('db_manager', None))
+            logger = kwargs.pop('logger', None)
+            settings_manager = kwargs.pop('settings_manager', None)
+
+            # Product identifiers
+            ultraBikeCode = kwargs.pop('product_code', kwargs.pop('productCode', kwargs.pop('ultraBikeCode', None)))
+            bicycleUrlOrCode = kwargs.pop('url_or_code', kwargs.pop('url', kwargs.pop('bicycleUrlOrCode', None)))
+
+            # Description / options
+            description_name = kwargs.pop('description_name', kwargs.pop('descriptionName', kwargs.pop('description', None)))
+            include_disclaimer = kwargs.pop('include_disclaimer', kwargs.pop('includeDisclaimer', False))
+            is_frameset = kwargs.pop('is_frameset', kwargs.pop('isFrameset', None))
+
+            # Build brand options dict
+            brand_options = kwargs.pop('brand_options', {}) or {}
+            if description_name:
+                brand_options.setdefault('description_name', description_name)
+            if include_disclaimer:
+                brand_options.setdefault('append_disclaimer', include_disclaimer)
+            if is_frameset is not None:
+                brand_options.setdefault('frameset_only', is_frameset)
+
+            # Determine brandName from uploader class name if not provided
+            brandName = kwargs.pop('brandName', None) or self.__class__.__name__
+
+            # If GUI provided a settings_manager or db_manager, use them; else create db manager
+            if db_manager is None and settings_manager is not None:
+                try:
+                    db_manager = settings_manager.db
+                except Exception as e:
+                    from Utilities.ErrorManager import ErrorManager
+                    ErrorManager.show_error("UNEXPECTED_ERROR", error=str(e))
+                    db_manager = None
+
+            # If driver not provided, try to create one using BrowserManager and settings
+            driver = kwargs.pop('driver', None)
+            if driver is None:
+                try:
+                    from Config.BrowserConfig.BrowserManager import BrowserManager
+                    # Use provided settings_manager or create temporary SettingsManager
+                    if settings_manager is None:
+                        settings_manager = SettingsManager(db_manager or DatabaseManager())
+                    browser_choice = settings_manager.get_browser_choice()
+                    bm = BrowserManager()
+                    # Provide a retry_callback that returns False to avoid CLI prompts
+                    driver = bm.setup_browser(browser_choice, retry_callback=lambda: False)
+                except Exception as e:
+                    from Utilities.ErrorManager import ErrorManager
+                    ErrorManager.show_error("UNEXPECTED_ERROR", error=str(e))
+                    driver = None
+
+        # Assign common attributes
         self.driver = driver
         self.logger = logger
         self.brandName = brandName
         self.brand_options = brand_options or {}
-        print(f"DEBUG baseUploader.__init__: self.brand_options = {self.brand_options}")
         self.batch_id = batch_id
+
+        # Debug: brand_options can be logged if needed
 
         self.features_uploaded = 0
         self.images_uploaded = 0
 
-        self.navigation_manager = ProductNavigationHandler(driver, logger)
+        self.navigation_manager = ProductNavigationHandler(self.driver, self.logger)
         self.url_handler = URLHandler()
-        self.web_handler = WebInteractionHandler(driver)
+        self.web_handler = WebInteractionHandler(self.driver)
         self.translation_handler = TranslationHandler()
 
-        self.ultraBikeCode = ultraBikeCode if ultraBikeCode is not None else getCode()
-        self.bicycleUrlOrCode = bicycleUrlOrCode if bicycleUrlOrCode is not None else self.url_handler.get_brand_url(brandName)
+        if ultraBikeCode is None and bicycleUrlOrCode is None:
+            raise ValueError("Product identifier missing: provide 'product_code' or 'url_or_code' when using GUI.")
+
+        self.ultraBikeCode = ultraBikeCode
+        self.bicycleUrlOrCode = bicycleUrlOrCode
 
         # Database setup
         if db_manager:
@@ -47,23 +135,29 @@ class ProductUploader(ABC):
         else:
             self.db = DatabaseManager()
 
-        self.session_manager = SessionManager(self.db)
-        self.settings_manager = SettingsManager(self.db)
+        # Settings manager
+        try:
+            self.session_manager = SessionManager(self.db)
+            self.settings_manager = SettingsManager(self.db)
+        except Exception as e:
+            from Utilities.ErrorManager import ErrorManager
+            ErrorManager.show_error("UNEXPECTED_ERROR", error=str(e))
+            self.session_manager = SessionManager(self.db)
+            self.settings_manager = SettingsManager(self.db)
 
-        self.translationManager = TranslationManager(brandName, self.db, logger)
-        self.imageUploader = ImageUploader(driver, brandName, logger)
-        self.featureUploader = FeatureUploader(driver, logger)
+        self.translationManager = TranslationManager(self.brandName, self.db, self.logger)
+        self.imageUploader = ImageUploader(self.driver, self.brandName, self.logger)
+        self.featureUploader = FeatureUploader(self.driver, self.logger)
 
         # Description handling - always initialize manager (needed for standalone disclaimer)
-        self.description_manager = DescriptionManager(self.db, logger)
+        self.description_manager = DescriptionManager(self.db, self.logger)
         self.description_name = self.brand_options.get('description_name', None)
-        print(f"DEBUG baseUploader.__init__: self.description_name = {self.description_name}")
-        print(f"DEBUG baseUploader.__init__: DescriptionManager initialized")
+        # Debug: description_name and manager init can be logged if needed
     
     def _log(self, message, **context):
         if self.logger:
             self.logger.log(f"{self.brandName}Uploader", message, **context)
-    
+
     def _log_error(self, message, exception=None, **context):
         if self.logger:
             self.logger.error(f"{self.brandName}Uploader", message, exception=exception, **context)
@@ -72,28 +166,28 @@ class ProductUploader(ABC):
         """Main execution flow with database tracking"""
         self._log("Starting upload process", code=self.ultraBikeCode)
         self.start_time = time.time()
-        
+
         try:
             # Main upload workflow
             self.scrape()
             self.translate()
             self.openProduct()
-            
+
             # Optional image upload
             if self.settings_manager.download_pictures_and_upload():
                 self.uploadImages()
                 self.images_uploaded = True
-            
-            print("DEBUG run(): About to call uploadDescription()")
-            
+
+            # Debug: about to call uploadDescription()
+
             # Upload description (if provided)
             self.uploadDescription()
-            
-            print("DEBUG run(): uploadDescription() completed")
-            
+
+            # Debug: uploadDescription() completed
+
             # Upload features
             self.uploadFeatures()
-            
+
             # Upload brand
             self.uploadBrand()
 
@@ -105,24 +199,24 @@ class ProductUploader(ABC):
 
             # Calculate duration
             duration = time.time() - self.start_time
-            
+
             # Record success in database
             self._record_success(duration)
-            
+
             # Add to recent products cache
             self._cache_recent_product()
-            
+
             self._log("Upload process completed successfully", duration=f"{duration:.2f}s")
             ErrorManager.show_success(f"Dviratis {self.ultraBikeCode} sėkmingai apdorotas!")
-            
+
         except Exception as e:
             duration = time.time() - self.start_time if self.start_time else 0
             self._record_failure(str(e), duration)
-            
             self._log_error("Upload process failed", exception=e, code=self.ultraBikeCode)
+            from Utilities.ErrorManager import ErrorManager
             ErrorManager.show_error("UNEXPECTED_ERROR", error=str(e))
             raise
-    
+
     def _record_success(self, duration):
         """Record successful upload to database"""
         cursor = self.db.conn.cursor()
@@ -141,7 +235,7 @@ class ProductUploader(ABC):
         ))
         self.db.conn.commit()
         self._log("Success recorded in database")
-    
+
     def _record_failure(self, error_message, duration):
         """Record failed upload to database"""
         cursor = self.db.conn.cursor()
@@ -159,17 +253,17 @@ class ProductUploader(ABC):
         ))
         self.db.conn.commit()
         self._log("Failure recorded in database")
-    
+
     def _cache_recent_product(self):
         """Add product to recent products cache"""
         cursor = self.db.conn.cursor()
-        
+
         # Check if already exists
         existing = cursor.execute("""
             SELECT id, use_count FROM recent_products 
             WHERE brand = ? AND product_code = ?
         """, (self.brandName, self.ultraBikeCode)).fetchone()
-        
+
         if existing:
             # Update existing
             cursor.execute("""
@@ -186,7 +280,7 @@ class ProductUploader(ABC):
                 (brand, product_code, url_or_code, last_used, use_count)
                 VALUES (?, ?, ?, datetime('now'), 1)
             """, (self.brandName, self.ultraBikeCode, self.bicycleUrlOrCode))
-        
+
         self.db.conn.commit()
 
     @abstractmethod
@@ -244,7 +338,7 @@ class ProductUploader(ABC):
 
     def uploadDescription(self):
         """Upload product description if provided, or standalone disclaimer if checked"""
-        print(f"DEBUG: uploadDescription called, description_name = {self.description_name}")
+        # Debug: uploadDescription called, description_name = {self.description_name}
 
         # Get append_disclaimer flag from brand_options
         append_disclaimer = self.brand_options.get('append_disclaimer', False)
@@ -252,7 +346,7 @@ class ProductUploader(ABC):
         # If no description but disclaimer is checked, upload just the disclaimer
         if not self.description_name and append_disclaimer:
             self._log("No description selected, but disclaimer requested - uploading standalone disclaimer")
-            print("DEBUG: No description name but disclaimer=True, uploading standalone disclaimer")
+            # Debug: No description name but disclaimer=True, uploading standalone disclaimer
             try:
                 # Upload disclaimer only (empty strings for base content)
                 success = self.description_manager.upload_to_prestashop_raw(
@@ -275,7 +369,7 @@ class ProductUploader(ABC):
 
             except Exception as e:
                 import traceback
-                print(f"DEBUG: Exception in uploadDescription (standalone): {traceback.format_exc()}")
+                # Debug: Exception in uploadDescription (standalone)
                 self._log_error("Standalone disclaimer upload failed", exception=e)
                 from Utilities.ErrorManager import ErrorManager
                 ErrorManager.show_warning(f"Disclaimer įkėlimo klaida: {str(e)}")
@@ -284,11 +378,11 @@ class ProductUploader(ABC):
         # If no description and no disclaimer, skip
         if not self.description_name:
             self._log("No description to upload")
-            print("DEBUG: No description name provided, skipping")
+            # Debug: No description name provided, skipping
             return
 
         # Upload description with optional disclaimer
-        print(f"DEBUG: Attempting to upload description: {self.description_name}, append_disclaimer={append_disclaimer}")
+        # Debug: Attempting to upload description: {self.description_name}, append_disclaimer={append_disclaimer}
         self._log("Uploading description", name=self.description_name, append_disclaimer=append_disclaimer)
         try:
             success = self.description_manager.upload_to_prestashop(
@@ -300,7 +394,7 @@ class ProductUploader(ABC):
 
             from Utilities.ErrorManager import ErrorManager
 
-            print(f"DEBUG: upload_to_prestashop returned: {success}")
+            # Debug: upload_to_prestashop returned: {success}
 
             if success:
                 self._log("Description uploaded successfully")
@@ -314,7 +408,7 @@ class ProductUploader(ABC):
 
         except Exception as e:
             import traceback
-            print(f"DEBUG: Exception in uploadDescription: {traceback.format_exc()}")
+            # Debug: Exception in uploadDescription
             self._log_error("Description upload failed", exception=e)
             from Utilities.ErrorManager import ErrorManager
             ErrorManager.show_warning(f"Aprašymo įkėlimo klaida: {str(e)}")

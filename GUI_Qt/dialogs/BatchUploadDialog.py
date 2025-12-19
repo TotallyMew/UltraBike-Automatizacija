@@ -23,11 +23,21 @@ class BatchRowWidget(QWidget):
     deleted = Signal(object)  # Emits self when deleted
     changed = Signal()  # Emits when any value changes
 
-    def __init__(self, brands, descriptions, parent=None):
+    def __init__(self, brands, descriptions, tr, parent=None):
         super().__init__(parent)
         self.brands = brands
         self.descriptions = descriptions
+        self._tr = tr
         self._init_ui()
+
+    def retranslate_ui(self):
+        self.brand_combo.setPlaceholderText(self._tr("batch.table.brand"))
+        self.code_field.setPlaceholderText(self._tr("upload.code.placeholder"))
+        self.url_field.setPlaceholderText(self._tr("upload.url.placeholder"))
+        self.desc_combo.setPlaceholderText(self._tr("batch.optional"))
+        self.frameset_check.setToolTip(self._tr("upload.frameset.tip"))
+        self.disclaimer_check.setToolTip(self._tr("upload.disclaimer.tip"))
+        self._delete_btn.setToolTip(self._tr("batch.row.remove.tip"))
 
     def _init_ui(self):
         layout = QHBoxLayout(self)
@@ -37,20 +47,17 @@ class BatchRowWidget(QWidget):
         # Brand dropdown
         self.brand_combo = ComboBox()
         self.brand_combo.addItems(self.brands)
-        self.brand_combo.setPlaceholderText("Brand")
         self.brand_combo.setFixedWidth(120)
         self.brand_combo.currentTextChanged.connect(self._on_brand_change)
         self.brand_combo.currentTextChanged.connect(self.changed.emit)
 
         # Product code
         self.code_field = LineEdit()
-        self.code_field.setPlaceholderText("UB-XXXX")
         self.code_field.setFixedWidth(120)
         self.code_field.textChanged.connect(self.changed.emit)
 
         # URL/Code
         self.url_field = LineEdit()
-        self.url_field.setPlaceholderText("https://... or code")
         self.url_field.setFixedWidth(280)
         self.url_field.textChanged.connect(self.changed.emit)
 
@@ -58,28 +65,24 @@ class BatchRowWidget(QWidget):
         self.desc_combo = ComboBox()
         self.desc_combo.addItem("")  # Empty option
         self.desc_combo.addItems(self.descriptions)
-        self.desc_combo.setPlaceholderText("Description (optional)")
         self.desc_combo.setFixedWidth(200)
         self.desc_combo.currentTextChanged.connect(self.changed.emit)
 
         # Frameset checkbox (hidden by default)
         self.frameset_check = CheckBox()
-        self.frameset_check.setToolTip("Pinarello: Frameset only")
         self.frameset_check.setVisible(False)
         self.frameset_check.setFixedWidth(70)
         self.frameset_check.stateChanged.connect(self.changed.emit)
 
         # Disclaimer checkbox
         self.disclaimer_check = CheckBox()
-        self.disclaimer_check.setToolTip("Append disclaimer")
         self.disclaimer_check.setFixedWidth(50)
         self.disclaimer_check.stateChanged.connect(self.changed.emit)
 
         # Delete button
-        delete_btn = TransparentToolButton(FluentIcon.DELETE, self)
-        delete_btn.setToolTip("Remove row")
-        delete_btn.clicked.connect(lambda: self.deleted.emit(self))
-        delete_btn.setFixedWidth(32)
+        self._delete_btn = TransparentToolButton(FluentIcon.DELETE, self)
+        self._delete_btn.clicked.connect(lambda: self.deleted.emit(self))
+        self._delete_btn.setFixedWidth(32)
 
         layout.addWidget(self.brand_combo)
         layout.addWidget(self.code_field)
@@ -87,8 +90,10 @@ class BatchRowWidget(QWidget):
         layout.addWidget(self.desc_combo)
         layout.addWidget(self.frameset_check)
         layout.addWidget(self.disclaimer_check)
-        layout.addWidget(delete_btn)
+        layout.addWidget(self._delete_btn)
         layout.addStretch()
+
+        self.retranslate_ui()
 
     def _on_brand_change(self, brand):
         """Show/hide frameset checkbox based on brand"""
@@ -139,8 +144,9 @@ class BatchUploadDialog(QDialog):
     def __init__(self, main_window, parent=None):
         super().__init__(parent)
         self.main = main_window
-        self.setWindowTitle("Batch Upload")
         self.resize(1100, 650)
+
+        self._tr = self.main.i18n.tr
 
         # Load descriptions
         desc_manager = DescriptionManager(main_window.db)
@@ -154,35 +160,85 @@ class BatchUploadDialog(QDialog):
 
         self._init_ui()
 
+        if hasattr(self.main, "i18n") and hasattr(self.main.i18n, "languageChanged"):
+            self.main.i18n.languageChanged.connect(self.retranslate_ui)
+
+        self.retranslate_ui()
+
+    def retranslate_ui(self):
+        self.setWindowTitle(self._tr("batch.title"))
+        self._title_label.setText(self._tr("batch.title"))
+
+        self.tabs.setTabText(0, self._tr("batch.mode.manual"))
+        self.tabs.setTabText(1, self._tr("batch.mode.excel"))
+
+        self._manual_header_brand.setText(self._tr("batch.table.brand"))
+        self._manual_header_code.setText(self._tr("batch.table.code"))
+        self._manual_header_url.setText(self._tr("batch.table.url"))
+        self._manual_header_desc.setText(self._tr("batch.table.desc"))
+
+        self._frameset_label.setText(self._tr("batch.table.frameset"))
+        self._frameset_label.setToolTip(self._tr("upload.frameset.tip"))
+        self.frameset_select_all.setToolTip(self._tr("batch.bulk.toggle.tip"))
+
+        self._disc_label.setText(self._tr("batch.table.disclaimer"))
+        self._disc_label.setToolTip(self._tr("upload.disclaimer.tip"))
+        self.disc_select_all.setToolTip(self._tr("batch.bulk.toggle.tip"))
+
+        self._add_row_btn.setText(self._tr("batch.add_row"))
+        self._clear_btn.setText(self._tr("batch.clear_all"))
+
+        self._browse_btn.setText(self._tr("batch.browse_excel"))
+        self._template_btn.setText(self._tr("batch.download_template"))
+        self.excel_filename_label.setText(self._tr("batch.no_file"))
+
+        self._empty_text1.setText(self._tr("batch.drop.title"))
+        self._empty_text2.setText(self._tr("batch.drop.subtitle"))
+
+        self._preview_title.setText(self._tr("batch.preview.title"))
+
+        self._cancel_btn.setText(self._tr("common.cancel"))
+        self.start_btn.setText(self._tr("batch.start"))
+
+        # Retranslate existing row widgets
+        for i in range(self.manual_rows_layout.count() - 1):
+            widget = self.manual_rows_layout.itemAt(i).widget()
+            if isinstance(widget, BatchRowWidget):
+                widget.retranslate_ui()
+        for i in range(self.excel_rows_layout.count() - 1):
+            widget = self.excel_rows_layout.itemAt(i).widget()
+            if isinstance(widget, BatchRowWidget):
+                widget.retranslate_ui()
+
     def _init_ui(self):
         """Initialize UI"""
         layout = QVBoxLayout(self)
         layout.setSpacing(16)
 
         # Title
-        title = StrongBodyLabel("Batch Upload")
-        title.setStyleSheet("font-size: 20px;")
-        layout.addWidget(title)
+        self._title_label = StrongBodyLabel("")
+        self._title_label.setStyleSheet("font-size: 20px;")
+        layout.addWidget(self._title_label)
 
         # Tabs
         self.tabs = QTabWidget()
-        self.tabs.addTab(self._create_manual_tab(), "Manual Entry")
-        self.tabs.addTab(self._create_excel_tab(), "Excel Upload")
+        self.tabs.addTab(self._create_manual_tab(), "")
+        self.tabs.addTab(self._create_excel_tab(), "")
         layout.addWidget(self.tabs)
 
         # Buttons
         button_layout = QHBoxLayout()
         button_layout.addStretch()
 
-        cancel_btn = PushButton("Cancel")
-        cancel_btn.clicked.connect(self.reject)
+        self._cancel_btn = PushButton("")
+        self._cancel_btn.clicked.connect(self.reject)
 
-        self.start_btn = PrimaryPushButton("Start Batch Upload")
+        self.start_btn = PrimaryPushButton("")
         self.start_btn.setIcon(FluentIcon.PLAY)
         self.start_btn.setEnabled(False)
         self.start_btn.clicked.connect(self._handle_start)
 
-        button_layout.addWidget(cancel_btn)
+        button_layout.addWidget(self._cancel_btn)
         button_layout.addWidget(self.start_btn)
         layout.addLayout(button_layout)
 
@@ -198,22 +254,24 @@ class BatchUploadDialog(QDialog):
         header_layout.setSpacing(8)
         header_layout.setContentsMargins(0, 0, 0, 0)
 
-        header_layout.addWidget(BodyLabel("Brand"))
-        header_layout.addWidget(BodyLabel("Product Code"), 0, Qt.AlignmentFlag.AlignLeft)
-        header_layout.addWidget(BodyLabel("URL or Code"), 0, Qt.AlignmentFlag.AlignLeft)
-        header_layout.addWidget(BodyLabel("Description"), 0, Qt.AlignmentFlag.AlignLeft)
+        self._manual_header_brand = BodyLabel("")
+        self._manual_header_code = BodyLabel("")
+        self._manual_header_url = BodyLabel("")
+        self._manual_header_desc = BodyLabel("")
+        header_layout.addWidget(self._manual_header_brand)
+        header_layout.addWidget(self._manual_header_code, 0, Qt.AlignmentFlag.AlignLeft)
+        header_layout.addWidget(self._manual_header_url, 0, Qt.AlignmentFlag.AlignLeft)
+        header_layout.addWidget(self._manual_header_desc, 0, Qt.AlignmentFlag.AlignLeft)
 
         # Frameset select-all
         frameset_col = QWidget()
         frameset_col_layout = QVBoxLayout(frameset_col)
         frameset_col_layout.setSpacing(2)
         frameset_col_layout.setContentsMargins(0, 0, 0, 0)
-        frameset_label = BodyLabel("Frameset")
-        frameset_label.setToolTip("Pinarello only")
+        self._frameset_label = BodyLabel("")
         self.frameset_select_all = CheckBox()
-        self.frameset_select_all.setToolTip("Select/Deselect all")
         self.frameset_select_all.stateChanged.connect(self._toggle_all_framesets)
-        frameset_col_layout.addWidget(frameset_label)
+        frameset_col_layout.addWidget(self._frameset_label)
         frameset_col_layout.addWidget(self.frameset_select_all)
         frameset_col.setFixedWidth(70)
         header_layout.addWidget(frameset_col)
@@ -223,12 +281,10 @@ class BatchUploadDialog(QDialog):
         disc_col_layout = QVBoxLayout(disc_col)
         disc_col_layout.setSpacing(2)
         disc_col_layout.setContentsMargins(0, 0, 0, 0)
-        disc_label = BodyLabel("Disc")
-        disc_label.setToolTip("Append disclaimer")
+        self._disc_label = BodyLabel("")
         self.disc_select_all = CheckBox()
-        self.disc_select_all.setToolTip("Select/Deselect all")
         self.disc_select_all.stateChanged.connect(self._toggle_all_disclaimers)
-        disc_col_layout.addWidget(disc_label)
+        disc_col_layout.addWidget(self._disc_label)
         disc_col_layout.addWidget(self.disc_select_all)
         disc_col.setFixedWidth(50)
         header_layout.addWidget(disc_col)
@@ -257,16 +313,16 @@ class BatchUploadDialog(QDialog):
 
         # Action buttons
         actions = QHBoxLayout()
-        add_btn = PushButton("Add Row")
-        add_btn.setIcon(FluentIcon.ADD)
-        add_btn.clicked.connect(self._add_manual_row)
+        self._add_row_btn = PushButton("")
+        self._add_row_btn.setIcon(FluentIcon.ADD)
+        self._add_row_btn.clicked.connect(self._add_manual_row)
 
-        clear_btn = PushButton("Clear All")
-        clear_btn.setIcon(FluentIcon.DELETE)
-        clear_btn.clicked.connect(self._clear_manual_rows)
+        self._clear_btn = PushButton("")
+        self._clear_btn.setIcon(FluentIcon.DELETE)
+        self._clear_btn.clicked.connect(self._clear_manual_rows)
 
-        actions.addWidget(add_btn)
-        actions.addWidget(clear_btn)
+        actions.addWidget(self._add_row_btn)
+        actions.addWidget(self._clear_btn)
         actions.addStretch()
         layout.addLayout(actions)
 
@@ -280,20 +336,20 @@ class BatchUploadDialog(QDialog):
 
         # File selection
         file_row = QHBoxLayout()
-        browse_btn = PushButton("Browse Excel File")
-        browse_btn.setIcon(FluentIcon.FOLDER)
-        browse_btn.clicked.connect(self._browse_excel)
+        self._browse_btn = PushButton("")
+        self._browse_btn.setIcon(FluentIcon.FOLDER)
+        self._browse_btn.clicked.connect(self._browse_excel)
 
-        template_btn = PushButton("Download Template")
-        template_btn.setIcon(FluentIcon.DOWNLOAD)
-        template_btn.clicked.connect(self._download_template)
+        self._template_btn = PushButton("")
+        self._template_btn.setIcon(FluentIcon.DOWNLOAD)
+        self._template_btn.clicked.connect(self._download_template)
 
-        file_row.addWidget(browse_btn)
-        file_row.addWidget(template_btn)
+        file_row.addWidget(self._browse_btn)
+        file_row.addWidget(self._template_btn)
         file_row.addStretch()
         layout.addLayout(file_row)
 
-        self.excel_filename_label = BodyLabel("No file selected")
+        self.excel_filename_label = BodyLabel("")
         self.excel_filename_label.setStyleSheet("color: #9CA3AF;")
         layout.addWidget(self.excel_filename_label)
 
@@ -304,14 +360,14 @@ class BatchUploadDialog(QDialog):
         empty_icon = BodyLabel("📤")
         empty_icon.setStyleSheet("font-size: 64px;")
         empty_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        empty_text1 = BodyLabel("Upload an Excel file to begin")
-        empty_text1.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        empty_text2 = BodyLabel("or download the template to get started")
-        empty_text2.setStyleSheet("color: #9CA3AF;")
-        empty_text2.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._empty_text1 = BodyLabel("")
+        self._empty_text1.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._empty_text2 = BodyLabel("")
+        self._empty_text2.setStyleSheet("color: #9CA3AF;")
+        self._empty_text2.setAlignment(Qt.AlignmentFlag.AlignCenter)
         empty_layout.addWidget(empty_icon)
-        empty_layout.addWidget(empty_text1)
-        empty_layout.addWidget(empty_text2)
+        empty_layout.addWidget(self._empty_text1)
+        empty_layout.addWidget(self._empty_text2)
         layout.addWidget(self.excel_empty_state, 1)
 
         # Preview (hidden initially)
@@ -320,7 +376,8 @@ class BatchUploadDialog(QDialog):
         preview_layout = QVBoxLayout(self.excel_preview_widget)
         preview_layout.setSpacing(8)
 
-        preview_layout.addWidget(StrongBodyLabel("Preview"))
+        self._preview_title = StrongBodyLabel("")
+        preview_layout.addWidget(self._preview_title)
 
         # Preview scroll
         preview_scroll = QScrollArea()
@@ -344,7 +401,7 @@ class BatchUploadDialog(QDialog):
 
     def _add_manual_row(self):
         """Add a manual entry row"""
-        row = BatchRowWidget(self.brands, self.descriptions, self)
+        row = BatchRowWidget(self.brands, self.descriptions, self._tr, self)
         row.deleted.connect(self._remove_row)
         row.changed.connect(self._validate_manual)
         self.manual_rows_layout.insertWidget(self.manual_rows_layout.count() - 1, row)
@@ -400,9 +457,9 @@ class BatchUploadDialog(QDialog):
         """Browse for Excel file"""
         filename, _ = QFileDialog.getOpenFileName(
             self,
-            "Select Excel File",
+            self._tr("batch.file.select_excel.title"),
             "",
-            "Excel files (*.xlsx);;All files (*.*)"
+            self._tr("batch.file.select_excel.filter")
         )
 
         if filename:
@@ -430,7 +487,7 @@ class BatchUploadDialog(QDialog):
                     break
 
             if not header_row:
-                self.excel_status_label.setText("Could not find header row")
+                self.excel_status_label.setText(self._tr("batch.excel.header_missing"))
                 self.excel_status_label.setStyleSheet("color: #F59E0B;")
                 self.start_btn.setEnabled(False)
                 wb.close()
@@ -464,7 +521,7 @@ class BatchUploadDialog(QDialog):
                     disclaimer = bool(disclaimer_raw)
 
                 # Create row widget
-                row_widget = BatchRowWidget(self.brands, self.descriptions, self)
+                row_widget = BatchRowWidget(self.brands, self.descriptions, self._tr, self)
                 row_widget.set_data({
                     'brand': brand,
                     'code': code,
@@ -486,11 +543,11 @@ class BatchUploadDialog(QDialog):
 
             # Update status
             if invalid_count > 0:
-                self.excel_status_label.setText(f"{valid_count} valid, {invalid_count} invalid rows")
+                self.excel_status_label.setText(self._tr("batch.excel.rows_valid_invalid", valid=valid_count, invalid=invalid_count))
                 self.excel_status_label.setStyleSheet("color: #F59E0B;")
                 self.start_btn.setEnabled(False)
             else:
-                self.excel_status_label.setText(f"{valid_count} valid rows ready")
+                self.excel_status_label.setText(self._tr("batch.excel.rows_valid_ready", valid=valid_count))
                 self.excel_status_label.setStyleSheet("color: #10B981;")
                 self.start_btn.setEnabled(valid_count > 0)
 
@@ -501,7 +558,7 @@ class BatchUploadDialog(QDialog):
             wb.close()
 
         except Exception as ex:
-            self.excel_status_label.setText(f"Error: {str(ex)}")
+            self.excel_status_label.setText(self._tr("batch.excel.error", error=str(ex)))
             self.excel_status_label.setStyleSheet("color: #EF4444;")
             self.start_btn.setEnabled(False)
 
@@ -523,10 +580,12 @@ class BatchUploadDialog(QDialog):
         # Only update if widgets exist
         if hasattr(self, 'excel_status_label'):
             if invalid_count > 0:
-                self.excel_status_label.setText(f"{valid_count} valid, {invalid_count} invalid rows")
+                self.excel_status_label.setText(
+                    self._tr("batch.excel.rows_valid_invalid", valid=valid_count, invalid=invalid_count)
+                )
                 self.excel_status_label.setStyleSheet("color: #F59E0B;")
             else:
-                self.excel_status_label.setText(f"{valid_count} valid rows ready")
+                self.excel_status_label.setText(self._tr("batch.excel.rows_valid_ready", valid=valid_count))
                 self.excel_status_label.setStyleSheet("color: #10B981;")
 
         if hasattr(self, 'start_btn'):
@@ -539,9 +598,9 @@ class BatchUploadDialog(QDialog):
         """Download Excel template"""
         filename, _ = QFileDialog.getSaveFileName(
             self,
-            "Save Template As",
-            "ultrabike_batch_template.xlsx",
-            "Excel files (*.xlsx)"
+            self._tr("batch.template.save_as.title"),
+            self._tr("batch.template.default_name"),
+            self._tr("batch.template.filter")
         )
 
         if not filename:
@@ -550,7 +609,7 @@ class BatchUploadDialog(QDialog):
         try:
             wb = openpyxl.Workbook()
             ws = wb.active
-            ws.title = "Batch Upload"
+            ws.title = self._tr("batch.title")
 
             # Header
             ws.append(["Brand", "Product Code", "URL or Code", "Description", "Frameset", "Append Disclaimer"])
@@ -568,8 +627,8 @@ class BatchUploadDialog(QDialog):
             wb.close()
 
             InfoBar.success(
-                title="Success",
-                content=f"Template saved to {filename}",
+                title=self._tr("common.success"),
+                content=self._tr("batch.template.saved", path=filename),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
@@ -579,8 +638,8 @@ class BatchUploadDialog(QDialog):
 
         except Exception as ex:
             InfoBar.error(
-                title="Error",
-                content=f"Failed to save template: {str(ex)}",
+                title=self._tr("common.error"),
+                content=self._tr("batch.template.save_failed", error=str(ex)),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,

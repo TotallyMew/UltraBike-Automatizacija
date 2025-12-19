@@ -74,12 +74,12 @@ class StatCard(CardWidget):
         self.value_label = TitleLabel(value)
         self.value_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
-        label_widget = CaptionLabel(label)
-        label_widget.setStyleSheet(f"color: {COLORS['text_secondary']};")
-        label_widget.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        self.label_label = CaptionLabel(label)
+        self.label_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self.label_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
         text_layout.addWidget(self.value_label)
-        text_layout.addWidget(label_widget)
+        text_layout.addWidget(self.label_label)
         text_layout.addStretch()
 
         layout.addLayout(text_layout, 1)
@@ -91,8 +91,9 @@ from PySide6.QtCore import Qt
 class HistoryItemCard(CardWidget):
     """Single history item card with status indicator - improved layout"""
 
-    def __init__(self, row, parent=None):
+    def __init__(self, row, tr, parent=None):
         super().__init__(parent)
+        self.tr = tr
         self.setBorderRadius(8)
         self.setMinimumHeight(160)  # Increased to prevent clipping
 
@@ -145,9 +146,9 @@ class HistoryItemCard(CardWidget):
         metrics_layout.setSpacing(24)
 
         for label_text, value in [
-            ("Duration", f"{row['duration_seconds']:.1f}s" if row['duration_seconds'] else "N/A"),
-            ("Features", str(row['features_uploaded']) if 'features_uploaded' in row.keys() and row['features_uploaded'] else "0"),
-            ("Images", str(row['images_uploaded']) if 'images_uploaded' in row.keys() and row['images_uploaded'] else "0"),
+            (self.tr("history.metric.duration"), f"{row['duration_seconds']:.1f}s" if row['duration_seconds'] else self.tr("common.na")),
+            (self.tr("history.metric.features"), str(row['features_uploaded']) if 'features_uploaded' in row.keys() and row['features_uploaded'] else "0"),
+            (self.tr("history.metric.images"), str(row['images_uploaded']) if 'images_uploaded' in row.keys() and row['images_uploaded'] else "0"),
         ]:
             v_layout = QVBoxLayout()
             v_layout.setSpacing(2)
@@ -188,7 +189,7 @@ class HistoryItemCard(CardWidget):
         right_layout.addWidget(timestamp)
 
         if not is_success and 'failed_stage' in row.keys() and row['failed_stage']:
-            failed_label = CaptionLabel(f"Failed: {row['failed_stage']}")
+            failed_label = CaptionLabel(self.tr("history.failed_prefix", stage=row['failed_stage']))
             failed_label.setStyleSheet(f"font-size: 11px; color: {COLORS['error']}; font-weight: 500;")
             failed_label.setAlignment(Qt.AlignmentFlag.AlignRight)
             right_layout.addWidget(failed_label)
@@ -240,7 +241,7 @@ class HistoryItemCard(CardWidget):
             error_icon.setFixedSize(16, 16)
             error_icon.setStyleSheet(f"color: {COLORS['error']};")
 
-            error_label = BodyLabel(f"Error: {row['error_message']}")
+            error_label = BodyLabel(self.tr("history.error_prefix", error=row['error_message']))
             error_label.setStyleSheet(f"font-size: 11px; color: {COLORS['error']};")
             error_label.setWordWrap(True)
 
@@ -255,6 +256,7 @@ class HistoryScreen(QWidget):
     def __init__(self, main_window, parent=None):
         super().__init__(parent)
         self.main = main_window
+        self._FILTER_ALL = "__all__"
         self.current_page = 0
         self.items_per_page = 10
         self.all_history = []
@@ -287,8 +289,8 @@ class HistoryScreen(QWidget):
 
         # === HEADER SECTION ===
         header = QHBoxLayout()
-        title_label = TitleLabel("Processing History")
-        header.addWidget(title_label)
+        self.title_label = TitleLabel("")
+        header.addWidget(self.title_label)
         header.addStretch()
         layout.addLayout(header)
 
@@ -297,13 +299,13 @@ class HistoryScreen(QWidget):
         stats_container.setSpacing(16)
 
         # Using FluentIcons for stats
-        self.total_stat = StatCard("Total Uploads", "0", FluentIcon.FOLDER)
+        self.total_stat = StatCard("", "0", FluentIcon.FOLDER)
         self.total_stat.setMaximumWidth(280)  # Prevent excessive stretching
-        self.success_stat = StatCard("Success Rate", "0%", FluentIcon.ACCEPT)
+        self.success_stat = StatCard("", "0%", FluentIcon.ACCEPT)
         self.success_stat.setMaximumWidth(280)
-        self.duration_stat = StatCard("Avg Duration", "0s", FluentIcon.HISTORY)
+        self.duration_stat = StatCard("", "0s", FluentIcon.HISTORY)
         self.duration_stat.setMaximumWidth(280)
-        self.today_stat = StatCard("Today", "0", FluentIcon.CALENDAR)
+        self.today_stat = StatCard("", "0", FluentIcon.CALENDAR)
         self.today_stat.setMaximumWidth(280)
 
         stats_container.addWidget(self.total_stat, 1)
@@ -321,44 +323,40 @@ class HistoryScreen(QWidget):
         toolbar_layout.setSpacing(16)  # Fluent 4px increment
 
         # Brand filter
-        brand_label = BodyLabel("Brand:")
+        self.brand_label = BodyLabel("")
+        brand_label = self.brand_label
         brand_label.setFixedWidth(50)
         brand_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
         self.brand_filter = ComboBox()
-        self.brand_filter.addItems([
-            "All", "KROSS", "Pinarello", "Basso", "Factor",
-            "TREK", "Rondo", "Octane", "Rascal", "Lee Cougan"
-        ])
         self.brand_filter.setFixedWidth(140)
         self.brand_filter.currentTextChanged.connect(self.refresh_history)
 
         # Status filter
-        status_label = BodyLabel("Status:")
+        self.status_label = BodyLabel("")
+        status_label = self.status_label
         status_label.setFixedWidth(50)
         status_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
         self.status_filter = ComboBox()
-        self.status_filter.addItems(["All", "Success", "Failed"])
         self.status_filter.setFixedWidth(120)
         self.status_filter.currentTextChanged.connect(self.refresh_history)
 
         # Date filter
-        date_label = BodyLabel("Period:")
+        self.period_label = BodyLabel("")
+        date_label = self.period_label
         date_label.setFixedWidth(50)
         date_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
         self.date_filter = ComboBox()
-        self.date_filter.addItems(["All Time", "Today", "Last 7 Days", "Last 30 Days"])
         self.date_filter.setFixedWidth(140)
         self.date_filter.currentTextChanged.connect(self.refresh_history)
 
         # Refresh button
-        refresh_button = TransparentToolButton(FluentIcon.SYNC, self)
-        refresh_button.setToolTip("Refresh history")
-        refresh_button.clicked.connect(self.refresh_history)
+        self.refresh_button = TransparentToolButton(FluentIcon.SYNC, self)
+        self.refresh_button.clicked.connect(self.refresh_history)
 
         # Export button
-        export_button = PushButton("Export to Excel")
-        export_button.setIcon(FluentIcon.DOCUMENT)
-        export_button.clicked.connect(self.export_to_excel)
+        self.export_button = PushButton("")
+        self.export_button.setIcon(FluentIcon.DOCUMENT)
+        self.export_button.clicked.connect(self.export_to_excel)
 
         toolbar_layout.addWidget(brand_label)
         toolbar_layout.addWidget(self.brand_filter)
@@ -367,8 +365,8 @@ class HistoryScreen(QWidget):
         toolbar_layout.addWidget(date_label)
         toolbar_layout.addWidget(self.date_filter)
         toolbar_layout.addStretch()
-        toolbar_layout.addWidget(refresh_button)
-        toolbar_layout.addWidget(export_button)
+        toolbar_layout.addWidget(self.refresh_button)
+        toolbar_layout.addWidget(self.export_button)
 
         layout.addWidget(toolbar_card)
 
@@ -415,16 +413,14 @@ class HistoryScreen(QWidget):
 
         self.prev_btn = TransparentToolButton(FluentIcon.LEFT_ARROW, self)
         self.prev_btn.setFixedSize(32, 32)
-        self.prev_btn.setToolTip("Previous page")
         self.prev_btn.clicked.connect(self._prev_page)
         self.prev_btn.setEnabled(False)
 
-        self.page_label = BodyLabel("Page 1 of 1")
+        self.page_label = BodyLabel("")
         self.page_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-weight: 500;")
 
         self.next_btn = TransparentToolButton(FluentIcon.RIGHT_ARROW, self)
         self.next_btn.setFixedSize(32, 32)
-        self.next_btn.setToolTip("Next page")
         self.next_btn.clicked.connect(self._next_page)
         self.next_btn.setEnabled(False)
 
@@ -434,7 +430,8 @@ class HistoryScreen(QWidget):
         self.items_per_page_combo.setFixedWidth(80)
         self.items_per_page_combo.currentTextChanged.connect(self._on_items_per_page_changed)
 
-        items_label = CaptionLabel("items per page")
+        self.items_label = CaptionLabel("")
+        items_label = self.items_label
         items_label.setStyleSheet(f"color: {COLORS['text_tertiary']};")
 
         pagination_layout.addWidget(self.prev_btn)
@@ -445,6 +442,77 @@ class HistoryScreen(QWidget):
         pagination_layout.addWidget(items_label)
 
         layout.addWidget(pagination_card)
+
+        self._populate_filters()
+        self.retranslate_ui()
+
+    def _populate_filters(self):
+        """Populate filter combos with translated labels while keeping stable userData."""
+        tr = self.main.i18n.tr
+
+        # Preserve selection by userData
+        current_brand = self.brand_filter.currentData()
+        current_status = self.status_filter.currentData()
+        current_period = self.date_filter.currentData()
+
+        self.brand_filter.blockSignals(True)
+        self.brand_filter.clear()
+        self.brand_filter.addItem(tr("common.all"), self._FILTER_ALL)
+        for brand in ["KROSS", "Pinarello", "Basso", "Factor", "TREK", "Rondo", "Octane", "Rascal", "Lee Cougan"]:
+            self.brand_filter.addItem(brand, brand)
+        if current_brand is not None:
+            idx = self.brand_filter.findData(current_brand)
+            if idx >= 0:
+                self.brand_filter.setCurrentIndex(idx)
+        self.brand_filter.blockSignals(False)
+
+        self.status_filter.blockSignals(True)
+        self.status_filter.clear()
+        self.status_filter.addItem(tr("common.all"), self._FILTER_ALL)
+        self.status_filter.addItem(tr("common.success"), "success")
+        self.status_filter.addItem(tr("common.failed"), "failed")
+        if current_status is not None:
+            idx = self.status_filter.findData(current_status)
+            if idx >= 0:
+                self.status_filter.setCurrentIndex(idx)
+        self.status_filter.blockSignals(False)
+
+        self.date_filter.blockSignals(True)
+        self.date_filter.clear()
+        self.date_filter.addItem(tr("common.all_time"), self._FILTER_ALL)
+        self.date_filter.addItem(tr("common.today"), "today")
+        self.date_filter.addItem(tr("common.last_7_days"), "last_7")
+        self.date_filter.addItem(tr("common.last_30_days"), "last_30")
+        if current_period is not None:
+            idx = self.date_filter.findData(current_period)
+            if idx >= 0:
+                self.date_filter.setCurrentIndex(idx)
+        self.date_filter.blockSignals(False)
+
+    def retranslate_ui(self):
+        tr = self.main.i18n.tr
+
+        self.title_label.setText(tr("history.title"))
+        self.total_stat.label_label.setText(tr("history.stats.total"))
+        self.success_stat.label_label.setText(tr("history.stats.success_rate"))
+        self.duration_stat.label_label.setText(tr("history.stats.avg_duration"))
+        self.today_stat.label_label.setText(tr("history.stats.today"))
+
+        self.brand_label.setText(f"{tr('common.brand')}:" if not tr('common.brand').endswith(":") else tr('common.brand'))
+        self.status_label.setText(f"{tr('common.status')}:" if not tr('common.status').endswith(":") else tr('common.status'))
+        self.period_label.setText(f"{tr('common.period')}:" if not tr('common.period').endswith(":") else tr('common.period'))
+
+        self.refresh_button.setToolTip(tr("history.refresh"))
+        self.export_button.setText(tr("common.export_excel"))
+        self.prev_btn.setToolTip(tr("common.previous_page"))
+        self.next_btn.setToolTip(tr("common.next_page"))
+        self.items_label.setText(tr("common.items_per_page"))
+
+        # Rebuild filter item text for current language
+        self._populate_filters()
+
+        # Re-render to update page label + no-data text + item cards
+        self._render_page()
 
     def refresh_history(self):
         """Refresh history list based on filters"""
@@ -462,30 +530,29 @@ class HistoryScreen(QWidget):
         params = []
 
         # Brand filter (case insensitive)
-        brand = self.brand_filter.currentText()
-        if brand and brand != "All":
+        brand = self.brand_filter.currentData()
+        if brand and brand != self._FILTER_ALL:
             query += " AND UPPER(brand) = UPPER(?)"
             params.append(brand)
 
         # Status filter
-        status = self.status_filter.currentText()
-        if status and status != "All":
-            status_value = "success" if status == "Success" else "failed"
+        status_value = self.status_filter.currentData()
+        if status_value and status_value != self._FILTER_ALL:
             query += " AND status = ?"
             params.append(status_value)
 
         # Date filter
-        date_range = self.date_filter.currentText()
-        if date_range and date_range != "All Time":
-            if date_range == "Today":
+        date_range = self.date_filter.currentData()
+        if date_range and date_range != self._FILTER_ALL:
+            if date_range == "today":
                 date_threshold = datetime.now().strftime('%Y-%m-%d')
                 query += " AND DATE(processed_at) = ?"
                 params.append(date_threshold)
-            elif date_range == "Last 7 Days":
+            elif date_range == "last_7":
                 date_threshold = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
                 query += " AND DATE(processed_at) >= ?"
                 params.append(date_threshold)
-            elif date_range == "Last 30 Days":
+            elif date_range == "last_30":
                 date_threshold = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
                 query += " AND DATE(processed_at) >= ?"
                 params.append(date_threshold)
@@ -518,7 +585,7 @@ class HistoryScreen(QWidget):
         end_idx = min(start_idx + self.items_per_page, total_items)
 
         # Update pagination controls
-        self.page_label.setText(f"Page {self.current_page + 1} of {total_pages}")
+        self.page_label.setText(self.main.i18n.tr("history.page", current=self.current_page + 1, total=total_pages))
         self.prev_btn.setEnabled(self.current_page > 0)
         self.next_btn.setEnabled(self.current_page < total_pages - 1)
 
@@ -526,10 +593,10 @@ class HistoryScreen(QWidget):
         if self.filtered_history:
             page_items = self.filtered_history[start_idx:end_idx]
             for row in page_items:
-                card = HistoryItemCard(row)
+                card = HistoryItemCard(row, self.main.i18n.tr)
                 self.history_layout.insertWidget(self.history_layout.count() - 1, card)
         else:
-            no_data = BodyLabel("No records found matching the selected filters")
+            no_data = BodyLabel(self.main.i18n.tr("history.no_records"))
             no_data.setStyleSheet(f"color: {COLORS['text_tertiary']}; padding: 40px 20px;")
             no_data.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.history_layout.insertWidget(0, no_data)
@@ -597,28 +664,27 @@ class HistoryScreen(QWidget):
             params = []
 
             # Apply same filters (case insensitive for brand)
-            brand = self.brand_filter.currentText()
-            if brand and brand != "All":
+            brand = self.brand_filter.currentData()
+            if brand and brand != self._FILTER_ALL:
                 query += " AND UPPER(brand) = UPPER(?)"
                 params.append(brand)
 
-            status = self.status_filter.currentText()
-            if status and status != "All":
-                status_value = "success" if status == "Success" else "failed"
+            status_value = self.status_filter.currentData()
+            if status_value and status_value != self._FILTER_ALL:
                 query += " AND status = ?"
                 params.append(status_value)
 
-            date_range = self.date_filter.currentText()
-            if date_range and date_range != "All Time":
-                if date_range == "Today":
+            date_range = self.date_filter.currentData()
+            if date_range and date_range != self._FILTER_ALL:
+                if date_range == "today":
                     date_threshold = datetime.now().strftime('%Y-%m-%d')
                     query += " AND DATE(processed_at) = ?"
                     params.append(date_threshold)
-                elif date_range == "Last 7 Days":
+                elif date_range == "last_7":
                     date_threshold = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
                     query += " AND DATE(processed_at) >= ?"
                     params.append(date_threshold)
-                elif date_range == "Last 30 Days":
+                elif date_range == "last_30":
                     date_threshold = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
                     query += " AND DATE(processed_at) >= ?"
                     params.append(date_threshold)
@@ -629,8 +695,8 @@ class HistoryScreen(QWidget):
 
             if not history:
                 InfoBar.warning(
-                    title="No Data",
-                    content="No records found to export",
+                    title=self.main.i18n.tr("history.no_data.title"),
+                    content=self.main.i18n.tr("history.no_data.content"),
                     parent=self,
                     position=InfoBarPosition.TOP
                 )
@@ -640,9 +706,9 @@ class HistoryScreen(QWidget):
             file_dialog = QFileDialog()
             file_path, _ = file_dialog.getSaveFileName(
                 self,
-                "Export History",
+                self.main.i18n.tr("history.export.title"),
                 f"history_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                "Excel Files (*.xlsx)"
+                self.main.i18n.tr("history.excel.filter")
             )
 
             if not file_path:
@@ -650,7 +716,7 @@ class HistoryScreen(QWidget):
 
             wb = Workbook()
             ws = wb.active
-            ws.title = "Processing History"
+            ws.title = self.main.i18n.tr("history.sheet.title")
 
             # Headers with Space Indigo background and Lavender Grey text
             headers = ["Brand", "Product Code", "URL/Code", "Status", "Duration (s)",
@@ -697,15 +763,15 @@ class HistoryScreen(QWidget):
             wb.save(file_path)
 
             InfoBar.success(
-                title="Export Successful",
-                content=f"History exported to {file_path}",
+                title=self.main.i18n.tr("history.export.success.title"),
+                content=self.main.i18n.tr("history.export.success.content", path=file_path),
                 parent=self,
                 position=InfoBarPosition.TOP
             )
 
         except Exception as ex:
             InfoBar.error(
-                title="Export Failed",
+                title=self.main.i18n.tr("history.export.failed.title"),
                 content=str(ex),
                 parent=self,
                 position=InfoBarPosition.TOP

@@ -89,7 +89,7 @@ class TranslationImporter:
                             translations.append((source, target))
         
         except Exception as e:
-            print(f"  ⚠ Error reading {file_path}: {e}")
+            # Warning: Error reading {file_path}: {e}
         
         return translations
     
@@ -125,12 +125,12 @@ class TranslationImporter:
         Import a single translation file
         """
         if not os.path.exists(file_path):
-            print(f"  ⚠ File not found: {file_path}")
+            # Warning: File not found: {file_path}
             self.skipped_count += 1
             return
         
         filename = os.path.basename(file_path)
-        print(f"  Importing {filename}...")
+        # Info: Importing {filename}...
         
         translations = self._parse_translation_file(file_path)
         
@@ -138,16 +138,13 @@ class TranslationImporter:
             category = self._detect_category(source, target)
             self._insert_translation(source_lang, target_lang, source, target, category)
         
-        print(f"    ✓ {len(translations)} translations parsed")
+        # Info: {len(translations)} translations parsed
     
     def import_all(self):
         """
         Import all translation files from Assets/Translations/
         """
-        print("\n" + "=" * 60)
-        print("IMPORTING TRANSLATIONS")
-        print("=" * 60)
-        print()
+        # Info: Importing translations (header)
         
         base_path = "Assets/Translations/"
         
@@ -181,15 +178,7 @@ class TranslationImporter:
         # Commit all changes
         self.db.conn.commit()
         
-        print()
-        print("=" * 60)
-        print("IMPORT SUMMARY")
-        print("=" * 60)
-        print(f"  Imported: {self.imported_count} translations")
-        print(f"  Duplicates skipped: {self.duplicate_count}")
-        print(f"  Files not found: {self.skipped_count}")
-        print("=" * 60)
-        print()
+        # Info: Import summary (footer)
         
         # Show category breakdown
         cursor = self.db.conn.cursor()
@@ -200,7 +189,7 @@ class TranslationImporter:
             ORDER BY count DESC
         """).fetchall()
         
-        print("Category breakdown:")
+        # Info: Category breakdown
         for cat in categories:
-            print(f"  {cat['category']}: {cat['count']} translations")
-        print()
+            # Info: {cat['category']}: {cat['count']} translations
+        # Info: End of category breakdown

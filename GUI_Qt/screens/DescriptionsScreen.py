@@ -28,6 +28,8 @@ class DescriptionsScreen(QWidget):
         self.current_description_name = None
         self.has_unsaved_changes = False
 
+        self._editor_containers = []
+
         self._init_ui()
         self._load_description_list()
         self._setup_shortcuts()
@@ -75,10 +77,10 @@ class DescriptionsScreen(QWidget):
         title_icon.setFixedSize(32, 32)
         title_icon.setEnabled(False)
 
-        title_label = TitleLabel("Product Descriptions")
+        self.title_label = TitleLabel("")
 
         title_container.addWidget(title_icon)
-        title_container.addWidget(title_label)
+        title_container.addWidget(self.title_label)
 
         header.addLayout(title_container)
         header.addStretch()
@@ -114,17 +116,17 @@ class DescriptionsScreen(QWidget):
 
         # List header
         list_header = QHBoxLayout()
-        list_title = BodyLabel("Saved Descriptions")
+        self.list_title = BodyLabel("")
+        list_title = self.list_title
         list_title.setStyleSheet(f"font-weight: 600; color: {COLORS['text_secondary']};")
 
-        refresh_btn = TransparentToolButton(FluentIcon.SYNC, self)
-        refresh_btn.setToolTip("Refresh list")
-        refresh_btn.setFixedSize(28, 28)
-        refresh_btn.clicked.connect(self._load_description_list)
+        self.refresh_btn = TransparentToolButton(FluentIcon.SYNC, self)
+        self.refresh_btn.setFixedSize(28, 28)
+        self.refresh_btn.clicked.connect(self._load_description_list)
 
         list_header.addWidget(list_title)
         list_header.addStretch()
-        list_header.addWidget(refresh_btn)
+        list_header.addWidget(self.refresh_btn)
 
         left_layout.addLayout(list_header)
 
@@ -139,11 +141,11 @@ class DescriptionsScreen(QWidget):
         list_btn_layout = QVBoxLayout()
         list_btn_layout.setSpacing(8)
 
-        self.new_btn = PrimaryPushButton("New")
+        self.new_btn = PrimaryPushButton("")
         self.new_btn.setIcon(FluentIcon.ADD.icon())
         self.new_btn.clicked.connect(self._handle_new)
 
-        self.delete_btn = PushButton("Delete")
+        self.delete_btn = PushButton("")
         self.delete_btn.setIcon(FluentIcon.DELETE.icon())
         self.delete_btn.setEnabled(False)
         self.delete_btn.clicked.connect(self._handle_delete)
@@ -187,7 +189,7 @@ class DescriptionsScreen(QWidget):
         action_layout = QHBoxLayout()
         action_layout.setSpacing(12)
 
-        self.save_btn = PrimaryPushButton("Save")
+        self.save_btn = PrimaryPushButton("")
         self.save_btn.setIcon(FluentIcon.SAVE.icon())
         self.save_btn.setFixedHeight(36)
         self.save_btn.setEnabled(False)
@@ -202,6 +204,8 @@ class DescriptionsScreen(QWidget):
 
         main_layout.addLayout(content_layout, 1)
 
+        self.retranslate_ui()
+
     def _create_html_editor(self):
         """Create HTML text editor widget"""
         container = QWidget()
@@ -212,7 +216,7 @@ class DescriptionsScreen(QWidget):
         # Warning message
         warning = QHBoxLayout()
         warning_icon = FluentIcon.INFO.icon()
-        warning_label = CaptionLabel("HTML only - paste from SVENG.txt, SVLT.txt, SVLV.txt")
+        warning_label = CaptionLabel("")
         warning_label.setStyleSheet(f"color: {COLORS['lavender_grey']}; font-weight: 500;")
 
         warning.addWidget(warning_label)
@@ -222,7 +226,7 @@ class DescriptionsScreen(QWidget):
 
         # Text editor
         editor = QTextEdit()
-        editor.setPlaceholderText("Paste HTML here (e.g., <h1>Title</h1>, <p>Text</p>)...")
+        editor.setPlaceholderText("")
         editor.setAcceptRichText(False)
         editor.textChanged.connect(self._on_content_changed)
 
@@ -246,7 +250,32 @@ class DescriptionsScreen(QWidget):
 
         layout.addWidget(editor)
 
+        # Keep references for retranslation
+        container._warning_label = warning_label
+        container._editor = editor
+        self._editor_containers.append(container)
+
         return container
+
+    def retranslate_ui(self):
+        tr = self.main.i18n.tr
+
+        self.title_label.setText(tr("descriptions.title"))
+        self.list_title.setText(tr("descriptions.saved"))
+        self.refresh_btn.setToolTip(tr("descriptions.refresh"))
+        self.new_btn.setText(tr("descriptions.new"))
+        self.delete_btn.setText(tr("descriptions.delete"))
+        self.save_btn.setText(tr("descriptions.save"))
+
+        for container in getattr(self, '_editor_containers', []):
+            warning_label = getattr(container, '_warning_label', None)
+            editor = getattr(container, '_editor', None)
+            if warning_label is not None:
+                warning_label.setText(tr("descriptions.editor.warning"))
+            if editor is not None:
+                editor.setPlaceholderText(tr("descriptions.editor.placeholder"))
+
+        self._update_title_indicator()
 
     def _style_list(self):
         """Apply styling to description list"""
@@ -321,7 +350,7 @@ class DescriptionsScreen(QWidget):
 
         except Exception as ex:
             InfoBar.error(
-                title="Load Failed",
+                title=self.main.i18n.tr("descriptions.load_failed.title"),
                 content=str(ex),
                 parent=self,
                 position=InfoBarPosition.TOP
@@ -369,8 +398,8 @@ class DescriptionsScreen(QWidget):
                 self.delete_btn.setEnabled(True)
 
                 InfoBar.success(
-                    title="Loaded",
-                    content=f"Loaded '{name}'",
+                    title=self.main.i18n.tr("descriptions.loaded.title"),
+                    content=self.main.i18n.tr("descriptions.loaded.content", name=name),
                     parent=self,
                     position=InfoBarPosition.TOP,
                     duration=2000
@@ -378,7 +407,7 @@ class DescriptionsScreen(QWidget):
 
         except Exception as ex:
             InfoBar.error(
-                title="Load Failed",
+                title=self.main.i18n.tr("descriptions.load_failed.title"),
                 content=str(ex),
                 parent=self,
                 position=InfoBarPosition.TOP
@@ -397,15 +426,21 @@ class DescriptionsScreen(QWidget):
 
         if self.current_description_name:
             indicator = " *" if self.has_unsaved_changes else ""
-            self.current_name_label.setText(f"Editing: {self.current_description_name}{indicator}")
+            self.current_name_label.setText(
+                self.main.i18n.tr(
+                    "descriptions.editing",
+                    name=self.current_description_name,
+                    indicator=indicator,
+                )
+            )
         else:
-            self.current_name_label.setText("New Description (not saved) *")
+            self.current_name_label.setText(self.main.i18n.tr("descriptions.new_indicator"))
 
     def _handle_new(self):
         """Create new description"""
         self.current_description_name = None
         self.has_unsaved_changes = True
-        self.current_name_label.setText("New Description (not saved) *")
+        self.current_name_label.setText(self.main.i18n.tr("descriptions.new_indicator"))
         self.current_name_label.setVisible(True)
 
         # Clear editors
@@ -422,8 +457,8 @@ class DescriptionsScreen(QWidget):
         self.description_list.clearSelection()
 
         InfoBar.success(
-            title="New Description",
-            content="Ready to create new description",
+            title=self.main.i18n.tr("descriptions.new.title"),
+            content=self.main.i18n.tr("descriptions.new.content"),
             parent=self,
             position=InfoBarPosition.TOP,
             duration=2000
@@ -444,8 +479,8 @@ class DescriptionsScreen(QWidget):
         if not self.current_description_name:
             name, ok = QInputDialog.getText(
                 self,
-                "Save Description",
-                "Enter description name:",
+                self.main.i18n.tr("descriptions.save_dialog.title"),
+                self.main.i18n.tr("descriptions.save_dialog.prompt"),
                 text=""
             )
 
@@ -469,8 +504,8 @@ class DescriptionsScreen(QWidget):
                 self._update_title_indicator()
 
                 InfoBar.success(
-                    title="Saved",
-                    content=f"Description '{self.current_description_name}' saved",
+                    title=self.main.i18n.tr("descriptions.saved.title"),
+                    content=self.main.i18n.tr("descriptions.saved.content", name=self.current_description_name),
                     parent=self,
                     position=InfoBarPosition.TOP,
                     duration=2000
@@ -481,7 +516,7 @@ class DescriptionsScreen(QWidget):
 
         except Exception as ex:
             InfoBar.error(
-                title="Save Failed",
+                title=self.main.i18n.tr("descriptions.save_failed.title"),
                 content=str(ex),
                 parent=self,
                 position=InfoBarPosition.TOP
@@ -495,8 +530,8 @@ class DescriptionsScreen(QWidget):
         # Confirm deletion
         reply = QMsgBox.question(
             self,
-            "Confirm Delete",
-            f"Delete description '{self.current_description_name}'?",
+            self.main.i18n.tr("descriptions.delete_confirm.title"),
+            self.main.i18n.tr("descriptions.delete_confirm.content", name=self.current_description_name),
             QMsgBox.StandardButton.Yes | QMsgBox.StandardButton.No
         )
 
@@ -506,8 +541,8 @@ class DescriptionsScreen(QWidget):
 
                 if success:
                     InfoBar.success(
-                        title="Deleted",
-                        content=f"Deleted '{self.current_description_name}'",
+                        title=self.main.i18n.tr("descriptions.deleted.title"),
+                        content=self.main.i18n.tr("descriptions.deleted.content", name=self.current_description_name),
                         parent=self,
                         position=InfoBarPosition.TOP,
                         duration=2000
@@ -519,7 +554,7 @@ class DescriptionsScreen(QWidget):
 
             except Exception as ex:
                 InfoBar.error(
-                    title="Delete Failed",
+                    title=self.main.i18n.tr("descriptions.delete_failed.title"),
                     content=str(ex),
                     parent=self,
                     position=InfoBarPosition.TOP

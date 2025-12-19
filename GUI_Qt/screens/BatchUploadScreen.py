@@ -28,8 +28,11 @@ class DropZoneWidget(QWidget):
     """Drag and drop zone for Excel files"""
     file_dropped = Signal(str)
 
-    def __init__(self, parent=None):
+    def __init__(self, tr, parent=None):
         super().__init__(parent)
+        self.tr = tr
+        self.title_label = None
+        self.subtitle_label = None
         self.setAcceptDrops(True)
         self._init_ui()
 
@@ -43,11 +46,13 @@ class DropZoneWidget(QWidget):
         icon.setFixedSize(96, 96)
 
         # Title
-        title = StrongBodyLabel("Drop your Excel file here")
+        self.title_label = StrongBodyLabel("")
+        title = self.title_label
         title.setStyleSheet(f"font-size: 16px; color: {COLORS['lavender_grey']};")
 
         # Subtitle
-        subtitle = CaptionLabel("or click to browse")
+        self.subtitle_label = CaptionLabel("")
+        subtitle = self.subtitle_label
         subtitle.setStyleSheet(f"color: {COLORS['text_secondary']};")
 
         layout.addStretch()
@@ -71,6 +76,14 @@ class DropZoneWidget(QWidget):
 
         # Make clickable
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        self.retranslate_ui()
+
+    def retranslate_ui(self):
+        if self.title_label is not None:
+            self.title_label.setText(self.tr("batch.drop.title"))
+        if self.subtitle_label is not None:
+            self.subtitle_label.setText(self.tr("batch.drop.subtitle"))
 
     def dragEnterEvent(self, event: QDragEnterEvent):
         if event.mimeData().hasUrls():
@@ -165,8 +178,8 @@ class BatchUploadScreen(QWidget):
         header = QHBoxLayout()
 
         # Title
-        title_label = TitleLabel("Batch Upload")
-        header.addWidget(title_label)
+        self.title_label = TitleLabel("")
+        header.addWidget(self.title_label)
         header.addStretch()
 
         # Mode pills (Fluent Design style)
@@ -176,12 +189,12 @@ class BatchUploadScreen(QWidget):
         mode_layout.setSpacing(8)
         mode_container.setStyleSheet("background: transparent;")
 
-        self.manual_pill = PillPushButton("Manual Entry")
+        self.manual_pill = PillPushButton("")
         self.manual_pill.setCheckable(True)
         self.manual_pill.setChecked(True)
         self.manual_pill.clicked.connect(lambda: self._switch_mode("manual"))
 
-        self.excel_pill = PillPushButton("Excel Upload")
+        self.excel_pill = PillPushButton("")
         self.excel_pill.setCheckable(True)
         self.excel_pill.clicked.connect(lambda: self._switch_mode("excel"))
 
@@ -203,24 +216,27 @@ class BatchUploadScreen(QWidget):
         manual_tb_layout.setContentsMargins(0, 0, 0, 0)
         manual_tb_layout.setSpacing(12)
 
-        add_btn = PushButton("Add Row")
+        self.add_btn = PushButton("")
+        add_btn = self.add_btn
         add_btn.setIcon(FluentIcon.ADD)
         add_btn.clicked.connect(self._add_row)
 
-        clear_btn = TransparentPushButton("Clear All")
+        self.clear_btn = TransparentPushButton("")
+        clear_btn = self.clear_btn
         clear_btn.setIcon(FluentIcon.DELETE)
         clear_btn.clicked.connect(self._clear_all)
 
         # Bulk selectors
-        bulk_label = CaptionLabel("Bulk select:")
+        self.bulk_label = CaptionLabel("")
+        bulk_label = self.bulk_label
         bulk_label.setStyleSheet(f"color: {COLORS['text_secondary']}; margin-left: 20px;")
 
-        frameset_bulk = CheckBox("Frameset")
-        frameset_bulk.setToolTip("Select all Pinarello framesets")
+        self.frameset_bulk = CheckBox("")
+        frameset_bulk = self.frameset_bulk
         frameset_bulk.stateChanged.connect(self._toggle_all_framesets)
 
-        disclaimer_bulk = CheckBox("Disclaimer")
-        disclaimer_bulk.setToolTip("Select all disclaimers")
+        self.disclaimer_bulk = CheckBox("")
+        disclaimer_bulk = self.disclaimer_bulk
         disclaimer_bulk.stateChanged.connect(self._toggle_all_disclaimers)
 
         manual_tb_layout.addWidget(add_btn)
@@ -236,15 +252,17 @@ class BatchUploadScreen(QWidget):
         excel_tb_layout.setContentsMargins(0, 0, 0, 0)
         excel_tb_layout.setSpacing(12)
 
-        browse_btn = PushButton("Browse Excel File")
+        self.browse_btn = PushButton("")
+        browse_btn = self.browse_btn
         browse_btn.setIcon(FluentIcon.FOLDER)
         browse_btn.clicked.connect(self._browse_excel)
 
-        template_btn = TransparentPushButton("Download Template")
+        self.template_btn = TransparentPushButton("")
+        template_btn = self.template_btn
         template_btn.setIcon(FluentIcon.DOWNLOAD)
         template_btn.clicked.connect(self._download_template)
 
-        self.excel_file_label = BodyLabel("No file selected")
+        self.excel_file_label = BodyLabel("")
         self.excel_file_label.setStyleSheet(f"color: {COLORS['text_secondary']}; margin-left: 20px;")
 
         excel_tb_layout.addWidget(browse_btn)
@@ -268,7 +286,7 @@ class BatchUploadScreen(QWidget):
         # Modern Fluent table
         self.table = QTableWidget()
         self.table.setColumnCount(7)
-        self.table.setHorizontalHeaderLabels(["Brand", "Product Code", "URL / Code", "Description", "Frameset", "Disclaimer", ""])
+        self.table.setHorizontalHeaderLabels(["", "", "", "", "", "", ""])
         self.table.setRowCount(5)
 
         # Apply table styling
@@ -318,7 +336,7 @@ class BatchUploadScreen(QWidget):
         content_layout.addWidget(table_container, 1)
 
         # Excel drop zone
-        self.excel_empty = DropZoneWidget()
+        self.excel_empty = DropZoneWidget(self.main.i18n.tr)
         self.excel_empty.file_dropped.connect(self._handle_file_drop)
         self.excel_empty.setVisible(False)
         content_layout.addWidget(self.excel_empty, 1)
@@ -331,7 +349,7 @@ class BatchUploadScreen(QWidget):
         status_layout = QHBoxLayout(status_card)
         status_layout.setContentsMargins(20, 14, 20, 14)
 
-        self.status_label = BodyLabel("Ready to start")
+        self.status_label = BodyLabel("")
         self.status_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
 
         status_layout.addWidget(self.status_label)
@@ -343,7 +361,7 @@ class BatchUploadScreen(QWidget):
         actions = QHBoxLayout()
         actions.addStretch()
 
-        self.start_btn = PrimaryPushButton("Start Batch Upload")
+        self.start_btn = PrimaryPushButton("")
         self.start_btn.setIcon(FluentIcon.PLAY)
         self.start_btn.setEnabled(False)
         self.start_btn.setFixedHeight(40)
@@ -351,6 +369,71 @@ class BatchUploadScreen(QWidget):
 
         actions.addWidget(self.start_btn)
         layout.addLayout(actions)
+
+        self.retranslate_ui()
+
+    def retranslate_ui(self):
+        tr = self.main.i18n.tr
+
+        self.title_label.setText(tr("batch.title"))
+        self.manual_pill.setText(tr("batch.mode.manual"))
+        self.excel_pill.setText(tr("batch.mode.excel"))
+
+        self.add_btn.setText(tr("batch.add_row"))
+        self.clear_btn.setText(tr("batch.clear_all"))
+        self.bulk_label.setText(tr("batch.bulk_select"))
+        self.frameset_bulk.setText(tr("batch.bulk.frameset"))
+        self.frameset_bulk.setToolTip(tr("batch.bulk.frameset.tip"))
+        self.disclaimer_bulk.setText(tr("batch.bulk.disclaimer"))
+        self.disclaimer_bulk.setToolTip(tr("batch.bulk.disclaimer.tip"))
+
+        self.browse_btn.setText(tr("batch.browse_excel"))
+        self.template_btn.setText(tr("batch.download_template"))
+        self.excel_file_label.setText(tr("batch.no_file"))
+
+        self.status_label.setText(tr("batch.status.ready"))
+        self.start_btn.setText(tr("batch.start"))
+
+        # Table headers
+        self.table.setHorizontalHeaderLabels([
+            tr("batch.table.brand"),
+            tr("batch.table.code"),
+            tr("batch.table.url"),
+            tr("batch.table.desc"),
+            tr("batch.table.frameset"),
+            tr("batch.table.disclaimer"),
+            "",
+        ])
+
+        # Drop-zone text
+        if hasattr(self, "excel_empty") and hasattr(self.excel_empty, "retranslate_ui"):
+            self.excel_empty.retranslate_ui()
+
+        # Update placeholders for existing table row widgets
+        for row in range(self.table.rowCount()):
+            brand_cell = self.table.cellWidget(row, 0)
+            if brand_cell:
+                brand_combo = brand_cell.findChild(ComboBox)
+                if brand_combo:
+                    brand_combo.setPlaceholderText(tr("batch.select_brand"))
+
+            code_cell = self.table.cellWidget(row, 1)
+            if code_cell:
+                code_field = code_cell.findChild(LineEdit)
+                if code_field:
+                    code_field.setPlaceholderText(tr("upload.code.placeholder"))
+
+            url_cell = self.table.cellWidget(row, 2)
+            if url_cell:
+                url_field = url_cell.findChild(LineEdit)
+                if url_field:
+                    url_field.setPlaceholderText(tr("upload.url.placeholder"))
+
+            desc_cell = self.table.cellWidget(row, 3)
+            if desc_cell:
+                desc_combo = desc_cell.findChild(ComboBox)
+                if desc_combo:
+                    desc_combo.setPlaceholderText(tr("batch.optional"))
 
     def _setup_table_row(self, row):
         """Setup widgets for a table row"""
@@ -366,7 +449,7 @@ class BatchUploadScreen(QWidget):
         # Brand combo
         brand_combo = ComboBox()
         brand_combo.addItems(self.brands)
-        brand_combo.setPlaceholderText("Select brand")
+        brand_combo.setPlaceholderText(self.main.i18n.tr("batch.select_brand"))
         brand_combo.setFixedHeight(36)
         brand_combo.currentTextChanged.connect(lambda brand, r=row: self._on_brand_change(r, brand))
         brand_combo.currentTextChanged.connect(self._validate)
@@ -374,14 +457,14 @@ class BatchUploadScreen(QWidget):
 
         # Product code
         code_field = LineEdit()
-        code_field.setPlaceholderText("UB-XXXX")
+        code_field.setPlaceholderText(self.main.i18n.tr("upload.code.placeholder"))
         code_field.setFixedHeight(36)
         code_field.textChanged.connect(lambda text, field=code_field: self._on_code_changed(text, field))
         self.table.setCellWidget(row, 1, create_centered_widget(code_field))
 
         # URL
         url_field = LineEdit()
-        url_field.setPlaceholderText("https://... or product code")
+        url_field.setPlaceholderText(self.main.i18n.tr("upload.url.placeholder"))
         url_field.setFixedHeight(36)
         url_field.textChanged.connect(lambda text, field=url_field: self._on_url_changed(text, field))
         self.table.setCellWidget(row, 2, create_centered_widget(url_field))
@@ -390,7 +473,7 @@ class BatchUploadScreen(QWidget):
         desc_combo = ComboBox()
         desc_combo.addItem("")
         desc_combo.addItems(self.descriptions)
-        desc_combo.setPlaceholderText("Optional")
+        desc_combo.setPlaceholderText(self.main.i18n.tr("batch.optional"))
         desc_combo.setFixedHeight(36)
         desc_combo.currentTextChanged.connect(self._validate)
         self.table.setCellWidget(row, 3, create_centered_widget(desc_combo))
@@ -422,7 +505,7 @@ class BatchUploadScreen(QWidget):
 
         # Delete button
         delete_btn = TransparentToolButton(FluentIcon.DELETE)
-        delete_btn.setToolTip("Remove row")
+        delete_btn.setToolTip(self.main.i18n.tr("batch.row.remove.tip"))
         delete_btn.setFixedSize(36, 36)
         delete_btn.clicked.connect(lambda: self._remove_row(row))
         delete_container = QWidget()
@@ -547,10 +630,11 @@ class BatchUploadScreen(QWidget):
         self.start_btn.setEnabled(valid_count > 0)
 
         if valid_count > 0:
-            self.status_label.setText(f"✓ {valid_count} product{'s' if valid_count != 1 else ''} ready")
+            key = "batch.status.ready_one" if valid_count == 1 else "batch.status.ready_many"
+            self.status_label.setText(self.main.i18n.tr(key, count=valid_count))
             self.status_label.setStyleSheet(f"color: {COLORS['success']}; font-weight: 500;")
         else:
-            self.status_label.setText("Add at least one product to continue")
+            self.status_label.setText(self.main.i18n.tr("batch.status.need_one"))
             self.status_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
 
     def _handle_file_drop(self, filepath):
@@ -564,9 +648,9 @@ class BatchUploadScreen(QWidget):
         """Browse for Excel file"""
         filename, _ = QFileDialog.getOpenFileName(
             self,
-            "Select Excel File",
+            self.main.i18n.tr("batch.file.select_excel.title"),
             "",
-            "Excel files (*.xlsx);;All files (*.*)"
+            self.main.i18n.tr("batch.file.select_excel.filter")
         )
 
         if filename:
@@ -587,7 +671,7 @@ class BatchUploadScreen(QWidget):
                     break
 
             if not header_row:
-                raise Exception("Could not find header row in Excel file")
+                raise Exception(self.main.i18n.tr("batch.excel.header_missing_in_file"))
 
             # Count data rows first
             data_rows = []
@@ -657,18 +741,25 @@ class BatchUploadScreen(QWidget):
 
             # Update status
             if invalid_count > 0:
-                self.status_label.setText(f"⚠ {valid_count} valid, {invalid_count} invalid rows - fix errors to continue")
+                self.status_label.setText(
+                    self.main.i18n.tr(
+                        "batch.excel.rows_fix_errors",
+                        valid=valid_count,
+                        invalid=invalid_count,
+                    )
+                )
                 self.status_label.setStyleSheet(f"color: {COLORS['warning']}; font-weight: 500;")
                 self.start_btn.setEnabled(False)
             else:
-                self.status_label.setText(f"✓ {valid_count} product{'s' if valid_count != 1 else ''} ready from Excel")
+                key = "batch.excel.ready_from_excel_one" if valid_count == 1 else "batch.excel.ready_from_excel_many"
+                self.status_label.setText(self.main.i18n.tr(key, count=valid_count))
                 self.status_label.setStyleSheet(f"color: {COLORS['success']}; font-weight: 500;")
                 self.start_btn.setEnabled(valid_count > 0)
 
         except Exception as ex:
             InfoBar.error(
-                title="Error",
-                content=f"Failed to load Excel: {str(ex)}",
+                title=self.main.i18n.tr("common.error"),
+                content=self.main.i18n.tr("batch.excel.load_failed", error=str(ex)),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
@@ -680,9 +771,9 @@ class BatchUploadScreen(QWidget):
         """Download Excel template"""
         filename, _ = QFileDialog.getSaveFileName(
             self,
-            "Save Template",
-            "ultrabike_batch_template.xlsx",
-            "Excel files (*.xlsx)"
+            self.main.i18n.tr("batch.template.save.title"),
+            self.main.i18n.tr("batch.template.default_name"),
+            self.main.i18n.tr("batch.template.filter"),
         )
 
         if not filename:
@@ -691,7 +782,7 @@ class BatchUploadScreen(QWidget):
         try:
             wb = openpyxl.Workbook()
             ws = wb.active
-            ws.title = "Batch Upload"
+            ws.title = self.main.i18n.tr("batch.title")
 
             # Headers
             headers = ["Brand", "Product Code", "URL or Code", "Description", "Frameset", "Append Disclaimer"]
@@ -715,8 +806,8 @@ class BatchUploadScreen(QWidget):
             wb.close()
 
             InfoBar.success(
-                title="Success",
-                content="Template downloaded successfully",
+                title=self.main.i18n.tr("common.success"),
+                content=self.main.i18n.tr("batch.template.downloaded"),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
@@ -726,8 +817,8 @@ class BatchUploadScreen(QWidget):
 
         except Exception as ex:
             InfoBar.error(
-                title="Error",
-                content=f"Failed to save template: {str(ex)}",
+                title=self.main.i18n.tr("common.error"),
+                content=self.main.i18n.tr("batch.template.save_failed", error=str(ex)),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,

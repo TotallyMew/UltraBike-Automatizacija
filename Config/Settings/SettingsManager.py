@@ -16,7 +16,7 @@ class SettingsManager:
                     else:
                         self.settings.append(stripped_line)
         except FileNotFoundError:
-            print(f"Warning: Settings file not found at {self.settings_file}")
+            # Warning: Settings file not found at {self.settings_file}
             # Initialize with default settings
             self.settings = [
                 False,  # Setting 0 - Download pictures and upload

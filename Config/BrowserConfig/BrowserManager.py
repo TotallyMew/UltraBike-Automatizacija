@@ -61,8 +61,8 @@ class BrowserManager:
                         return None
                     continue
             except Exception as e:
-                print(f"Error setting up browser: {e}")
-                print("Closing program, browser not found.")
+                # Error: Error setting up browser: {e}
+                # Error: Closing program, browser not found.
                 return None
 
     def _setup_chrome(self):
@@ -91,25 +91,7 @@ class BrowserManager:
         )
 
     def _handle_unsupported_browser(self):
-        while True:
-            retry = input("Try again? (Y/N): ").strip().lower()
-            if retry == 'y':
-                browser_choice = input("Choose browser (Firefox (slow!), Chrome, Edge): ").strip()
-                return browser_choice
-            elif retry == 'n':
-                print("Exiting program")
-                return None
-            else:
-                print("Please enter Y or N.")
+        raise RuntimeError("CLI browser selection disabled: provide a valid 'browser_choice' or a GUI retry_callback.")
 
     def _prompt_retry_internet(self):
-        print("You are not connected to the internet. Try again? (Y/N)")
-        while True:
-            retry = input().strip().lower()
-            if retry == 'y':
-                return True
-            elif retry == 'n':
-                print("Exiting program")
-                return False
-            else:
-                print("Please enter Y or N.")
+        raise RuntimeError("CLI internet retry prompt disabled: provide a 'retry_callback' from GUI.")

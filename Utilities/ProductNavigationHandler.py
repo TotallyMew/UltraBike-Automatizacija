@@ -106,8 +106,16 @@ class ProductNavigationHandler:
                     self._log_error("Error during product navigation", exception=e, code=unique_code)
                     ErrorManager.show_error("UPLOAD_PRODUCT_NOT_FOUND", code=unique_code)
 
-                if not self._retry_search():
+                res = self._retry_search()
+                if res is False:
                     raise ValueError(f"Product search cancelled for code: {unique_code}")
+                elif isinstance(res, str):
+                    # User provided a new code to retry with
+                    unique_code = res
+                    continue
+                else:
+                    # True -> retry with same code
+                    continue
         else:
             while True:
                 try:
@@ -123,8 +131,14 @@ class ProductNavigationHandler:
                     self._log_error("Error during simple search", exception=e, code=unique_code)
                     ErrorManager.show_error("UPLOAD_PRODUCT_NOT_FOUND", code=unique_code)
 
-                if not self._retry_search():
+                res = self._retry_search()
+                if res is False:
                     raise ValueError(f"Product search cancelled for code: {unique_code}")
+                elif isinstance(res, str):
+                    unique_code = res
+                    continue
+                else:
+                    continue
 
     def _search_product(self, unique_code):
         self._log("Searching product (UB code)", code=unique_code)
@@ -162,5 +176,10 @@ class ProductNavigationHandler:
         
         search_product.send_keys(unique_code + Keys.ENTER)
 
+    def set_retry_callback(self, callback):
+        self._retry_callback = callback
+
     def _retry_search(self):
+        if hasattr(self, '_retry_callback') and self._retry_callback:
+            return self._retry_callback("paiešką")
         return ErrorManager.prompt_retry("paiešką")

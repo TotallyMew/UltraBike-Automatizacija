@@ -11,6 +11,6 @@ importer.import_all()
 # Verify import
 cursor = db.conn.cursor()
 count = cursor.execute("SELECT COUNT(*) FROM translations").fetchone()[0]
-print(f"\nTotal translations in database: {count}")
+ # GUI/log: Total translations in database: {count}
 
 db.close()

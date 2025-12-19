@@ -50,10 +50,16 @@ class DescriptionManager:
             self.logger.log("DescriptionManager", message, **context)
 
     def _log_error(self, message, exception=None, **context):
+        from Utilities.ErrorManager import ErrorManager
         if self.logger:
             self.logger.error(
                 "DescriptionManager", message, exception=exception, **context
             )
+        # Show error in GUI
+        if exception:
+            ErrorManager.show_error("UNEXPECTED_ERROR", error=str(exception))
+        else:
+            ErrorManager.show_error("UNEXPECTED_ERROR", error=message)
 
     def append_disclaimer_if_missing(
         self, lt_html: str, en_html: str, lv_html: str
@@ -306,7 +312,7 @@ class DescriptionManager:
             self._log_error(
                 "Failed to upload HTML", exception=e, product_code=product_code
             )
-            print(traceback.format_exc())
+            # Error: traceback.format_exc() can be logged if needed
 
             try:
                 driver.switch_to.default_content()

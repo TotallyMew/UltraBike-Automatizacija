@@ -21,8 +21,9 @@ from GUI_Qt.styles.theme_config import COLORS, FONTS
 class EditTranslationDialog(MessageBox):
     """Dialog for editing a translation"""
 
-    def __init__(self, brand, original, translation, parent=None):
-        super().__init__("Edit Translation", "", parent)
+    def __init__(self, brand, original, translation, parent=None, tr=None):
+        self.tr = tr or (lambda k, **kw: k.format(**kw) if kw else k)
+        super().__init__(self.tr("translations.edit_dialog.title"), "", parent)
         self.brand = brand
         self.original_text = original
         self.original_translation = translation
@@ -38,7 +39,7 @@ class EditTranslationDialog(MessageBox):
         layout.setContentsMargins(0, 0, 0, 0)
 
         # Brand (read-only)
-        brand_label = CaptionLabel("Brand:")
+        brand_label = CaptionLabel(self.tr("translations.brand"))
         brand_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
         brand_value = BodyLabel(brand)
         brand_value.setStyleSheet(f"""
@@ -50,7 +51,7 @@ class EditTranslationDialog(MessageBox):
         """)
 
         # Original (read-only)
-        original_label = CaptionLabel("Original Text:")
+        original_label = CaptionLabel(self.tr("translations.original"))
         original_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
         original_value = BodyLabel(original)
         original_value.setStyleSheet(f"""
@@ -61,11 +62,11 @@ class EditTranslationDialog(MessageBox):
         original_value.setWordWrap(True)
 
         # Translation (editable)
-        translation_label = CaptionLabel("Lithuanian Translation:")
+        translation_label = CaptionLabel(self.tr("translations.translation"))
         translation_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
         self.translation_input = LineEdit()
         self.translation_input.setText(translation)
-        self.translation_input.setPlaceholderText("Enter translation...")
+        self.translation_input.setPlaceholderText(self.tr("translations.translation.placeholder"))
 
         layout.addWidget(brand_label)
         layout.addWidget(brand_value)
@@ -79,8 +80,8 @@ class EditTranslationDialog(MessageBox):
         self.textLayout.addWidget(content_widget)
 
         # Update buttons
-        self.yesButton.setText("Save")
-        self.cancelButton.setText("Cancel")
+        self.yesButton.setText(self.tr("translations.dialog.save"))
+        self.cancelButton.setText(self.tr("translations.dialog.cancel"))
 
     def get_translation(self):
         """Get the edited translation"""
@@ -90,8 +91,9 @@ class EditTranslationDialog(MessageBox):
 class AddTranslationDialog(MessageBox):
     """Dialog for adding a new translation"""
 
-    def __init__(self, brands, parent=None):
-        super().__init__("Add New Translation", "", parent)
+    def __init__(self, brands, parent=None, tr=None):
+        self.tr = tr or (lambda k, **kw: k.format(**kw) if kw else k)
+        super().__init__(self.tr("translations.add_dialog.title"), "", parent)
 
         # Clear default content
         self.textLayout.removeWidget(self.contentLabel)
@@ -104,23 +106,23 @@ class AddTranslationDialog(MessageBox):
         layout.setContentsMargins(0, 0, 0, 0)
 
         # Brand selector
-        brand_label = CaptionLabel("Brand:")
+        brand_label = CaptionLabel(self.tr("translations.brand"))
         brand_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
         self.brand_combo = ComboBox()
         self.brand_combo.addItems(brands)
-        self.brand_combo.setPlaceholderText("Select brand...")
+        self.brand_combo.setPlaceholderText(self.tr("translations.brand.placeholder"))
 
         # Original text
-        original_label = CaptionLabel("Original Text:")
+        original_label = CaptionLabel(self.tr("translations.original"))
         original_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
         self.original_input = LineEdit()
-        self.original_input.setPlaceholderText("Enter original product name...")
+        self.original_input.setPlaceholderText(self.tr("translations.original.placeholder"))
 
         # Translation text
-        translation_label = CaptionLabel("Lithuanian Translation:")
+        translation_label = CaptionLabel(self.tr("translations.translation"))
         translation_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
         self.translation_input = LineEdit()
-        self.translation_input.setPlaceholderText("Enter translation...")
+        self.translation_input.setPlaceholderText(self.tr("translations.translation.placeholder"))
 
         layout.addWidget(brand_label)
         layout.addWidget(self.brand_combo)
@@ -134,8 +136,8 @@ class AddTranslationDialog(MessageBox):
         self.textLayout.addWidget(content_widget)
 
         # Update buttons
-        self.yesButton.setText("Add")
-        self.cancelButton.setText("Cancel")
+        self.yesButton.setText(self.tr("translations.dialog.add"))
+        self.cancelButton.setText(self.tr("translations.dialog.cancel"))
 
     def get_data(self):
         """Get the translation data"""
@@ -152,6 +154,7 @@ class TranslationsScreen(QWidget):
     def __init__(self, main_window, parent=None):
         super().__init__(parent)
         self.main = main_window
+        self._FILTER_ALL = "__all__"
         self.current_page = 0
         self.page_size = 20
         self.all_translations = []
@@ -192,16 +195,16 @@ class TranslationsScreen(QWidget):
         title_icon.setFixedSize(32, 32)
         title_icon.setEnabled(False)
 
-        title_label = TitleLabel("Product Translations")
+        self.title_label = TitleLabel("")
 
         title_container.addWidget(title_icon)
-        title_container.addWidget(title_label)
+        title_container.addWidget(self.title_label)
 
         header.addLayout(title_container)
         header.addStretch()
 
         # Statistics badge
-        self.stats_label = BodyLabel("0 translations")
+        self.stats_label = BodyLabel("")
         self.stats_label.setStyleSheet(f"""
             background-color: {COLORS['lavender_grey']};
             color: white;
@@ -222,47 +225,44 @@ class TranslationsScreen(QWidget):
 
         # Search bar - flexible width with min/max constraints
         self.search_input = SearchLineEdit()
-        self.search_input.setPlaceholderText("Search translations...")
+        self.search_input.setPlaceholderText("")
         self.search_input.setMinimumWidth(200)
         self.search_input.setMaximumWidth(400)
         self.search_input.textChanged.connect(self._apply_filters)
 
         # Brand filter - flexible width
-        brand_label = BodyLabel("Brand:")
+        self.brand_label = BodyLabel("")
+        brand_label = self.brand_label
         brand_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
 
         self.brand_filter = ComboBox()
-        self.brand_filter.addItems([
-            "All", "KROSS", "Pinarello", "Basso", "Factor",
-            "TREK", "Rondo", "Octane", "Rascal", "Lee Cougan"
-        ])
+        self._populate_brand_filter()
         self.brand_filter.setMinimumWidth(120)
         self.brand_filter.setMaximumWidth(180)
         self.brand_filter.currentTextChanged.connect(self._apply_filters)
 
         # Add button
-        add_btn = PrimaryPushButton("Add Translation")
-        add_btn.setIcon(FluentIcon.ADD)
-        add_btn.clicked.connect(self._show_add_dialog)
+        self.add_btn = PrimaryPushButton("")
+        self.add_btn.setIcon(FluentIcon.ADD)
+        self.add_btn.clicked.connect(self._show_add_dialog)
 
         # Refresh button
-        refresh_btn = TransparentToolButton(FluentIcon.SYNC, self)
-        refresh_btn.setToolTip("Refresh translations")
-        refresh_btn.clicked.connect(self._load_translations)
+        self.refresh_btn = TransparentToolButton(FluentIcon.SYNC, self)
+        self.refresh_btn.clicked.connect(self._load_translations)
 
         toolbar_layout.addWidget(self.search_input)
         toolbar_layout.addWidget(brand_label)
         toolbar_layout.addWidget(self.brand_filter)
         toolbar_layout.addStretch()
-        toolbar_layout.addWidget(add_btn)
-        toolbar_layout.addWidget(refresh_btn)
+        toolbar_layout.addWidget(self.add_btn)
+        toolbar_layout.addWidget(self.refresh_btn)
 
         layout.addWidget(toolbar_card)
 
         # === TABLE ===
         self.table = QTableWidget()
         self.table.setColumnCount(4)
-        self.table.setHorizontalHeaderLabels(["Brand", "Original", "Translation", "Actions"])
+        self.table.setHorizontalHeaderLabels(["", "", "", ""])
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
@@ -299,15 +299,13 @@ class TranslationsScreen(QWidget):
         pagination_layout.setContentsMargins(20, 12, 20, 12)
         pagination_layout.setSpacing(12)
 
-        self.page_info = BodyLabel("Page 1 of 1")
+        self.page_info = BodyLabel("")
         self.page_info.setStyleSheet(f"color: {COLORS['text_secondary']};")
 
         self.prev_btn = TransparentToolButton(FluentIcon.LEFT_ARROW, self)
-        self.prev_btn.setToolTip("Previous page")
         self.prev_btn.clicked.connect(self._prev_page)
 
         self.next_btn = TransparentToolButton(FluentIcon.RIGHT_ARROW, self)
-        self.next_btn.setToolTip("Next page")
         self.next_btn.clicked.connect(self._next_page)
 
         pagination_layout.addWidget(self.page_info)
@@ -316,6 +314,50 @@ class TranslationsScreen(QWidget):
         pagination_layout.addWidget(self.next_btn)
 
         layout.addWidget(pagination_card)
+
+        self.retranslate_ui()
+
+    def _populate_brand_filter(self):
+        tr = self.main.i18n.tr
+        current = self.brand_filter.currentData() if hasattr(self, 'brand_filter') else None
+
+        self.brand_filter.blockSignals(True)
+        self.brand_filter.clear()
+        self.brand_filter.addItem(tr("common.all"), self._FILTER_ALL)
+        for brand in ["KROSS", "Pinarello", "Basso", "Factor", "TREK", "Rondo", "Octane", "Rascal", "Lee Cougan"]:
+            self.brand_filter.addItem(brand, brand)
+        if current is not None:
+            idx = self.brand_filter.findData(current)
+            if idx >= 0:
+                self.brand_filter.setCurrentIndex(idx)
+        self.brand_filter.blockSignals(False)
+
+    def _translations_plural_suffix(self, count: int) -> str:
+        code = getattr(self.main.i18n.language, 'code', 'en')
+        if code == 'lt':
+            return 's' if count == 1 else 'i'
+        return '' if count == 1 else 's'
+
+    def retranslate_ui(self):
+        tr = self.main.i18n.tr
+
+        self.title_label.setText(tr("translations.title"))
+        self.search_input.setPlaceholderText(tr("translations.search.placeholder"))
+        self.brand_label.setText(tr("common.brand") + ":")
+        self.add_btn.setText(tr("translations.add"))
+        self.refresh_btn.setToolTip(tr("translations.refresh"))
+        self.prev_btn.setToolTip(tr("common.previous_page"))
+        self.next_btn.setToolTip(tr("common.next_page"))
+
+        self.table.setHorizontalHeaderLabels([
+            tr("translations.table.brand"),
+            tr("translations.table.original"),
+            tr("translations.table.translation"),
+            tr("translations.table.actions"),
+        ])
+
+        self._populate_brand_filter()
+        self._render_page()
 
     def _update_table_theme(self):
         """Update table styling based on current theme"""
@@ -379,8 +421,9 @@ class TranslationsScreen(QWidget):
             """).fetchall()
 
             # Update statistics
+            count = len(self.all_translations)
             self.stats_label.setText(
-                f"{len(self.all_translations)} translation{'s' if len(self.all_translations) != 1 else ''}"
+                self.main.i18n.tr("translations.stats", count=count, plural=self._translations_plural_suffix(count))
             )
 
             # Apply filters and render
@@ -388,7 +431,7 @@ class TranslationsScreen(QWidget):
 
         except Exception as ex:
             InfoBar.error(
-                title="Load Failed",
+                title=self.main.i18n.tr("translations.load_failed.title"),
                 content=str(ex),
                 parent=self,
                 position=InfoBarPosition.TOP
@@ -397,13 +440,13 @@ class TranslationsScreen(QWidget):
     def _apply_filters(self):
         """Filter translations and reset to first page"""
         search_text = self.search_input.text().lower()
-        brand_filter = self.brand_filter.currentText()
+        brand_filter = self.brand_filter.currentData()
 
         # Filter translations
         self.filtered_translations = []
         for brand, original, translation in self.all_translations:
             # Brand filter
-            if brand_filter != "All" and brand != brand_filter:
+            if brand_filter and brand_filter != self._FILTER_ALL and brand != brand_filter:
                 continue
 
             # Search filter
@@ -432,7 +475,12 @@ class TranslationsScreen(QWidget):
 
         # Update page info
         self.page_info.setText(
-            f"Page {self.current_page + 1} of {total_pages} ({len(self.filtered_translations)} results)"
+            self.main.i18n.tr(
+                "translations.page",
+                current=self.current_page + 1,
+                total=total_pages,
+                results=len(self.filtered_translations),
+            )
         )
 
         # Enable/disable pagination buttons
@@ -465,12 +513,12 @@ class TranslationsScreen(QWidget):
 
             edit_btn = TransparentToolButton(FluentIcon.EDIT, self)
             edit_btn.setFixedSize(32, 32)
-            edit_btn.setToolTip("Edit translation")
+            edit_btn.setToolTip(self.main.i18n.tr("translations.edit.tip"))
             edit_btn.clicked.connect(lambda checked, b=brand, o=original, t=translation: self._edit_translation(b, o, t))
 
             delete_btn = TransparentToolButton(FluentIcon.DELETE, self)
             delete_btn.setFixedSize(32, 32)
-            delete_btn.setToolTip("Delete translation")
+            delete_btn.setToolTip(self.main.i18n.tr("translations.delete.tip"))
             delete_btn.clicked.connect(lambda checked, b=brand, o=original: self._delete_translation(b, o))
 
             actions_layout.addWidget(edit_btn)
@@ -496,15 +544,15 @@ class TranslationsScreen(QWidget):
     def _show_add_dialog(self):
         """Show dialog to add new translation"""
         brands = ["KROSS", "Pinarello", "Basso", "Factor", "TREK", "Rondo", "Octane", "Rascal", "Lee Cougan"]
-        dialog = AddTranslationDialog(brands, self)
+        dialog = AddTranslationDialog(brands, self, tr=self.main.i18n.tr)
 
         if dialog.exec():
             brand, original, translation = dialog.get_data()
 
             if not brand or not original or not translation:
                 InfoBar.warning(
-                    title="Missing Information",
-                    content="Please fill in all fields",
+                    title=self.main.i18n.tr("translations.missing.title"),
+                    content=self.main.i18n.tr("translations.missing.content"),
                     parent=self,
                     position=InfoBarPosition.TOP
                 )
@@ -525,8 +573,8 @@ class TranslationsScreen(QWidget):
 
             if existing:
                 InfoBar.warning(
-                    title="Already Exists",
-                    content="This translation already exists",
+                    title=self.main.i18n.tr("translations.exists.title"),
+                    content=self.main.i18n.tr("translations.exists.content"),
                     parent=self,
                     position=InfoBarPosition.TOP
                 )
@@ -544,15 +592,15 @@ class TranslationsScreen(QWidget):
             self._load_translations()
 
             InfoBar.success(
-                title="Translation Added",
-                content=f"Added translation for '{original}'",
+                title=self.main.i18n.tr("translations.added.title"),
+                content=self.main.i18n.tr("translations.added.content", original=original),
                 parent=self,
                 position=InfoBarPosition.TOP
             )
 
         except Exception as ex:
             InfoBar.error(
-                title="Add Failed",
+                title=self.main.i18n.tr("translations.add_failed.title"),
                 content=str(ex),
                 parent=self,
                 position=InfoBarPosition.TOP
@@ -560,15 +608,15 @@ class TranslationsScreen(QWidget):
 
     def _edit_translation(self, brand, original, translation):
         """Show dialog to edit translation"""
-        dialog = EditTranslationDialog(brand, original, translation, self)
+        dialog = EditTranslationDialog(brand, original, translation, self, tr=self.main.i18n.tr)
 
         if dialog.exec():
             new_translation = dialog.get_translation()
 
             if not new_translation:
                 InfoBar.warning(
-                    title="Invalid Input",
-                    content="Translation cannot be empty",
+                    title=self.main.i18n.tr("translations.invalid.title"),
+                    content=self.main.i18n.tr("translations.invalid.content"),
                     parent=self,
                     position=InfoBarPosition.TOP
                 )
@@ -591,15 +639,15 @@ class TranslationsScreen(QWidget):
             self._load_translations()
 
             InfoBar.success(
-                title="Translation Updated",
-                content=f"Updated translation for '{original}'",
+                title=self.main.i18n.tr("translations.updated.title"),
+                content=self.main.i18n.tr("translations.updated.content", original=original),
                 parent=self,
                 position=InfoBarPosition.TOP
             )
 
         except Exception as ex:
             InfoBar.error(
-                title="Update Failed",
+                title=self.main.i18n.tr("translations.update_failed.title"),
                 content=str(ex),
                 parent=self,
                 position=InfoBarPosition.TOP
@@ -609,12 +657,12 @@ class TranslationsScreen(QWidget):
         """Delete translation with confirmation"""
         # Show confirmation dialog
         dialog = MessageBox(
-            "Delete Translation",
-            f"Are you sure you want to delete the translation for '{original}'?",
+            self.main.i18n.tr("translations.delete_confirm.title"),
+            self.main.i18n.tr("translations.delete_confirm.content", original=original),
             self
         )
-        dialog.yesButton.setText("Delete")
-        dialog.cancelButton.setText("Cancel")
+        dialog.yesButton.setText(self.main.i18n.tr("common.delete"))
+        dialog.cancelButton.setText(self.main.i18n.tr("common.cancel"))
 
         if dialog.exec():
             try:
@@ -630,15 +678,15 @@ class TranslationsScreen(QWidget):
                 self._load_translations()
 
                 InfoBar.success(
-                    title="Translation Deleted",
-                    content=f"Deleted translation for '{original}'",
+                    title=self.main.i18n.tr("translations.deleted.title"),
+                    content=self.main.i18n.tr("translations.deleted.content", original=original),
                     parent=self,
                     position=InfoBarPosition.TOP
                 )
 
             except Exception as ex:
                 InfoBar.error(
-                    title="Delete Failed",
+                    title=self.main.i18n.tr("translations.delete_failed.title"),
                     content=str(ex),
                     parent=self,
                     position=InfoBarPosition.TOP

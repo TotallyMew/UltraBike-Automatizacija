@@ -1,0 +1,733 @@
+"""GUI_Qt/i18n.py
+
+Lightweight in-app localization.
+
+This project currently stores language as a display string in DB settings
+(e.g., "English", "Lithuanian"). This module normalizes that into language
+codes ("en", "lt") and provides a signal for live UI updates.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any, Dict
+
+from PySide6.QtCore import QObject, Signal
+
+
+_LANG_DISPLAY_TO_CODE = {
+    "English": "en",
+    "Lithuanian": "lt",
+}
+
+_LANG_CODE_TO_DISPLAY = {v: k for k, v in _LANG_DISPLAY_TO_CODE.items()}
+
+
+TRANSLATIONS: Dict[str, Dict[str, str]] = {
+    "en": {
+        "app.title": "UltraBike product automation",
+
+        # Common
+        "common.all": "All",
+        "common.yes": "Yes",
+        "common.no": "No",
+        "common.ok": "OK",
+        "common.cancel": "Cancel",
+        "common.close": "Close",
+        "common.save": "Save",
+        "common.delete": "Delete",
+        "common.add": "Add",
+        "common.refresh": "Refresh",
+        "common.search": "Search",
+        "common.brand": "Brand",
+        "common.status": "Status",
+        "common.period": "Period",
+        "common.success": "Success",
+        "common.error": "Error",
+        "common.failed": "Failed",
+        "common.today": "Today",
+        "common.all_time": "All Time",
+        "common.last_7_days": "Last 7 Days",
+        "common.last_30_days": "Last 30 Days",
+        "common.previous_page": "Previous page",
+        "common.next_page": "Next page",
+        "common.items_per_page": "items per page",
+        "common.na": "N/A",
+        "common.export_excel": "Export to Excel",
+
+        "nav.upload": "Upload",
+        "nav.batch": "Batch upload",
+        "nav.history": "History",
+        "nav.translations": "Translations",
+        "nav.descriptions": "Descriptions",
+        "nav.settings": "Settings",
+
+        # Loading
+        "loading.title": "UltraBike",
+        "loading.default": "Loading...",
+        "loading.connecting": "Connecting to PrestaShop...",
+
+        # Top bar
+        "topbar.logged_in": "Logged in: {email}",
+        "topbar.logout": "Log out",
+
+        # Login
+        "login.title": "UltraBike Automation",
+        "login.subtitle": "Sign in to PrestaShop",
+        "login.email": "Email:",
+        "login.email.placeholder": "your@email.com",
+        "login.password": "Password:",
+        "login.password.placeholder": "••••••••",
+        "login.browser": "Browser:",
+        "login.button": "Sign in",
+        "login.success.title": "Success",
+        "login.success.content": "Login successful!",
+        "login.failed.title": "Login Failed",
+        "login.browser_init_failed": "Failed to initialize browser",
+        "login.ok": "Login successful",
+        "login.invalid_credentials": "Invalid credentials",
+
+        # Upload screen
+        "upload.title": "Upload Product",
+        "upload.brand.label": "Brand",
+        "upload.brand.caption": "Select the product manufacturer",
+        "upload.code.label": "Product Code",
+        "upload.code.caption": "Internal product identifier (e.g., UB-XXXX)",
+        "upload.code.placeholder": "UB-XXXX",
+        "upload.url.label": "Product URL or Code",
+        "upload.url.caption": "Manufacturer's product URL or code",
+        "upload.url.placeholder": "https://... or product code",
+        "upload.desc.label": "Description Template",
+        "upload.desc.caption": "Select a description template",
+        "upload.desc.select": "Select description...",
+        "upload.desc.refresh": "Refresh descriptions",
+        "upload.options.title": "Upload Options",
+        "upload.disclaimer": "Include disclaimer",
+        "upload.disclaimer.tip": "Adds disclaimer text to product description",
+        "upload.disclaimer.info.title": "Disclaimer Information",
+        "upload.disclaimer.info.content": "The disclaimer adds important legal and warranty information to the product description.",
+        "upload.frameset": "Frameset only",
+        "upload.frameset.tip": "Upload as frameset (Pinarello only)",
+        "upload.button": "Upload Product",
+        "upload.status.uploading": "Uploading...",
+        "upload.status.starting": "Starting upload...",
+        "upload.done": "Upload completed successfully!",
+        "upload.failed": "Upload failed: {error}",
+        "upload.in_progress.title": "Upload in Progress",
+        "upload.in_progress.content": "Please wait for the current upload to complete",
+        "upload.invalid_brand.title": "Invalid Brand",
+        "upload.uploader_error.title": "Uploader Error",
+        "upload.uploader_error.content": "Failed to create uploader: {error}",
+        "upload.load_failed.title": "Load Failed",
+        "upload.load_failed.content": "Failed to load descriptions: {error}",
+        "upload.success.title": "Upload Successful",
+        "upload.failed.title": "Upload Failed",
+
+        # Upload retry dialog
+        "upload.retry.title": "Product not found",
+        "upload.retry.content": "You can try again with the same or a new code.",
+        "upload.retry.placeholder": "Example: UB-1234 (leave empty to retry same code)",
+        "upload.retry.yes": "Retry",
+        "upload.retry.cancel": "Cancel",
+
+        # Batch upload screen
+        "batch.title": "Batch Upload",
+        "batch.mode.manual": "Manual Entry",
+        "batch.mode.excel": "Excel Upload",
+        "batch.add_row": "Add Row",
+        "batch.clear_all": "Clear All",
+        "batch.bulk_select": "Bulk select:",
+        "batch.bulk.frameset": "Frameset",
+        "batch.bulk.frameset.tip": "Select all Pinarello framesets",
+        "batch.bulk.disclaimer": "Disclaimer",
+        "batch.bulk.disclaimer.tip": "Select all disclaimers",
+        "batch.browse_excel": "Browse Excel File",
+        "batch.download_template": "Download Template",
+        "batch.no_file": "No file selected",
+        "batch.drop.title": "Drop your Excel file here",
+        "batch.drop.subtitle": "or click to browse",
+        "batch.table.brand": "Brand",
+        "batch.table.code": "Product Code",
+        "batch.table.url": "URL / Code",
+        "batch.table.desc": "Description",
+        "batch.table.frameset": "Frameset",
+        "batch.table.disclaimer": "Disclaimer",
+        "batch.select_brand": "Select brand",
+        "batch.optional": "Optional",
+        "batch.status.ready": "Ready to start",
+        "batch.status.ready_one": "✓ {count} product ready",
+        "batch.status.ready_many": "✓ {count} products ready",
+        "batch.status.need_one": "Add at least one product to continue",
+        "batch.start": "Start Batch Upload",
+        "batch.row.remove.tip": "Remove row",
+        "batch.bulk.toggle.tip": "Select/Deselect all",
+        "batch.preview.title": "Preview",
+        "batch.file.select_excel.title": "Select Excel File",
+        "batch.file.select_excel.filter": "Excel files (*.xlsx);;All files (*.*)",
+        "batch.template.save_as.title": "Save Template As",
+        "batch.template.default_name": "ultrabike_batch_template.xlsx",
+        "batch.template.filter": "Excel files (*.xlsx)",
+        "batch.template.saved": "Template saved to {path}",
+        "batch.template.save_failed": "Failed to save template: {error}",
+        "batch.excel.header_missing": "Could not find header row",
+        "batch.excel.header_missing_in_file": "Could not find header row in Excel file",
+        "batch.excel.rows_valid_invalid": "{valid} valid, {invalid} invalid rows",
+        "batch.excel.rows_valid_ready": "{valid} valid rows ready",
+        "batch.excel.rows_fix_errors": "⚠ {valid} valid, {invalid} invalid rows - fix errors to continue",
+        "batch.excel.ready_from_excel_one": "✓ {count} product ready from Excel",
+        "batch.excel.ready_from_excel_many": "✓ {count} products ready from Excel",
+        "batch.excel.load_failed": "Failed to load Excel: {error}",
+        "batch.excel.error": "Error: {error}",
+        "batch.template.save.title": "Save Template",
+        "batch.template.downloaded": "Template downloaded successfully",
+
+        # History
+        "history.title": "Processing History",
+        "history.stats.total": "Total Uploads",
+        "history.stats.success_rate": "Success Rate",
+        "history.stats.avg_duration": "Avg Duration",
+        "history.stats.today": "Today",
+        "history.refresh": "Refresh history",
+        "history.page": "Page {current} of {total}",
+        "history.no_records": "No records found matching the selected filters",
+        "history.no_data.title": "No Data",
+        "history.no_data.content": "No records found to export",
+        "history.export.title": "Export History",
+        "history.export.success.title": "Export Successful",
+        "history.export.success.content": "History exported to {path}",
+        "history.export.failed.title": "Export Failed",
+        "history.sheet.title": "Processing History",
+        "history.excel.filter": "Excel Files (*.xlsx)",
+        "history.metric.duration": "Duration",
+        "history.metric.features": "Features",
+        "history.metric.images": "Images",
+        "history.failed_prefix": "Failed: {stage}",
+        "history.error_prefix": "Error: {error}",
+
+        # Translations
+        "translations.title": "Product Translations",
+        "translations.stats": "{count} translation{plural}",
+        "translations.search.placeholder": "Search translations...",
+        "translations.refresh": "Refresh translations",
+        "translations.add": "Add Translation",
+        "translations.table.brand": "Brand",
+        "translations.table.original": "Original",
+        "translations.table.translation": "Translation",
+        "translations.table.actions": "Actions",
+        "translations.page": "Page {current} of {total} ({results} results)",
+        "translations.edit.tip": "Edit translation",
+        "translations.delete.tip": "Delete translation",
+        "translations.load_failed.title": "Load Failed",
+        "translations.add_dialog.title": "Add New Translation",
+        "translations.edit_dialog.title": "Edit Translation",
+        "translations.brand": "Brand:",
+        "translations.brand.placeholder": "Select brand...",
+        "translations.original": "Original Text:",
+        "translations.original.placeholder": "Enter original product name...",
+        "translations.translation": "Lithuanian Translation:",
+        "translations.translation.placeholder": "Enter translation...",
+        "translations.dialog.add": "Add",
+        "translations.dialog.save": "Save",
+        "translations.dialog.cancel": "Cancel",
+        "translations.missing.title": "Missing Information",
+        "translations.missing.content": "Please fill in all fields",
+        "translations.exists.title": "Already Exists",
+        "translations.exists.content": "This translation already exists",
+        "translations.added.title": "Translation Added",
+        "translations.added.content": "Added translation for '{original}'",
+        "translations.add_failed.title": "Add Failed",
+        "translations.invalid.title": "Invalid Input",
+        "translations.invalid.content": "Translation cannot be empty",
+        "translations.updated.title": "Translation Updated",
+        "translations.updated.content": "Updated translation for '{original}'",
+        "translations.update_failed.title": "Update Failed",
+        "translations.delete_confirm.title": "Delete Translation",
+        "translations.delete_confirm.content": "Are you sure you want to delete the translation for '{original}'?",
+        "translations.deleted.title": "Translation Deleted",
+        "translations.deleted.content": "Deleted translation for '{original}'",
+        "translations.delete_failed.title": "Delete Failed",
+
+        # Descriptions
+        "descriptions.title": "Product Descriptions",
+        "descriptions.saved": "Saved Descriptions",
+        "descriptions.refresh": "Refresh list",
+        "descriptions.load_failed.title": "Load Failed",
+        "descriptions.new": "New",
+        "descriptions.delete": "Delete",
+        "descriptions.save": "Save",
+        "descriptions.editor.warning": "HTML only - paste from SVENG.txt, SVLT.txt, SVLV.txt",
+        "descriptions.editor.placeholder": "Paste HTML here (e.g., <h1>Title</h1>, <p>Text</p>)...",
+        "descriptions.loaded.title": "Loaded",
+        "descriptions.loaded.content": "Loaded '{name}'",
+        "descriptions.editing": "Editing: {name}{indicator}",
+        "descriptions.new_indicator": "New Description (not saved) *",
+        "descriptions.new.title": "New Description",
+        "descriptions.new.content": "Ready to create new description",
+        "descriptions.save_dialog.title": "Save Description",
+        "descriptions.save_dialog.prompt": "Enter description name:",
+        "descriptions.saved.title": "Saved",
+        "descriptions.saved.content": "Description '{name}' saved",
+        "descriptions.save_failed.title": "Save Failed",
+        "descriptions.delete_confirm.title": "Confirm Delete",
+        "descriptions.delete_confirm.content": "Delete description '{name}'?",
+        "descriptions.deleted.title": "Deleted",
+        "descriptions.deleted.content": "Deleted '{name}'",
+        "descriptions.delete_failed.title": "Delete Failed",
+
+        # Master password screens
+        "master.setup.title": "Welcome to UltraBike",
+        "master.setup.subtitle": "Set up your master password to secure your credentials",
+        "master.password.label": "Master Password:",
+        "master.password.placeholder": "Enter a strong password",
+        "master.confirm.label": "Confirm Password:",
+        "master.confirm.placeholder": "Re-enter password",
+        "master.create": "Create Master Password",
+        "master.created.title": "Success",
+        "master.created.content": "Master password created successfully!",
+        "master.prompt.title": "Session Expired",
+        "master.prompt.subtitle": "Enter your master password to continue",
+        "master.unlock": "Unlock",
+        "master.verified.title": "Success",
+        "master.verified.content": "Master password verified!",
+        "master.invalid.title": "Error",
+        "master.invalid.content": "Invalid master password",
+
+        # MainWindow prompt dialogs (ErrorManager)
+        "prompt.retry.title": "Retry Operation",
+        "prompt.retry.placeholder": "Enter new code to retry or leave empty to keep same",
+        "prompt.retry.yes": "Retry",
+        "prompt.retry.cancel": "Cancel",
+        "prompt.continue.title": "Continue?",
+        "prompt.continue.content": "Do you want to continue?",
+        "prompt.continue.yes": "Yes",
+        "prompt.continue.no": "No",
+        "prompt.exit_or_retry.title": "Error",
+        "prompt.exit_or_retry.content": "(1) Retry, (2) Exit",
+        "prompt.exit_or_retry.retry": "Retry",
+        "prompt.exit_or_retry.exit": "Exit",
+        "settings.title": "Settings",
+        "settings.language.title": "Language",
+        "settings.language.desc": "Choose your preferred language for the application",
+        "settings.language.label": "Language:",
+        "settings.language.placeholder": "Select language",
+        "settings.browser.title": "Browser settings",
+        "settings.browser.desc": "Select your preferred browser for automation",
+        "settings.browser.label": "Browser:",
+        "settings.features.title": "Features",
+        "settings.features.download.title": "Download and upload images",
+        "settings.features.download.desc": "Automatically download and upload bicycle images",
+        "settings.features.autosave.title": "Auto-save",
+        "settings.features.autosave.desc": "Automatically save product updates after upload",
+        "settings.features.extended.title": "Extended mode",
+        "settings.features.extended.desc": "Enable folder creator and scraper menu",
+        "settings.appearance.title": "Appearance",
+        "settings.appearance.desc": "Customize the look and feel of the application",
+        "settings.appearance.dark.title": "Dark theme",
+        "settings.appearance.dark.desc": "Switch between light and dark mode",
+        "settings.paths.title": "File paths",
+        "settings.paths.desc": "Configure file storage locations",
+        "settings.paths.kross.title": "KROSS images download path",
+        "settings.paths.repo.title": "Bicycle folder repository path",
+        "settings.paths.browse": "Browse",
+        "settings.paths.placeholder": "Select folder...",
+        "settings.paths.select_folder.title": "Select Folder",
+        "settings.about.title": "About",
+        "settings.about.app": "UltraBike product automation",
+        "settings.about.version": "Version 2.0 - Qt Edition",
+        "settings.save": "Save all settings",
+        "settings.saved.title": "Settings saved",
+        "settings.saved.content": "All settings have been saved successfully",
+        "settings.save_failed.title": "Save failed",
+        "settings.save_failed.content": "Failed to save settings: {error}",
+    },
+    "lt": {
+        "app.title": "UltraBike prekių automatizacija",
+
+        # Common
+        "common.all": "Visi",
+        "common.yes": "Taip",
+        "common.no": "Ne",
+        "common.ok": "Gerai",
+        "common.cancel": "Atšaukti",
+        "common.close": "Uždaryti",
+        "common.save": "Išsaugoti",
+        "common.delete": "Ištrinti",
+        "common.add": "Pridėti",
+        "common.refresh": "Atnaujinti",
+        "common.search": "Ieškoti",
+        "common.brand": "Gamintojas",
+        "common.status": "Būsena",
+        "common.period": "Laikotarpis",
+        "common.success": "Sėkminga",
+        "common.error": "Klaida",
+        "common.failed": "Nepavyko",
+        "common.today": "Šiandien",
+        "common.all_time": "Visas laikotarpis",
+        "common.last_7_days": "Paskutinės 7 dienos",
+        "common.last_30_days": "Paskutinės 30 dienų",
+        "common.previous_page": "Ankstesnis puslapis",
+        "common.next_page": "Kitas puslapis",
+        "common.items_per_page": "įrašų puslapyje",
+        "common.na": "N/A",
+        "common.export_excel": "Eksportuoti į Excel",
+
+        "nav.upload": "Įkelti",
+        "nav.batch": "Masinis įkėlimas",
+        "nav.history": "Istorija",
+        "nav.translations": "Vertimai",
+        "nav.descriptions": "Aprašymai",
+        "nav.settings": "Nustatymai",
+
+        # Loading
+        "loading.title": "UltraBike",
+        "loading.default": "Kraunama...",
+        "loading.connecting": "Jungiamasi į PrestaShop...",
+
+        # Top bar
+        "topbar.logged_in": "Prisijungęs: {email}",
+        "topbar.logout": "Atsijungti",
+
+        # Login
+        "login.title": "UltraBike automatizacija",
+        "login.subtitle": "Prisijunkite prie PrestaShop",
+        "login.email": "El. paštas:",
+        "login.email.placeholder": "jusu@email.lt",
+        "login.password": "Slaptažodis:",
+        "login.password.placeholder": "••••••••",
+        "login.browser": "Naršyklė:",
+        "login.button": "Prisijungti",
+        "login.success.title": "Sėkmingai",
+        "login.success.content": "Prisijungta sėkmingai!",
+        "login.failed.title": "Nepavyko prisijungti",
+        "login.browser_init_failed": "Nepavyko inicijuoti naršyklės",
+        "login.ok": "Prisijungta sėkmingai",
+        "login.invalid_credentials": "Neteisingi prisijungimo duomenys",
+
+        # Upload screen
+        "upload.title": "Įkelti prekę",
+        "upload.brand.label": "Gamintojas",
+        "upload.brand.caption": "Pasirinkite prekės gamintoją",
+        "upload.code.label": "Prekės kodas",
+        "upload.code.caption": "Vidinis prekės identifikatorius (pvz., UB-XXXX)",
+        "upload.code.placeholder": "UB-XXXX",
+        "upload.url.label": "Prekės URL arba kodas",
+        "upload.url.caption": "Gamintojo prekės URL arba kodas",
+        "upload.url.placeholder": "https://... arba prekės kodas",
+        "upload.desc.label": "Aprašymo šablonas",
+        "upload.desc.caption": "Pasirinkite aprašymo šabloną",
+        "upload.desc.select": "Pasirinkite aprašymą...",
+        "upload.desc.refresh": "Atnaujinti aprašymus",
+        "upload.options.title": "Įkėlimo parinktys",
+        "upload.disclaimer": "Pridėti disclaimer",
+        "upload.disclaimer.tip": "Prideda disclaimer tekstą į prekės aprašymą",
+        "upload.disclaimer.info.title": "Disclaimer informacija",
+        "upload.disclaimer.info.content": "Disclaimer prideda svarbią teisinę ir garantinę informaciją į prekės aprašymą.",
+        "upload.frameset": "Tik frameset",
+        "upload.frameset.tip": "Įkelti kaip frameset (tik Pinarello)",
+        "upload.button": "Įkelti prekę",
+        "upload.status.uploading": "Įkeliama...",
+        "upload.status.starting": "Pradedamas įkėlimas...",
+        "upload.done": "Įkėlimas sėkmingai baigtas!",
+        "upload.failed": "Įkėlimas nepavyko: {error}",
+        "upload.in_progress.title": "Vyksta įkėlimas",
+        "upload.in_progress.content": "Palaukite, kol baigsis dabartinis įkėlimas",
+        "upload.invalid_brand.title": "Neteisingas gamintojas",
+        "upload.uploader_error.title": "Uploader klaida",
+        "upload.uploader_error.content": "Nepavyko sukurti uploader: {error}",
+        "upload.load_failed.title": "Nepavyko įkelti",
+        "upload.load_failed.content": "Nepavyko įkelti aprašymų: {error}",
+        "upload.success.title": "Įkelta sėkmingai",
+        "upload.failed.title": "Įkėlimas nepavyko",
+
+        # Upload retry dialog
+        "upload.retry.title": "Nepavyko rasti prekės",
+        "upload.retry.content": "Galite bandyti dar kartą su tuo pačiu arba nauju kodu.",
+        "upload.retry.placeholder": "Pvz.: UB-1234 (palikite tuščią, kad bandytumėte tą patį kodą)",
+        "upload.retry.yes": "Bandyti iš naujo",
+        "upload.retry.cancel": "Atšaukti",
+
+        # Batch upload screen
+        "batch.title": "Masinis įkėlimas",
+        "batch.mode.manual": "Rankinis įvedimas",
+        "batch.mode.excel": "Excel įkėlimas",
+        "batch.add_row": "Pridėti eilutę",
+        "batch.clear_all": "Išvalyti viską",
+        "batch.bulk_select": "Masinis pasirinkimas:",
+        "batch.bulk.frameset": "Frameset",
+        "batch.bulk.frameset.tip": "Pažymėti visus Pinarello frameset",
+        "batch.bulk.disclaimer": "Disclaimer",
+        "batch.bulk.disclaimer.tip": "Pažymėti visus disclaimer",
+        "batch.browse_excel": "Pasirinkti Excel failą",
+        "batch.download_template": "Atsisiųsti šabloną",
+        "batch.no_file": "Failas nepasirinktas",
+        "batch.drop.title": "Įmeskite Excel failą čia",
+        "batch.drop.subtitle": "arba paspauskite, kad pasirinktumėte",
+        "batch.table.brand": "Gamintojas",
+        "batch.table.code": "Prekės kodas",
+        "batch.table.url": "URL / kodas",
+        "batch.table.desc": "Aprašymas",
+        "batch.table.frameset": "Frameset",
+        "batch.table.disclaimer": "Disclaimer",
+        "batch.select_brand": "Pasirinkti gamintoją",
+        "batch.optional": "Nebūtina",
+        "batch.status.ready": "Pasiruošta",
+        "batch.status.ready_one": "✓ Paruošta: {count} prekė",
+        "batch.status.ready_many": "✓ Paruošta: {count} prek.",
+        "batch.status.need_one": "Pridėkite bent vieną prekę, kad tęstumėte",
+        "batch.start": "Pradėti masinį įkėlimą",
+        "batch.row.remove.tip": "Pašalinti eilutę",
+        "batch.bulk.toggle.tip": "Pažymėti/nuimti visus",
+        "batch.preview.title": "Peržiūra",
+        "batch.file.select_excel.title": "Pasirinkti Excel failą",
+        "batch.file.select_excel.filter": "Excel failai (*.xlsx);;Visi failai (*.*)",
+        "batch.template.save_as.title": "Išsaugoti šabloną kaip",
+        "batch.template.default_name": "ultrabike_batch_template.xlsx",
+        "batch.template.filter": "Excel failai (*.xlsx)",
+        "batch.template.saved": "Šablonas išsaugotas: {path}",
+        "batch.template.save_failed": "Nepavyko išsaugoti šablono: {error}",
+        "batch.excel.header_missing": "Nepavyko rasti antraštės eilutės",
+        "batch.excel.header_missing_in_file": "Nepavyko rasti antraštės eilutės Excel faile",
+        "batch.excel.rows_valid_invalid": "Tinkamos: {valid}, netinkamos: {invalid}",
+        "batch.excel.rows_valid_ready": "Paruošta tinkamų eilučių: {valid}",
+        "batch.excel.rows_fix_errors": "⚠ Tinkamos: {valid}, netinkamos: {invalid} – pataisykite klaidas, kad tęstumėte",
+        "batch.excel.ready_from_excel_one": "✓ Paruošta iš Excel: {count} prekė",
+        "batch.excel.ready_from_excel_many": "✓ Paruošta iš Excel: {count} prek.",
+        "batch.excel.load_failed": "Nepavyko įkelti Excel: {error}",
+        "batch.excel.error": "Klaida: {error}",
+        "batch.template.save.title": "Išsaugoti šabloną",
+        "batch.template.downloaded": "Šablonas sėkmingai atsisiųstas",
+
+        # History
+        "history.title": "Apdorojimo istorija",
+        "history.stats.total": "Viso įkėlimų",
+        "history.stats.success_rate": "Sėkmės procentas",
+        "history.stats.avg_duration": "Vid. trukmė",
+        "history.stats.today": "Šiandien",
+        "history.refresh": "Atnaujinti istoriją",
+        "history.page": "Puslapis {current} iš {total}",
+        "history.no_records": "Nerasta įrašų pagal pasirinktus filtrus",
+        "history.no_data.title": "Nėra duomenų",
+        "history.no_data.content": "Nėra įrašų eksportavimui",
+        "history.export.title": "Eksportuoti istoriją",
+        "history.export.success.title": "Eksportuota sėkmingai",
+        "history.export.success.content": "Istorija eksportuota į {path}",
+        "history.export.failed.title": "Eksportuoti nepavyko",
+        "history.sheet.title": "Apdorojimo istorija",
+        "history.excel.filter": "Excel failai (*.xlsx)",
+        "history.metric.duration": "Trukmė",
+        "history.metric.features": "Savybės",
+        "history.metric.images": "Nuotraukos",
+        "history.failed_prefix": "Nepavyko: {stage}",
+        "history.error_prefix": "Klaida: {error}",
+
+        # Translations
+        "translations.title": "Prekių vertimai",
+        "translations.stats": "{count} vertima{plural}",
+        "translations.search.placeholder": "Ieškoti vertimų...",
+        "translations.refresh": "Atnaujinti vertimus",
+        "translations.add": "Pridėti vertimą",
+        "translations.table.brand": "Gamintojas",
+        "translations.table.original": "Originalas",
+        "translations.table.translation": "Vertimas",
+        "translations.table.actions": "Veiksmai",
+        "translations.page": "Puslapis {current} iš {total} ({results} rezultatų)",
+        "translations.edit.tip": "Redaguoti vertimą",
+        "translations.delete.tip": "Ištrinti vertimą",
+        "translations.load_failed.title": "Nepavyko įkelti",
+        "translations.add_dialog.title": "Pridėti naują vertimą",
+        "translations.edit_dialog.title": "Redaguoti vertimą",
+        "translations.brand": "Gamintojas:",
+        "translations.brand.placeholder": "Pasirinkite gamintoją...",
+        "translations.original": "Originalus tekstas:",
+        "translations.original.placeholder": "Įveskite originalų prekės pavadinimą...",
+        "translations.translation": "Lietuviškas vertimas:",
+        "translations.translation.placeholder": "Įveskite vertimą...",
+        "translations.dialog.add": "Pridėti",
+        "translations.dialog.save": "Išsaugoti",
+        "translations.dialog.cancel": "Atšaukti",
+        "translations.missing.title": "Trūksta informacijos",
+        "translations.missing.content": "Užpildykite visus laukus",
+        "translations.exists.title": "Jau egzistuoja",
+        "translations.exists.content": "Šis vertimas jau egzistuoja",
+        "translations.added.title": "Vertimas pridėtas",
+        "translations.added.content": "Pridėtas vertimas: '{original}'",
+        "translations.add_failed.title": "Pridėti nepavyko",
+        "translations.invalid.title": "Neteisinga įvestis",
+        "translations.invalid.content": "Vertimas negali būti tuščias",
+        "translations.updated.title": "Vertimas atnaujintas",
+        "translations.updated.content": "Atnaujintas vertimas: '{original}'",
+        "translations.update_failed.title": "Atnaujinti nepavyko",
+        "translations.delete_confirm.title": "Ištrinti vertimą",
+        "translations.delete_confirm.content": "Ar tikrai norite ištrinti vertimą: '{original}'?",
+        "translations.deleted.title": "Vertimas ištrintas",
+        "translations.deleted.content": "Ištrintas vertimas: '{original}'",
+        "translations.delete_failed.title": "Ištrinti nepavyko",
+
+        # Descriptions
+        "descriptions.title": "Prekių aprašymai",
+        "descriptions.saved": "Išsaugoti aprašymai",
+        "descriptions.refresh": "Atnaujinti sąrašą",
+        "descriptions.load_failed.title": "Nepavyko įkelti",
+        "descriptions.new": "Naujas",
+        "descriptions.delete": "Ištrinti",
+        "descriptions.save": "Išsaugoti",
+        "descriptions.editor.warning": "Tik HTML – įklijuokite iš SVENG.txt, SVLT.txt, SVLV.txt",
+        "descriptions.editor.placeholder": "Įklijuokite HTML čia (pvz., <h1>Pavadinimas</h1>, <p>Tekstas</p>)...",
+        "descriptions.loaded.title": "Įkelta",
+        "descriptions.loaded.content": "Įkelta '{name}'",
+        "descriptions.editing": "Redaguojama: {name}{indicator}",
+        "descriptions.new_indicator": "Naujas aprašymas (neišsaugota) *",
+        "descriptions.new.title": "Naujas aprašymas",
+        "descriptions.new.content": "Pasiruošta kurti naują aprašymą",
+        "descriptions.save_dialog.title": "Išsaugoti aprašymą",
+        "descriptions.save_dialog.prompt": "Įveskite aprašymo pavadinimą:",
+        "descriptions.saved.title": "Išsaugota",
+        "descriptions.saved.content": "Aprašymas '{name}' išsaugotas",
+        "descriptions.save_failed.title": "Išsaugoti nepavyko",
+        "descriptions.delete_confirm.title": "Patvirtinkite trynimą",
+        "descriptions.delete_confirm.content": "Ištrinti aprašymą '{name}'?",
+        "descriptions.deleted.title": "Ištrinta",
+        "descriptions.deleted.content": "Ištrinta '{name}'",
+        "descriptions.delete_failed.title": "Ištrinti nepavyko",
+
+        # Master password screens
+        "master.setup.title": "Sveiki atvykę į UltraBike",
+        "master.setup.subtitle": "Sukurkite pagrindinį slaptažodį, kad apsaugotumėte prisijungimus",
+        "master.password.label": "Pagrindinis slaptažodis:",
+        "master.password.placeholder": "Įveskite stiprų slaptažodį",
+        "master.confirm.label": "Pakartokite slaptažodį:",
+        "master.confirm.placeholder": "Pakartokite slaptažodį",
+        "master.create": "Sukurti pagrindinį slaptažodį",
+        "master.created.title": "Sėkmingai",
+        "master.created.content": "Pagrindinis slaptažodis sukurtas!",
+        "master.prompt.title": "Sesija baigėsi",
+        "master.prompt.subtitle": "Įveskite pagrindinį slaptažodį, kad tęstumėte",
+        "master.unlock": "Atrakinti",
+        "master.verified.title": "Sėkmingai",
+        "master.verified.content": "Pagrindinis slaptažodis patvirtintas!",
+        "master.invalid.title": "Klaida",
+        "master.invalid.content": "Neteisingas pagrindinis slaptažodis",
+
+        # MainWindow prompt dialogs (ErrorManager)
+        "prompt.retry.title": "Bandyti dar kartą",
+        "prompt.retry.placeholder": "Įveskite naują kodą arba palikite tuščią, kad bandytumėte tą patį",
+        "prompt.retry.yes": "Bandyti",
+        "prompt.retry.cancel": "Atšaukti",
+        "prompt.continue.title": "Tęsti?",
+        "prompt.continue.content": "Ar norite tęsti?",
+        "prompt.continue.yes": "Taip",
+        "prompt.continue.no": "Ne",
+        "prompt.exit_or_retry.title": "Klaida",
+        "prompt.exit_or_retry.content": "(1) Bandyti dar kartą, (2) Išeiti",
+        "prompt.exit_or_retry.retry": "Bandyti",
+        "prompt.exit_or_retry.exit": "Išeiti",
+        "settings.title": "Nustatymai",
+        "settings.language.title": "Kalba",
+        "settings.language.desc": "Pasirinkite programos kalbą",
+        "settings.language.label": "Kalba:",
+        "settings.language.placeholder": "Pasirinkite kalbą",
+        "settings.browser.title": "Naršyklės nustatymai",
+        "settings.browser.desc": "Pasirinkite naršyklę automatizacijai",
+        "settings.browser.label": "Naršyklė:",
+        "settings.features.title": "Funkcijos",
+        "settings.features.download.title": "Atsisiųsti ir įkelti nuotraukas",
+        "settings.features.download.desc": "Automatiškai atsisiųsti ir įkelti dviračių nuotraukas",
+        "settings.features.autosave.title": "Auto-išsaugojimas",
+        "settings.features.autosave.desc": "Automatiškai išsaugoti pakeitimus po įkėlimo",
+        "settings.features.extended.title": "Išplėstinis režimas",
+        "settings.features.extended.desc": "Įjungti aplankų kūrėją ir scraper meniu",
+        "settings.appearance.title": "Išvaizda",
+        "settings.appearance.desc": "Pritaikykite programos išvaizdą",
+        "settings.appearance.dark.title": "Tamsi tema",
+        "settings.appearance.dark.desc": "Perjungti šviesią / tamsią temą",
+        "settings.paths.title": "Failų keliai",
+        "settings.paths.desc": "Sukonfigūruokite failų saugojimo vietas",
+        "settings.paths.kross.title": "KROSS nuotraukų atsisiuntimo kelias",
+        "settings.paths.repo.title": "Dviračių aplankų saugyklos kelias",
+        "settings.paths.browse": "Naršyti",
+        "settings.paths.placeholder": "Pasirinkite aplanką...",
+        "settings.paths.select_folder.title": "Pasirinkti aplanką",
+        "settings.about.title": "Apie",
+        "settings.about.app": "UltraBike prekių automatizacija",
+        "settings.about.version": "Versija 2.0 - Qt leidimas",
+        "settings.save": "Išsaugoti nustatymus",
+        "settings.saved.title": "Nustatymai išsaugoti",
+        "settings.saved.content": "Visi nustatymai sėkmingai išsaugoti",
+        "settings.save_failed.title": "Nepavyko išsaugoti",
+        "settings.save_failed.content": "Nepavyko išsaugoti nustatymų: {error}",
+    },
+}
+
+
+def normalize_language(value: Any, fallback: str = "en") -> str:
+    """Normalize a stored/display language value to a language code."""
+    if not value:
+        return fallback
+    if isinstance(value, str):
+        v = value.strip()
+        if v in TRANSLATIONS:
+            return v
+        if v in _LANG_DISPLAY_TO_CODE:
+            return _LANG_DISPLAY_TO_CODE[v]
+    return fallback
+
+
+def translate(lang_code: str, key: str, **kwargs) -> str:
+    """Translate a key using an explicit language code (no side effects)."""
+    code = normalize_language(lang_code, "en")
+    text = TRANSLATIONS.get(code, {}).get(key)
+    if text is None:
+        text = TRANSLATIONS.get("en", {}).get(key, key)
+
+    try:
+        return text.format(**kwargs)
+    except Exception:
+        return text
+
+
+@dataclass(frozen=True)
+class Language:
+    code: str
+
+    @property
+    def display(self) -> str:
+        return _LANG_CODE_TO_DISPLAY.get(self.code, "English")
+
+
+class I18nManager(QObject):
+    """Simple translation manager with a Qt signal for UI updates."""
+
+    languageChanged = Signal(str)  # emits language code
+
+    def __init__(self, settings_manager=None, default_language: str = "en"):
+        super().__init__()
+        self._settings = settings_manager
+        self._language = normalize_language(
+            settings_manager.get("language", None) if settings_manager else None,
+            default_language,
+        )
+
+    @property
+    def language(self) -> Language:
+        return Language(self._language)
+
+    def _normalize_language(self, value: Any, fallback: str) -> str:
+        return normalize_language(value, fallback)
+
+    def set_language(self, language: str, *, persist: bool = False) -> None:
+        code = self._normalize_language(language, self._language)
+        if code == self._language:
+            if persist and self._settings:
+                # Keep DB consistent even if code didn’t change
+                self._settings.set("language", Language(code).display)
+            return
+
+        self._language = code
+
+        if persist and self._settings:
+            self._settings.set("language", Language(code).display)
+
+        self.languageChanged.emit(code)
+
+    def tr(self, key: str, **kwargs) -> str:
+        return translate(self._language, key, **kwargs)

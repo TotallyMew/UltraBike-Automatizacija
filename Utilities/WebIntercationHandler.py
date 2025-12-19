@@ -45,9 +45,10 @@ class WebInteractionHandler:
             )
             self.driver.execute_script("arguments[0].scrollIntoView();", brand_match)
             brand_match.click()
-            print("Prekės ženklas pridėtas")       
-        except:     
-            print("Prekės žėnklas jau yra pridėtas")
+            # GUI/log should handle success feedback
+        except:
+            # GUI/log should handle already-added feedback
+            pass
 
     def save_information(self):
         try:
@@ -55,9 +56,10 @@ class WebInteractionHandler:
                 EC.element_to_be_clickable((By.CSS_SELECTOR, "input.btn.btn-primary.save.uppercase.ml-3"))
             )
             self.driver.execute_script("arguments[0].click();", save_button)
-            print("Prekės pakeitimai išsaugoti.")
+            # GUI/log should handle success feedback
         except:
-            print("Prekės atnaujinimai nebuvo išsaugoti!")
+            # GUI/log should handle failure feedback
+            pass
         time.sleep(3)
 
     def click_product_by_code(self, unique_code):
@@ -69,11 +71,14 @@ class WebInteractionHandler:
             product.click()
             return True
         except NoSuchElementException:
-            print(f"Prekė su kodu '{unique_code}' nerasta.")
+            # GUI/log should handle not found feedback
+            pass
         except ElementClickInterceptedException:
-            print(f"Negalima paspausti ant prekės su kodu '{unique_code}'.")
+            # GUI/log should handle click error feedback
+            pass
         except Exception as e:
-            print(f"Ivyko netikėta klaida: {e}")
+            # GUI/log should handle unexpected error feedback
+            pass
         return False
 
     def click_product_by_link(self, unique_code, brand_name):
@@ -97,7 +102,8 @@ class WebInteractionHandler:
             link_element.click()
             return True
         except Exception as e:
-            print(f"Ivyko klaida: {e}")
+            # GUI/log should handle error feedback
+            pass
         return False
 
     def is_feature_found(self):

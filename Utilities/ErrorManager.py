@@ -1,4 +1,7 @@
-﻿class ErrorManager:
+﻿import queue
+
+
+class ErrorManager:
     """Manages user-facing error messages in Lithuanian"""
     
     # Error message templates
@@ -57,58 +60,76 @@
     
     @staticmethod
     def show_error(error_code, **kwargs):
-        """Display user-friendly error message"""
-        template = ErrorManager.ERRORS.get(error_code, ErrorManager.ERRORS["UNKNOWN_ERROR"])
-        message = template.format(**kwargs)
-        print(f"\n[ERROR] KLAIDA: {message}\n")
-    
+        """Display user-friendly error message (GUI/log only)"""
+        # GUI should handle displaying this error
+        pass
+
     @staticmethod
     def show_warning(message):
-        """Display warning message"""
-        print(f"\n[WARNING] ISPEJIMAS: {message}\n")
-    
+        """Display warning message (GUI/log only)"""
+        pass
+
     @staticmethod
     def show_info(message):
-        """Display info message"""
-        print(f"\n[INFO] {message}\n")
-    
+        """Display info message (GUI/log only)"""
+        pass
+
     @staticmethod
     def show_success(message):
-        """Display success message"""
-        print(f"\n[OK] {message}\n")
+        """Display success message (GUI/log only)"""
+        pass
     
+    # Queue used to send prompt requests to the GUI. GUI should call `set_prompt_queue(q)` during startup.
+    _prompt_queue = None
+
+    @staticmethod
+    def set_prompt_queue(q: "queue.Queue"):
+        """Register a Queue.Queue instance that GUI will poll for prompt requests.
+
+        Each prompt request is a tuple: (prompt_type, operation_name, response_queue)
+        Where `response_queue` is a Queue used by GUI to send back the result.
+        """
+        ErrorManager._prompt_queue = q
+
     @staticmethod
     def prompt_retry(operation_name="operacija"):
-        """Ask user if they want to retry after error"""
-        while True:
-            response = input(f"Bandyti {operation_name} dar kartą? (T/N): ").strip().lower()
-            if response == "t":
-                return True
-            elif response == "n":
-                return False
-            else:
-                print("Įveskite 'T' arba 'N'.")
+        """Ask user if they want to retry after error.
+
+        If a GUI prompt queue is registered, this will synchronously wait for the GUI
+        to show a dialog and return the user's answer. Otherwise raises RuntimeError.
+        """
+        if ErrorManager._prompt_queue is None:
+            raise RuntimeError("CLI prompts disabled: GUI must handle retry prompts for '" + operation_name + "'.")
+
+        resp_q = queue.Queue()
+        ErrorManager._prompt_queue.put(("retry", operation_name, resp_q))
+        try:
+            return resp_q.get()
+        except Exception:
+            raise RuntimeError("No GUI response for retry prompt")
     
     @staticmethod
     def prompt_continue():
-        """Ask user if they want to continue after error"""
-        while True:
-            response = input("Ar norite tęsti? (taip/ne): ").strip().lower()
-            if response == "taip":
-                return True
-            elif response == "ne":
-                return False
-            else:
-                print("Įveskite 'taip' arba 'ne'.")
+        """Ask user if they want to continue after error (GUI-backed)."""
+        if ErrorManager._prompt_queue is None:
+            raise RuntimeError("CLI prompts disabled: GUI must handle continuation prompts.")
+
+        resp_q = queue.Queue()
+        ErrorManager._prompt_queue.put(("continue", None, resp_q))
+        try:
+            return resp_q.get()
+        except Exception:
+            raise RuntimeError("No GUI response for continue prompt")
     
     @staticmethod
     def prompt_exit_or_retry():
-        """Ask user if they want to exit or retry"""
-        while True:
-            response = input("(1) Bandyti dar kartą, (2) Išeiti: ").strip()
-            if response == "1":
-                return "retry"
-            elif response == "2":
-                return "exit"
-            else:
-                print("Įveskite '1' arba '2'.")
+        """Ask user if they want to exit or retry (returns 'retry' or 'exit')."""
+        if ErrorManager._prompt_queue is None:
+            raise RuntimeError("CLI prompts disabled: GUI must handle exit/retry decisions.")
+
+        resp_q = queue.Queue()
+        ErrorManager._prompt_queue.put(("exit_or_retry", None, resp_q))
+        try:
+            return resp_q.get()
+        except Exception:
+            raise RuntimeError("No GUI response for exit/retry prompt")

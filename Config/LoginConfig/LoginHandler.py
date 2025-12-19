@@ -73,12 +73,12 @@ class LoginHandler:
         self.driver.maximize_window()
         self.driver.get("https://ultrabike.lt/admin-ultro/")
         
-        # Use default CLI callbacks if none provided
+        # Require GUI to provide callbacks in GUI-only mode
         if credentials_callback is None:
-            credentials_callback = self._cli_credentials_callback
-        
+            raise RuntimeError("CLI login flow disabled: GUI must provide a credentials_callback(email,password).")
+
         if retry_callback is None:
-            retry_callback = self._cli_retry_callback
+            raise RuntimeError("CLI login flow disabled: GUI must provide a retry_callback returning True/False.")
         
         attempts = 0
         
@@ -122,37 +122,14 @@ class LoginHandler:
         Default CLI implementation for getting credentials
         Used when no callback provided (backward compatibility)
         """
-        import re
-        import stdiomask
-        
-        # Get saved credentials
-        self.saved_email, self.saved_password = self.credential_manager.get_saved_credentials()
-        
-        # Offer to use saved credentials
-        if self.saved_email and self.saved_password:
-            use_saved = input(f"Naudoti esamus duomenis prisijungimui ({self.saved_email})? (T/N): ").lower()
-            if use_saved == 't':
-                self._log("Using saved credentials", email=self.saved_email)
-                return self.saved_email, self.saved_password
-        
-        # Get new credentials
-        while True:
-            email = input("Įveskite el. paštą: ").strip()
-            if self._is_valid_email(email):
-                break
-            else:
-                ErrorManager.show_warning("Neteisingas el. pašto formatas. Bandykite dar kartą.")
-        
-        password = stdiomask.getpass("Įveskite slaptažodį: ", mask="*")
-        self._log("New credentials entered", email=email)
-        return email, password
+        raise RuntimeError("CLI login helper disabled: GUI must provide credentials via credentials_callback.")
     
     def _cli_retry_callback(self) -> bool:
         """
         Default CLI implementation for retry prompt
         Used when no callback provided (backward compatibility)
         """
-        return ErrorManager.prompt_retry("prisijungimą")
+        raise RuntimeError("CLI login retry helper disabled: GUI must provide a retry_callback.")
     
     def _is_valid_email(self, email: str) -> bool:
         """Basic email validation"""

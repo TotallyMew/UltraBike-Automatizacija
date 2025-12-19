@@ -22,6 +22,12 @@ class TranslationManager:
     def _log_error(self, message, exception=None, **context):
         if self.logger:
             self.logger.error("TranslationManager", message, exception=exception, **context)
+        # Show error in GUI
+        from Utilities.ErrorManager import ErrorManager
+        if exception:
+            ErrorManager.show_error("UNEXPECTED_ERROR", error=str(exception))
+        else:
+            ErrorManager.show_error("UNEXPECTED_ERROR", error=message)
     
     def prepareTranslationFiles(self, scrape_func, url, **kwargs):
         self._log("Preparing translation files", brand=self.brandName, url=url)

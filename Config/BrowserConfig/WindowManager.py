@@ -24,4 +24,5 @@ class WindowManager:
                 # Verify size after resizing
                 element_size = element.size
         except Exception as e:
-            print(f"Window resize error: {e}")
+            from Utilities.ErrorManager import ErrorManager
+            ErrorManager.show_error("UNEXPECTED_ERROR", error=str(e))

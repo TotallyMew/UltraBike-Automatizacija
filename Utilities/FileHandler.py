@@ -23,7 +23,8 @@ class FileHandler:
                         key, value = line.strip().split(": ", 1)
                         table_data[key] = value
                     except ValueError:
-                        print(f"Warning: Line is not in 'key: value' format: {line.strip()}")
+                        from Utilities.ErrorManager import ErrorManager
+                        ErrorManager.show_error("FILE_FORMAT_ERROR", line=line.strip())
                 
                 if table_data:
                     tables.append(table_data)
@@ -34,7 +35,8 @@ class FileHandler:
                 file.write("")
             return FileHandler.read_translated_file(file_path)
         except Exception as e:
-            print(f"An error occurred: {e}")
+            from Utilities.ErrorManager import ErrorManager
+            ErrorManager.show_error("UNEXPECTED_ERROR", error=str(e))
 
         return tables
 

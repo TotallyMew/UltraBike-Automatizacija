@@ -59,12 +59,8 @@ class CredentialManager:
             return None, None
             
         if len(credentials) > 1:
-            # Multiple accounts - prompt user
-            for i, email in enumerate(credentials.keys()):
-                print(f"{i + 1}. {email}")
-            choice = int(input("Pasirinkite paskyrą (įveskite skaičių): ")) - 1
-            email = list(credentials.keys())[choice]
-            return email, credentials[email]
+            # Multiple accounts - GUI must choose which to use
+            raise ValueError("Multiple saved accounts found; GUI must select which account to use.")
         else:
             # Single account
             email = next(iter(credentials))

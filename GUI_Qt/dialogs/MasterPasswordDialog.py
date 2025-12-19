@@ -3,7 +3,7 @@ Master Password Dialogs
 Setup dialog (first run) and prompt dialog (session expired)
 """
 
-from PySide6.QtWidgets import QWidget, QVBoxLayout
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout
 from PySide6.QtCore import Qt
 from qfluentwidgets import (
     MessageBox, PasswordLineEdit, BodyLabel, TitleLabel,
@@ -37,11 +37,11 @@ class MasterPasswordSetupDialog(QWidget):
         center_layout.setContentsMargins(40, 40, 40, 40)
 
         # Title
-        title = TitleLabel("Welcome to UltraBike")
+        title = TitleLabel(self.main.i18n.tr("master.setup.title"))
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         center_layout.addWidget(title)
 
-        subtitle = BodyLabel("Set up your master password to secure your credentials")
+        subtitle = BodyLabel(self.main.i18n.tr("master.setup.subtitle"))
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         subtitle.setWordWrap(True)
         center_layout.addWidget(subtitle)
@@ -55,9 +55,9 @@ class MasterPasswordSetupDialog(QWidget):
         password_row_layout.setSpacing(8)
         password_row_layout.setContentsMargins(0, 0, 0, 0)
 
-        password_label = BodyLabel("Master Password:")
+        password_label = BodyLabel(self.main.i18n.tr("master.password.label"))
         self.password_field = PasswordLineEdit()
-        self.password_field.setPlaceholderText("Enter a strong password")
+        self.password_field.setPlaceholderText(self.main.i18n.tr("master.password.placeholder"))
         self.password_field.textChanged.connect(self._check_form_valid)
 
         password_row_layout.addWidget(password_label)
@@ -70,9 +70,9 @@ class MasterPasswordSetupDialog(QWidget):
         confirm_row_layout.setSpacing(8)
         confirm_row_layout.setContentsMargins(0, 0, 0, 0)
 
-        confirm_label = BodyLabel("Confirm Password:")
+        confirm_label = BodyLabel(self.main.i18n.tr("master.confirm.label"))
         self.confirm_field = PasswordLineEdit()
-        self.confirm_field.setPlaceholderText("Re-enter password")
+        self.confirm_field.setPlaceholderText(self.main.i18n.tr("master.confirm.placeholder"))
         self.confirm_field.textChanged.connect(self._check_form_valid)
 
         confirm_row_layout.addWidget(confirm_label)
@@ -83,7 +83,7 @@ class MasterPasswordSetupDialog(QWidget):
         center_layout.addSpacing(16)
 
         # Create button
-        self.create_button = PrimaryPushButton("Create Master Password")
+        self.create_button = PrimaryPushButton(self.main.i18n.tr("master.create"))
         self.create_button.setEnabled(False)
         self.create_button.clicked.connect(self._handle_create)
         center_layout.addWidget(self.create_button)
@@ -116,8 +116,8 @@ class MasterPasswordSetupDialog(QWidget):
 
         # Show success
         InfoBar.success(
-            title="Success",
-            content="Master password created successfully!",
+            title=self.main.i18n.tr("master.created.title"),
+            content=self.main.i18n.tr("master.created.content"),
             orient=Qt.Orientation.Horizontal,
             isClosable=True,
             position=InfoBarPosition.TOP,
@@ -156,11 +156,11 @@ class MasterPasswordPromptDialog(QWidget):
         center_layout.setContentsMargins(40, 40, 40, 40)
 
         # Title
-        title = TitleLabel("Session Expired")
+        title = TitleLabel(self.main.i18n.tr("master.prompt.title"))
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         center_layout.addWidget(title)
 
-        subtitle = BodyLabel("Enter your master password to continue")
+        subtitle = BodyLabel(self.main.i18n.tr("master.prompt.subtitle"))
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         center_layout.addWidget(subtitle)
 
@@ -173,9 +173,9 @@ class MasterPasswordPromptDialog(QWidget):
         password_row_layout.setSpacing(8)
         password_row_layout.setContentsMargins(0, 0, 0, 0)
 
-        password_label = BodyLabel("Master Password:")
+        password_label = BodyLabel(self.main.i18n.tr("master.password.label"))
         self.password_field = PasswordLineEdit()
-        self.password_field.setPlaceholderText("Enter master password")
+        self.password_field.setPlaceholderText(self.main.i18n.tr("master.password.placeholder"))
         self.password_field.textChanged.connect(self._check_form_valid)
         self.password_field.returnPressed.connect(self._handle_unlock)
 
@@ -187,7 +187,7 @@ class MasterPasswordPromptDialog(QWidget):
         center_layout.addSpacing(16)
 
         # Unlock button
-        self.unlock_button = PrimaryPushButton("Unlock")
+        self.unlock_button = PrimaryPushButton(self.main.i18n.tr("master.unlock"))
         self.unlock_button.setEnabled(False)
         self.unlock_button.clicked.connect(self._handle_unlock)
         center_layout.addWidget(self.unlock_button)
@@ -219,8 +219,8 @@ class MasterPasswordPromptDialog(QWidget):
 
             # Show success
             InfoBar.success(
-                title="Success",
-                content="Master password verified!",
+                title=self.main.i18n.tr("master.verified.title"),
+                content=self.main.i18n.tr("master.verified.content"),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
@@ -234,8 +234,8 @@ class MasterPasswordPromptDialog(QWidget):
         else:
             # Show error
             InfoBar.error(
-                title="Error",
-                content="Invalid master password",
+                title=self.main.i18n.tr("master.invalid.title"),
+                content=self.main.i18n.tr("master.invalid.content"),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,

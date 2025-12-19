@@ -39,20 +39,9 @@ def scrapeAndTranslateToFileRascal(url, outputFile, variant_index=None, db_manag
 
             key = keySpan.get_text(strip=True).upper()  # ← .upper()
 
-            # Handle multiple variants
+            # Handle multiple variants - GUI must supply variant_index
             if len(valueSpans) > 1 and variant_index is None:
-                print("Rasta daugiau nei vienas prekės variantas puslapyje.")
-                for index, valueSpan in enumerate(valueSpans, start=1):
-                    print(f"{index}: {valueSpan.get_text(strip=True)}")
-                while True:
-                    try:
-                        variant_index = int(input("Pasirinkite pagal kurį rašyti: ")) - 1
-                        if 0 <= variant_index < len(valueSpans):
-                            break
-                        else:
-                            print("Neteisingas pasirinkimas.")
-                    except ValueError:
-                        print("Neteisingas pasirinkimas. Pasirinkite per naują.")
+                raise ValueError("Multiple variants found on Rascal product page; GUI must provide 'variant_index'.")
 
             selectedValue = (
                 valueSpans[variant_index].get_text(strip=True)

@@ -480,7 +480,8 @@ class TranslationsScreen:
                 self.refresh_translations()
                 
             except Exception as ex:
-                print(f"Delete error: {ex}")
+                # Error: Delete error: {ex}
+                pass
         
         dialog = ft.AlertDialog(
             title=ft.Text("Confirm Delete"),

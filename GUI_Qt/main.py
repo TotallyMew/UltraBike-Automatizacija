@@ -34,12 +34,11 @@ def main():
     app.setOrganizationName("UltraBike")
 
     icon_path = os.path.join(project_root, "might work.ico")
-    print("icon exists:", os.path.isfile(icon_path))        # -> True
-    print("absolute path:", os.path.abspath(icon_path))
+    # Debug: icon existence and absolute path can be logged if needed
         #Set the application icon
     icon_path = os.path.join(project_root, "might work.ico")  # path to your ICO
     app.setWindowIcon(QIcon(icon_path))
-    print(QPixmap(icon_path).isNull())  
+    # Debug: QPixmap null check can be logged if needed
 
     # Apply Fluent Design theme
     apply_theme(app)

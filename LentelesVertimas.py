@@ -34,26 +34,5 @@ def lentelesVertimas():
     
     process_tables(doc, mapping)
     
-    while True:
-        try:
-            doc.save(doc_path)
-            print("Document updated in place.")
-            break
-        except PermissionError:
-            print("⚠️ Unable to save the document. Please close the file if it's open.")
-            user_input = input("Have you closed the document? (y/n): ").strip().lower()
-            if user_input == 'y':
-                print("Retrying save...")
-                time.sleep(1)  # short delay before retry
-                continue
-            elif user_input == 'n':
-                end = input("Do you want to end the program? (y/n): ").strip().lower()
-                if end == 'y':
-                    print("Exiting without saving changes.")
-                    break
-                else:
-                    print("Okay, let's try again in a moment.")
-                    time.sleep(2)
-            else:
-                print("Invalid input. Please type 'y' or 'n'.")
+    # CLI document-processing utility disabled: use GUI to manage document saving/retries.
 
