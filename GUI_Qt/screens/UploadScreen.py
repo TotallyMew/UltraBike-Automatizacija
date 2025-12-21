@@ -275,6 +275,22 @@ class UploadScreen(QWidget):
 
         options_layout.addLayout(disclaimer_row)
 
+        # Order note checkbox (short description)
+        order_note_row = QHBoxLayout()
+        order_note_row.setSpacing(ROW_SPACING)
+
+        self.order_note_checkbox = CheckBox("")
+        order_note_info = TransparentToolButton(FluentIcon.INFO, self)
+        self.order_note_info_btn = order_note_info
+        order_note_info.setFixedSize(SIZES['icon_sm'], SIZES['icon_sm'])
+        order_note_info.clicked.connect(self._show_order_note_info)
+
+        order_note_row.addWidget(self.order_note_checkbox)
+        order_note_row.addWidget(order_note_info)
+        order_note_row.addStretch()
+
+        options_layout.addLayout(order_note_row)
+
         # Frameset checkbox (conditional - only for Pinarello)
         self.frameset_row = QWidget()
         frameset_layout = QHBoxLayout(self.frameset_row)
@@ -416,6 +432,8 @@ class UploadScreen(QWidget):
         self.options_title.setText(tr("upload.options.title"))
         self.disclaimer_checkbox.setText(tr("upload.disclaimer"))
         self.disclaimer_info_btn.setToolTip(tr("upload.disclaimer.tip"))
+        self.order_note_checkbox.setText(tr("upload.order_note"))
+        self.order_note_info_btn.setToolTip(tr("upload.order_note.tip"))
         self.frameset_checkbox.setText(tr("upload.frameset"))
         self.frameset_info_btn.setToolTip(tr("upload.frameset.tip"))
 
@@ -514,6 +532,16 @@ class UploadScreen(QWidget):
             duration=4000
         )
 
+    def _show_order_note_info(self):
+        """Show order note information"""
+        InfoBar.info(
+            title=self.main.i18n.tr("upload.order_note.info.title"),
+            content=self.main.i18n.tr("upload.order_note.info.content"),
+            parent=self,
+            position=InfoBarPosition.TOP,
+            duration=4000
+        )
+
     def _handle_upload(self):
         """Handle upload button click"""
         if self.upload_worker and self.upload_worker.isRunning():
@@ -530,7 +558,16 @@ class UploadScreen(QWidget):
         code = self.code_field.text().strip()
         url = self.url_field.text().strip()
         description = self.description_combo.currentText()
+        # Description is optional. Convert placeholder to "no selection".
+        try:
+            if self.description_combo.currentIndex() == 0:
+                description = None
+            elif description == self.main.i18n.tr("upload.desc.select"):
+                description = None
+        except Exception:
+            pass
         include_disclaimer = self.disclaimer_checkbox.isChecked()
+        include_order_note = self.order_note_checkbox.isChecked()
         is_frameset = self.frameset_checkbox.isChecked() if self.frameset_row.isVisible() else False
 
         # Get uploader class
@@ -580,6 +617,7 @@ class UploadScreen(QWidget):
                 url_or_code=url,
                 description_name=description,
                 include_disclaimer=include_disclaimer,
+                include_order_note=include_order_note,
                 is_frameset=is_frameset if brand == "Pinarello" else None,
                 master_password=master_password
             )
@@ -697,6 +735,7 @@ class UploadScreen(QWidget):
         self.url_field.clear()
         self.description_combo.setCurrentIndex(0)
         self.disclaimer_checkbox.setChecked(False)
+        self.order_note_checkbox.setChecked(False)
         self.frameset_checkbox.setChecked(False)
         self.status_label.setText("")
         self._check_form_valid()

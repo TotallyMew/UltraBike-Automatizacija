@@ -5,6 +5,7 @@ Handles description CRUD operations and PrestaShop upload
 
 import time
 from datetime import datetime
+import re
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -40,6 +41,21 @@ class DescriptionManager:
 
     # Detection substring
     DISCLAIMER_SIGNATURE = "Due to the different resolution"
+
+    # Short description "order note" HTML constants
+    ORDER_NOTE_LT = (
+        '<p><b style="color:#d0121a;">Prekę galime užsakyti, dėl jos pasiekiamumo prašome teirautis!</b></p>'
+    )
+    ORDER_NOTE_LV = (
+        '<p><b style="color:#d0121a;">Mēs varam pasūtīt produktu jums, lūdzu, noskaidrojiet tā pieejamību!</b></p>'
+    )
+    ORDER_NOTE_EN = (
+        '<p><b style="color:#d0121a;">We can order the product for you, please inquire about its availability!</b></p>'
+    )
+
+    ORDER_NOTE_SIGNATURE_EN = "We can order the product for you"
+    ORDER_NOTE_SIGNATURE_LT = "Prekę galime užsakyti"
+    ORDER_NOTE_SIGNATURE_LV = "Mēs varam pasūtīt produktu"
 
     def __init__(self, db_manager, logger=None):
         self.db = db_manager
@@ -79,6 +95,185 @@ class DescriptionManager:
             lv_html += self.DISCLAIMER_LV
 
         return lt_html, en_html, lv_html
+
+    def _order_note_present(self, html: str | None, lang_code: str) -> bool:
+        if not html:
+            return False
+        if self.ORDER_NOTE_SIGNATURE_EN in html:
+            return True
+        if lang_code == "lt" and self.ORDER_NOTE_SIGNATURE_LT in html:
+            return True
+        if lang_code == "lv" and self.ORDER_NOTE_SIGNATURE_LV in html:
+            return True
+        return False
+
+    def append_order_note_if_missing(self, lt_html: str, en_html: str, lv_html: str) -> tuple:
+        """Append the short-description order note to each language if not already present."""
+
+        if lt_html is not None and not self._order_note_present(lt_html, "lt"):
+            lt_html += self.ORDER_NOTE_LT
+
+        if en_html is not None and not self._order_note_present(en_html, "en"):
+            en_html += self.ORDER_NOTE_EN
+
+        if lv_html is not None and not self._order_note_present(lv_html, "lv"):
+            lv_html += self.ORDER_NOTE_LV
+
+        return lt_html, en_html, lv_html
+
+    def append_order_note_to_short_description(self, driver, product_code: str) -> bool:
+        """Append the order note to the PrestaShop *short description* field (per language).
+
+        This is designed to be safe to run multiple times: it appends only if missing.
+        Requirement: click the short-description wrapper before injecting HTML.
+        """
+        self._log("Appending order note to short description", product_code=product_code)
+
+        def _strip_leading_empty_paragraphs(html: str | None) -> str:
+            """Remove leading empty <p>...</p> blocks that TinyMCE often inserts."""
+            if not html:
+                return ""
+            cleaned = html.strip()
+            # Remove repeated leading empty paragraphs like:
+            # <p></p>, <p> </p>, <p>&nbsp;</p>, <p><br></p>, <p><br data-mce-bogus="1"></p>
+            empty_p = re.compile(
+                r"^\s*<p>(?:\s|&nbsp;|<br\b[^>]*\/?\s*>)*<\/p>",
+                re.IGNORECASE,
+            )
+            while True:
+                new = empty_p.sub("", cleaned)
+                if new == cleaned:
+                    break
+                cleaned = new.lstrip()
+            return cleaned
+
+        try:
+            wait = WebDriverWait(driver, 10)
+
+            try:
+                current_url = driver.current_url
+                if "#tab-step1" not in current_url:
+                    driver.get(current_url.split("#")[0] + "#tab-step1")
+                    time.sleep(1)
+            except Exception:
+                pass
+
+            languages = [
+                ("lt", self.ORDER_NOTE_LT, "2"),
+                ("en", self.ORDER_NOTE_EN, "1"),
+                ("lv", self.ORDER_NOTE_LV, "3"),
+            ]
+
+            any_updated = False
+
+            for lang_code, note_html, lang_id in languages:
+                # Switch language so we're editing the visible locale.
+                try:
+                    language_dropdown = wait.until(
+                        EC.element_to_be_clickable((By.ID, "form_switch_language"))
+                    )
+                    Select(language_dropdown).select_by_value(lang_code)
+                    time.sleep(0.8)
+                except Exception:
+                    # Best effort; continue.
+                    pass
+
+                # Click the wrapper (per user requirement).
+                try:
+                    wrapper = wait.until(
+                        EC.presence_of_element_located((By.ID, "form_step1_description_short"))
+                    )
+                    driver.execute_script(
+                        "arguments[0].scrollIntoView({block: 'center'});", wrapper
+                    )
+                    try:
+                        wrapper.click()
+                    except Exception:
+                        driver.execute_script("arguments[0].click();", wrapper)
+                    time.sleep(0.1)
+                except Exception:
+                    # If wrapper isn't found, we still try to locate the editor.
+                    pass
+
+                # Preferred: TinyMCE iframe like the full description field.
+                iframe_id = f"form_step1_description_short_{lang_id}_ifr"
+                try:
+                    wait.until(EC.frame_to_be_available_and_switch_to_it((By.ID, iframe_id)))
+                    editor_body = wait.until(EC.presence_of_element_located((By.ID, "tinymce")))
+
+                    current_html = ""
+                    try:
+                        current_html = editor_body.get_attribute("innerHTML") or ""
+                    except Exception:
+                        current_html = ""
+
+                    current_html = _strip_leading_empty_paragraphs(current_html)
+
+                    if not self._order_note_present(current_html, lang_code):
+                        new_html = (current_html or "") + note_html
+                        driver.execute_script(
+                            "arguments[0].innerHTML = arguments[1];",
+                            editor_body,
+                            new_html,
+                        )
+                        any_updated = True
+
+                    driver.switch_to.default_content()
+                    time.sleep(0.2)
+                    continue
+
+                except Exception:
+                    try:
+                        driver.switch_to.default_content()
+                    except Exception:
+                        pass
+
+                # Fallback: plain textarea field.
+                try:
+                    textarea_id = f"form_step1_description_short_{lang_id}"
+                    textarea = wait.until(EC.presence_of_element_located((By.ID, textarea_id)))
+                    current_value = textarea.get_attribute("value") or ""
+
+                    current_value = _strip_leading_empty_paragraphs(current_value)
+
+                    if not self._order_note_present(current_value, lang_code):
+                        new_value = (current_value or "") + note_html
+                        driver.execute_script(
+                            """
+                            const el = arguments[0];
+                            const value = arguments[1];
+                            el.focus();
+                            el.value = value;
+                            el.dispatchEvent(new Event('input', { bubbles: true }));
+                            el.dispatchEvent(new Event('change', { bubbles: true }));
+                            """,
+                            textarea,
+                            new_value,
+                        )
+                        any_updated = True
+                    time.sleep(0.2)
+                except Exception:
+                    # If this language field isn't available, skip.
+                    continue
+
+            self._log(
+                "Short description order note processed",
+                product_code=product_code,
+                updated=any_updated,
+            )
+            return True
+
+        except Exception as e:
+            self._log_error(
+                "Failed to append order note to short description",
+                exception=e,
+                product_code=product_code,
+            )
+            try:
+                driver.switch_to.default_content()
+            except Exception:
+                pass
+            return False
 
     def save_description(
         self, name: str, description_lt: str, description_en: str, description_lv: str

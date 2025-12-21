@@ -22,6 +22,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from PySide6.QtCore import QEvent, QThread, QTimer, Qt, Signal
 from PySide6.QtGui import QDragEnterEvent, QDropEvent, QStandardItemModel
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QFileDialog,
     QHBoxLayout,
     QHeaderView,
@@ -194,6 +195,7 @@ class BatchDescriptionsWorker(QThread):
             code = it["code"]
             desc = it["description"]
             disclaimer = bool(it.get("append_disclaimer"))
+            order_note = bool(it.get("append_order_note"))
 
             self.row_update.emit(row, tr("batchdesc.status.running"), "")
             self.log.emit(tr("batchdesc.progress.open", current=idx, total=total, code=code))
@@ -212,6 +214,13 @@ class BatchDescriptionsWorker(QThread):
                 if not uploaded:
                     self.row_update.emit(row, tr("batchdesc.status.failed"), tr("batchdesc.item.failed_upload"))
                     continue
+
+                if order_note:
+                    try:
+                        desc_manager.append_order_note_to_short_description(driver, product_code=code)
+                    except Exception:
+                        # Best effort; don't fail the whole row if short description update is flaky.
+                        pass
 
                 self.log.emit(tr("batchdesc.progress.save", current=idx, total=total, code=code))
                 web.save_information()
@@ -308,6 +317,8 @@ class BatchDescriptionsScreen(QWidget):
 
         toolbar_card = CardWidget()
         toolbar_card.setBorderRadius(RADII['md'])
+        # Keep this toolbar in a single row (like Batch Titles) so the card doesn't
+        # stretch in the Y axis at the default window size.
         toolbar_layout = QHBoxLayout(toolbar_card)
         toolbar_layout.setContentsMargins(*TOOLBAR_MARGINS)
         toolbar_layout.setSpacing(CARD_SPACING)
@@ -324,6 +335,9 @@ class BatchDescriptionsScreen(QWidget):
         self.bulk_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
         self.disclaimer_bulk = CheckBox("")
         self.disclaimer_bulk.stateChanged.connect(self._toggle_all_disclaimers)
+
+        self.order_note_bulk = CheckBox("")
+        self.order_note_bulk.stateChanged.connect(self._toggle_all_order_notes)
 
         self.template_btn = PushButton("")
         self.template_btn.setIcon(FluentIcon.DOWNLOAD.icon())
@@ -354,22 +368,27 @@ class BatchDescriptionsScreen(QWidget):
         self.start_btn.setEnabled(False)
         self.start_btn.clicked.connect(self._start_batch)
 
-        toolbar_layout.addWidget(self.add_btn)
-        toolbar_layout.addWidget(self.clear_btn)
         # Spacer between Clear and Bulk Select (hide/show with manual controls)
         self._manual_sep = QWidget()
         self._manual_sep.setStyleSheet("background: transparent;")
         self._manual_sep.setFixedWidth(ROW_SPACING)
-        toolbar_layout.addWidget(self._manual_sep)
-        toolbar_layout.addWidget(self.bulk_label)
-        toolbar_layout.addWidget(self.disclaimer_bulk)
-        toolbar_layout.addWidget(self.template_btn)
-        toolbar_layout.addWidget(self.browse_btn)
-        toolbar_layout.addWidget(self.excel_file_label)
+
         # Spacer between excel file label and status (hide/show with excel controls)
         self._excel_status_sep = QWidget()
         self._excel_status_sep.setStyleSheet("background: transparent;")
         self._excel_status_sep.setFixedWidth(CONTENT_SPACING)
+
+        # Single row: manual controls + bulk selectors + excel controls + status/start
+        # (show/hide is handled by _switch_mode).
+        toolbar_layout.addWidget(self.add_btn)
+        toolbar_layout.addWidget(self.clear_btn)
+        toolbar_layout.addWidget(self._manual_sep)
+        toolbar_layout.addWidget(self.bulk_label)
+        toolbar_layout.addWidget(self.disclaimer_bulk)
+        toolbar_layout.addWidget(self.order_note_bulk)
+        toolbar_layout.addWidget(self.template_btn)
+        toolbar_layout.addWidget(self.browse_btn)
+        toolbar_layout.addWidget(self.excel_file_label)
         toolbar_layout.addWidget(self._excel_status_sep)
         toolbar_layout.addWidget(self._toolbar_spacer)
         toolbar_layout.addWidget(self.status_label)
@@ -387,7 +406,7 @@ class BatchDescriptionsScreen(QWidget):
         self.excel_drop.file_dropped.connect(self._handle_file_drop)
 
         self.table = QTableWidget()
-        self.table.setColumnCount(7)
+        self.table.setColumnCount(8)
         self.table.verticalHeader().setVisible(False)
         self.table.setAlternatingRowColors(True)
         self.table.setShowGrid(True)
@@ -395,19 +414,30 @@ class BatchDescriptionsScreen(QWidget):
         self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        # Disable manual column resizing (no interactive splitters).
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
+
+        # Smooth scrolling (avoid row/column snapping).
+        self.table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.table.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        try:
+            self.table.verticalScrollBar().setSingleStep(12)
+            self.table.horizontalScrollBar().setSingleStep(12)
+        except Exception:
+            pass
+        # Fixed columns (horizontal scrolling as needed).
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
         self.table.horizontalHeader().setStretchLastSection(False)
         self.table.viewport().installEventFilter(self)
 
         # Wider brand column so placeholder doesn't get truncated
-        self.table.setColumnWidth(0, SIZES['col_w_200'])
-        self.table.setColumnWidth(1, SIZES['col_w_160'])
-        self.table.setColumnWidth(2, SIZES['col_w_260'])
-        self.table.setColumnWidth(3, SIZES['col_w_140'])
-        self.table.setColumnWidth(4, SIZES['col_w_120'])
-        self.table.setColumnWidth(5, SIZES['col_w_280'])
-        self.table.setColumnWidth(6, SIZES['col_w_56'])
+        self.table.setColumnWidth(0, SIZES['col_w_240'])  # Brand
+        self.table.setColumnWidth(1, SIZES['col_w_180'])  # Code
+        self.table.setColumnWidth(2, SIZES['col_w_420'])  # Description
+        self.table.setColumnWidth(3, SIZES['col_w_120'])  # Disclaimer
+        self.table.setColumnWidth(4, SIZES['col_w_120'])  # Order note
+        self.table.setColumnWidth(5, SIZES['col_w_160'])  # Status
+        self.table.setColumnWidth(6, SIZES['col_w_420'])  # Error
+        self.table.setColumnWidth(7, SIZES['col_w_56'])   # Delete
 
         self.table.verticalHeader().setDefaultSectionSize(SIZES['table_row_height_lg'])
 
@@ -433,10 +463,15 @@ class BatchDescriptionsScreen(QWidget):
         self.bulk_label.setText(tr("batch.bulk_select"))
         self.disclaimer_bulk.setText(tr("batch.bulk.disclaimer"))
         self.disclaimer_bulk.setToolTip(tr("batch.bulk.disclaimer.tip"))
+        self.order_note_bulk.setText(tr("batch.bulk.order_note"))
+        self.order_note_bulk.setToolTip(tr("batch.bulk.order_note.tip"))
         self.template_btn.setText(tr("batch.download_template"))
         self.browse_btn.setText(tr("batch.browse_excel"))
         self.excel_file_label.setText(tr("batch.no_file"))
-        self.status_label.setText(tr("batch.status.ready"))
+        # Keep the Start button area clean; don't show the "Ready" hint.
+        self.status_label.setText("")
+        self.status_label.setVisible(False)
+        self.status_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
         self.start_btn.setText(tr("batchdesc.start"))
 
         self.table.setHorizontalHeaderLabels([
@@ -444,6 +479,7 @@ class BatchDescriptionsScreen(QWidget):
             tr("batch.table.code"),
             tr("batch.table.desc"),
             tr("batch.table.disclaimer"),
+            tr("batch.table.order_note"),
             tr("batchdesc.table.status"),
             tr("batchdesc.table.error"),
             "",
@@ -622,6 +658,7 @@ class BatchDescriptionsScreen(QWidget):
         self.clear_btn.setVisible(is_manual)
         self.bulk_label.setVisible(is_manual)
         self.disclaimer_bulk.setVisible(is_manual)
+        self.order_note_bulk.setVisible(is_manual)
         if hasattr(self, "_manual_sep"):
             self._manual_sep.setVisible(is_manual)
 
@@ -690,6 +727,12 @@ class BatchDescriptionsScreen(QWidget):
                 else:
                     disclaimer = bool(disclaimer_raw)
 
+                order_raw = excel_row[4] if len(excel_row) > 4 else False
+                if isinstance(order_raw, str):
+                    order_note = order_raw.strip().lower() in ("yes", "true", "1")
+                else:
+                    order_note = bool(order_raw)
+
                 brand_widget = self._get_widget_from_cell(table_row, 0, ComboBox)
                 if brand_widget and brand:
                     brand_widget.setCurrentText(brand)
@@ -705,6 +748,10 @@ class BatchDescriptionsScreen(QWidget):
                 disclaimer_widget = self._get_widget_from_cell(table_row, 3, CheckBox)
                 if disclaimer_widget:
                     disclaimer_widget.setChecked(disclaimer)
+
+                order_widget = self._get_widget_from_cell(table_row, 4, CheckBox)
+                if order_widget:
+                    order_widget.setChecked(order_note)
 
                 if brand and code and desc:
                     valid_count += 1
@@ -726,11 +773,13 @@ class BatchDescriptionsScreen(QWidget):
                     )
                 )
                 self.status_label.setStyleSheet(f"color: {COLORS['warning']}; font-weight: 500;")
+                self.status_label.setVisible(True)
                 self.start_btn.setEnabled(False)
             else:
-                key = "batch.excel.ready_from_excel_one" if valid_count == 1 else "batch.excel.ready_from_excel_many"
-                self.status_label.setText(self.main.i18n.tr(key, count=valid_count))
-                self.status_label.setStyleSheet(f"color: {COLORS['success']}; font-weight: 500;")
+                # Don't show a "Ready" hint; keep Start enabled silently.
+                self.status_label.setText("")
+                self.status_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+                self.status_label.setVisible(False)
                 self.start_btn.setEnabled(valid_count > 0)
         except Exception as ex:
             InfoBar.error(
@@ -757,8 +806,8 @@ class BatchDescriptionsScreen(QWidget):
             wb = openpyxl.Workbook()
             ws = wb.active
             ws.title = self.main.i18n.tr("batchdesc.title")
-            ws.append(["Brand", "Product Code", "Description", "Append Disclaimer"])
-            ws.append(["KROSS", "UB-1234", "MyTemplateName", "Yes"])
+            ws.append(["Brand", "Product Code", "Description", "Append Disclaimer", "Append Order Note"])
+            ws.append(["KROSS", "UB-1234", "MyTemplateName", "Yes", "Yes"])
 
             for cell in ws[1]:
                 cell.font = Font(bold=True, color="FFFFFF", size=11)
@@ -811,6 +860,13 @@ class BatchDescriptionsScreen(QWidget):
         checked = state == Qt.CheckState.Checked.value
         for row in range(self.table.rowCount()):
             cb = self._get_widget_from_cell(row, 3, CheckBox)
+            if cb:
+                cb.setChecked(checked)
+
+    def _toggle_all_order_notes(self, state):
+        checked = state == Qt.CheckState.Checked.value
+        for row in range(self.table.rowCount()):
+            cb = self._get_widget_from_cell(row, 4, CheckBox)
             if cb:
                 cb.setChecked(checked)
 
@@ -884,14 +940,27 @@ class BatchDescriptionsScreen(QWidget):
         dl.addWidget(disc)
         self.table.setCellWidget(row, 3, disc_container)
 
+        order = CheckBox("")
+        order.setProperty("ubTableCheck", True)
+        order.stateChanged.connect(self._validate)
+        order_container = QWidget()
+        order_container.setStyleSheet("background: transparent;")
+        order_container.setProperty("ubTableCell", True)
+        ol = QHBoxLayout(order_container)
+        ol.setContentsMargins(SPACING['xs'], 0, SPACING['xs'], 0)
+        order_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        ol.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        ol.addWidget(order)
+        self.table.setCellWidget(row, 4, order_container)
+
         status = BodyLabel(self.main.i18n.tr("batchdesc.status.pending"))
         status.setStyleSheet(f"color: {COLORS['text_secondary']};")
-        self.table.setCellWidget(row, 4, wrap(status))
+        self.table.setCellWidget(row, 5, wrap(status))
 
         error = LineEdit()
         error.setReadOnly(True)
         error.setMinimumHeight(SIZES['input_height'])
-        self.table.setCellWidget(row, 5, wrap(error))
+        self.table.setCellWidget(row, 6, wrap(error))
 
         delete_btn = TransparentToolButton(FluentIcon.DELETE)
         delete_btn.clicked.connect(lambda _=False, r=row: self._delete_row(r))
@@ -904,7 +973,7 @@ class BatchDescriptionsScreen(QWidget):
         dcl.addStretch(1)
         dcl.addWidget(delete_btn, 0, Qt.AlignmentFlag.AlignVCenter)
         dcl.addStretch(1)
-        self.table.setCellWidget(row, 6, dc)
+        self.table.setCellWidget(row, 7, dc)
 
         self.table.setRowHeight(row, SIZES['table_row_height_lg'])
 
@@ -915,11 +984,13 @@ class BatchDescriptionsScreen(QWidget):
             c = self._get_widget_from_cell(row, 1, LineEdit)
             d = self._get_widget_from_cell(row, 2, ComboBox)
             disc = self._get_widget_from_cell(row, 3, CheckBox)
+            order = self._get_widget_from_cell(row, 4, CheckBox)
 
             brand = b.currentText().strip() if b else ""
             code = c.text().strip() if c else ""
             desc = d.currentText().strip() if d else ""
             disclaimer = disc.isChecked() if disc else False
+            order_note = order.isChecked() if order else False
 
             if brand in self.brands and code and desc:
                 items.append({
@@ -928,6 +999,7 @@ class BatchDescriptionsScreen(QWidget):
                     "code": code,
                     "description": desc,
                     "append_disclaimer": disclaimer,
+                    "append_order_note": order_note,
                 })
         return items
 
@@ -970,14 +1042,10 @@ class BatchDescriptionsScreen(QWidget):
         if self.worker is not None:
             return
 
-        if valid > 0:
-            key = "batch.status.ready_one" if valid == 1 else "batch.status.ready_many"
-            self.status_label.setText(self.main.i18n.tr(key, count=valid))
-            self.status_label.setStyleSheet(f"color: {COLORS['success']}; font-weight: 500;")
-        else:
-            # Keep Start disabled, but don't nag with a message.
-            self.status_label.setText("")
-            self.status_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        # Don't show a "Ready" hint; keep Start enabled/disabled silently.
+        self.status_label.setText("")
+        self.status_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self.status_label.setVisible(False)
 
     def _set_busy(self, busy: bool):
         self.progress_ring.setVisible(busy)
@@ -1038,6 +1106,7 @@ class BatchDescriptionsScreen(QWidget):
     def _on_log(self, message: str):
         self.status_label.setText(message)
         self.status_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self.status_label.setVisible(bool((message or "").strip()))
 
     def _on_row_update(self, row: int, status_text: str, error_text: str):
         status = self._get_widget_from_cell(row, 4, BodyLabel)

@@ -27,6 +27,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from PySide6.QtCore import QEvent, QThread, QTimer, Qt, Signal
 from PySide6.QtGui import QDragEnterEvent, QDropEvent, QStandardItemModel
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QFileDialog,
     QHBoxLayout,
     QHeaderView,
@@ -443,20 +444,30 @@ class BatchTitlesScreen(QWidget):
         self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        # Disable manual column resizing (no interactive splitters).
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
+
+        # Smooth scrolling (avoid row/column snapping).
+        self.table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.table.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        try:
+            self.table.verticalScrollBar().setSingleStep(12)
+            self.table.horizontalScrollBar().setSingleStep(12)
+        except Exception:
+            pass
+        # Fixed columns (horizontal scrolling as needed).
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
         self.table.horizontalHeader().setStretchLastSection(False)
         self.table.viewport().installEventFilter(self)
 
         # Wider brand column so placeholder doesn't get truncated
-        self.table.setColumnWidth(0, SIZES['col_w_200'])
-        self.table.setColumnWidth(1, SIZES['col_w_160'])
-        self.table.setColumnWidth(2, SIZES['col_w_320'])
-        self.table.setColumnWidth(3, SIZES['col_w_320'])
-        self.table.setColumnWidth(4, SIZES['col_w_320'])
-        self.table.setColumnWidth(5, SIZES['col_w_140'])
-        self.table.setColumnWidth(6, SIZES['col_w_320'])
-        self.table.setColumnWidth(7, SIZES['col_w_56'])
+        self.table.setColumnWidth(0, SIZES['col_w_240'])  # Brand
+        self.table.setColumnWidth(1, SIZES['col_w_180'])  # Code
+        self.table.setColumnWidth(2, SIZES['col_w_320'])  # Title LT
+        self.table.setColumnWidth(3, SIZES['col_w_320'])  # Title EN
+        self.table.setColumnWidth(4, SIZES['col_w_320'])  # Title LV
+        self.table.setColumnWidth(5, SIZES['col_w_160'])  # Status
+        self.table.setColumnWidth(6, SIZES['col_w_320'])  # Error
+        self.table.setColumnWidth(7, SIZES['col_w_56'])   # Delete
 
         self.table.verticalHeader().setDefaultSectionSize(SIZES['table_row_height_lg'])
 
@@ -482,7 +493,10 @@ class BatchTitlesScreen(QWidget):
         self.template_btn.setText(tr("batch.download_template"))
         self.browse_btn.setText(tr("batch.browse_excel"))
         self.excel_file_label.setText(tr("batch.no_file"))
-        self.status_label.setText(tr("batch.status.ready"))
+        # Keep the Start button area clean; don't show the "Ready" hint.
+        self.status_label.setText("")
+        self.status_label.setVisible(False)
+        self.status_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
         self.start_btn.setText(tr("batchtitle.start"))
 
         self.table.setHorizontalHeaderLabels([
@@ -779,11 +793,13 @@ class BatchTitlesScreen(QWidget):
                     )
                 )
                 self.status_label.setStyleSheet(f"color: {COLORS['warning']}; font-weight: 500;")
+                self.status_label.setVisible(True)
                 self.start_btn.setEnabled(False)
             else:
-                key = "batch.excel.ready_from_excel_one" if valid_count == 1 else "batch.excel.ready_from_excel_many"
-                self.status_label.setText(self.main.i18n.tr(key, count=valid_count))
-                self.status_label.setStyleSheet(f"color: {COLORS['success']}; font-weight: 500;")
+                # Don't show a "Ready" hint; keep Start enabled silently.
+                self.status_label.setText("")
+                self.status_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+                self.status_label.setVisible(False)
                 self.start_btn.setEnabled(valid_count > 0)
         except Exception as ex:
             InfoBar.error(
@@ -1050,14 +1066,10 @@ class BatchTitlesScreen(QWidget):
         if self.worker is not None:
             return
 
-        if valid > 0:
-            key = "batch.status.ready_one" if valid == 1 else "batch.status.ready_many"
-            self.status_label.setText(self.main.i18n.tr(key, count=valid))
-            self.status_label.setStyleSheet(f"color: {COLORS['success']}; font-weight: 500;")
-        else:
-            # Keep Start disabled, but don't nag with a message.
-            self.status_label.setText("")
-            self.status_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        # Don't show a "Ready" hint; keep Start enabled/disabled silently.
+        self.status_label.setText("")
+        self.status_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self.status_label.setVisible(False)
 
     def _set_busy(self, busy: bool):
         self.progress_ring.setVisible(busy)
@@ -1118,6 +1130,7 @@ class BatchTitlesScreen(QWidget):
     def _on_log(self, message: str):
         self.status_label.setText(message)
         self.status_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self.status_label.setVisible(bool((message or "").strip()))
 
     def _on_row_update(self, row: int, status_text: str, error_text: str):
         status = self._get_widget_from_cell(row, 5, BodyLabel)

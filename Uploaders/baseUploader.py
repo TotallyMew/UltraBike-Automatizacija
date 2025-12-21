@@ -47,7 +47,21 @@ class ProductUploader(ABC):
             ultraBikeCode = kwargs.pop('ultraBikeCode', None)
             bicycleUrlOrCode = kwargs.pop('bicycleUrlOrCode', None)
             db_manager = kwargs.pop('db_manager', kwargs.pop('db', None))
-            brand_options = kwargs.pop('brand_options', None)
+            # Allow legacy callers to still pass GUI-style options.
+            description_name = kwargs.pop('description_name', kwargs.pop('descriptionName', kwargs.pop('description', None)))
+            include_disclaimer = kwargs.pop('include_disclaimer', kwargs.pop('includeDisclaimer', False))
+            include_order_note = kwargs.pop('include_order_note', kwargs.pop('includeOrderNote', False))
+            is_frameset = kwargs.pop('is_frameset', kwargs.pop('isFrameset', None))
+
+            brand_options = kwargs.pop('brand_options', {}) or {}
+            if description_name:
+                brand_options.setdefault('description_name', description_name)
+            if include_disclaimer:
+                brand_options.setdefault('append_disclaimer', include_disclaimer)
+            if include_order_note:
+                brand_options.setdefault('append_order_note', include_order_note)
+            if is_frameset is not None:
+                brand_options.setdefault('frameset_only', is_frameset)
             logger = kwargs.pop('logger', None)
             batch_id = kwargs.pop('batch_id', None)
         else:
@@ -66,6 +80,7 @@ class ProductUploader(ABC):
             # Description / options
             description_name = kwargs.pop('description_name', kwargs.pop('descriptionName', kwargs.pop('description', None)))
             include_disclaimer = kwargs.pop('include_disclaimer', kwargs.pop('includeDisclaimer', False))
+            include_order_note = kwargs.pop('include_order_note', kwargs.pop('includeOrderNote', False))
             is_frameset = kwargs.pop('is_frameset', kwargs.pop('isFrameset', None))
 
             # Build brand options dict
@@ -74,6 +89,8 @@ class ProductUploader(ABC):
                 brand_options.setdefault('description_name', description_name)
             if include_disclaimer:
                 brand_options.setdefault('append_disclaimer', include_disclaimer)
+            if include_order_note:
+                brand_options.setdefault('append_order_note', include_order_note)
             if is_frameset is not None:
                 brand_options.setdefault('frameset_only', is_frameset)
 
@@ -353,35 +370,53 @@ class ProductUploader(ABC):
 
         # Get append_disclaimer flag from brand_options
         append_disclaimer = self.brand_options.get('append_disclaimer', False)
+        append_order_note = self.brand_options.get('append_order_note', False)
 
-        # If no description but disclaimer is checked, upload just the disclaimer
-        if not self.description_name and append_disclaimer:
-            self._log("No description selected, but disclaimer requested - uploading standalone disclaimer")
-            # Debug: No description name but disclaimer=True, uploading standalone disclaimer
-            try:
-                # Upload disclaimer only (empty strings for base content)
-                success = self.description_manager.upload_to_prestashop_raw(
-                    self.driver,
-                    self.ultraBikeCode,
-                    '',  # Empty LT content
-                    '',  # Empty EN content
-                    '',  # Empty LV content
-                    append_disclaimer=True
-                )
+        # If no description template selected, we can still run independent addons.
+        if not self.description_name:
+            did_anything = False
 
-                if success:
-                    self._log("Standalone disclaimer uploaded successfully")
-                    ErrorManager.show_success("Disclaimer įkeltas!")
-                else:
-                    self._log_error("Standalone disclaimer upload returned False")
-                    ErrorManager.show_warning("Nepavyko įkelti disclaimer")
+            if append_disclaimer:
+                self._log("No description selected, but disclaimer requested - uploading standalone disclaimer")
+                try:
+                    success = self.description_manager.upload_to_prestashop_raw(
+                        self.driver,
+                        self.ultraBikeCode,
+                        '',  # Empty LT content
+                        '',  # Empty EN content
+                        '',  # Empty LV content
+                        append_disclaimer=True
+                    )
+                    did_anything = True
 
-            except Exception as e:
-                import traceback
-                # Debug: Exception in uploadDescription (standalone)
-                self._log_error("Standalone disclaimer upload failed", exception=e)
-                ErrorManager.show_warning(f"Disclaimer įkėlimo klaida: {str(e)}")
-            return
+                    if success:
+                        self._log("Standalone disclaimer uploaded successfully")
+                        ErrorManager.show_success("Disclaimer įkeltas!")
+                    else:
+                        self._log_error("Standalone disclaimer upload returned False")
+                        ErrorManager.show_warning("Nepavyko įkelti disclaimer")
+                except Exception as e:
+                    self._log_error("Standalone disclaimer upload failed", exception=e)
+                    ErrorManager.show_warning(f"Disclaimer įkėlimo klaida: {str(e)}")
+
+            if append_order_note:
+                self._log("No description selected, but order note requested - appending to short description")
+                try:
+                    ok = self.description_manager.append_order_note_to_short_description(
+                        self.driver,
+                        product_code=self.ultraBikeCode,
+                    )
+                    did_anything = True
+                    if ok:
+                        ErrorManager.show_success("Užsakymo pastaba įkelta!")
+                    else:
+                        ErrorManager.show_warning("Nepavyko įkelti užsakymo pastabos")
+                except Exception as e:
+                    self._log_error("Order note upload failed", exception=e)
+                    ErrorManager.show_warning(f"Užsakymo pastabos įkėlimo klaida: {str(e)}")
+
+            if did_anything:
+                return
 
         # If no description and no disclaimer, skip
         if not self.description_name:
@@ -408,6 +443,21 @@ class ProductUploader(ABC):
                     ErrorManager.show_success(f"Aprašymas '{self.description_name}' su disclaimer įkeltas!")
                 else:
                     ErrorManager.show_success(f"Aprašymas '{self.description_name}' įkeltas!")
+
+                if append_order_note:
+                    try:
+                        self._log("Appending order note to short description", code=self.ultraBikeCode)
+                        ok_note = self.description_manager.append_order_note_to_short_description(
+                            self.driver,
+                            product_code=self.ultraBikeCode,
+                        )
+                        if ok_note:
+                            ErrorManager.show_success("Užsakymo pastaba įkelta!")
+                        else:
+                            ErrorManager.show_warning("Nepavyko įkelti užsakymo pastabos")
+                    except Exception as e:
+                        self._log_error("Order note upload failed", exception=e)
+                        ErrorManager.show_warning(f"Užsakymo pastabos įkėlimo klaida: {str(e)}")
             else:
                 self._log_error("Description upload returned False")
                 ErrorManager.show_warning(f"Nepavyko įkelti aprašymo '{self.description_name}'")

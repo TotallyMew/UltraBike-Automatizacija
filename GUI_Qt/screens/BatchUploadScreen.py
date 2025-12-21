@@ -266,6 +266,8 @@ class BatchUploadScreen(QWidget):
         layout.addLayout(header)
 
         # === TOOLBAR SECTION ===
+        # Keep this toolbar in a single row (like Batch Titles) so the card doesn't
+        # stretch in the Y axis at the default window size.
         toolbar_card = CardWidget()
         toolbar_card.setBorderRadius(RADII['md'])
         toolbar_layout = QHBoxLayout(toolbar_card)
@@ -296,6 +298,11 @@ class BatchUploadScreen(QWidget):
         disclaimer_bulk = self.disclaimer_bulk
         disclaimer_bulk.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         disclaimer_bulk.stateChanged.connect(self._toggle_all_disclaimers)
+
+        self.order_note_bulk = CheckBox("")
+        order_note_bulk = self.order_note_bulk
+        order_note_bulk.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        order_note_bulk.stateChanged.connect(self._toggle_all_order_notes)
 
         # Spacer between Clear and Bulk Select (hide/show with manual controls)
         self._manual_sep = QWidget()
@@ -346,13 +353,15 @@ class BatchUploadScreen(QWidget):
         self.status_label.setMaximumWidth(SIZES['col_w_160'])
         self.status_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
 
-        # Match the other batch screens: a single toolbar layout.
+        # Single row: manual controls + bulk selectors + excel controls + status/start
+        # (show/hide is handled by _switch_mode).
         toolbar_layout.addWidget(add_btn)
         toolbar_layout.addWidget(clear_btn)
         toolbar_layout.addWidget(self._manual_sep)
         toolbar_layout.addWidget(bulk_label)
         toolbar_layout.addWidget(frameset_bulk)
         toolbar_layout.addWidget(disclaimer_bulk)
+        toolbar_layout.addWidget(order_note_bulk)
         toolbar_layout.addWidget(template_btn)
         toolbar_layout.addWidget(browse_btn)
         toolbar_layout.addWidget(self.excel_file_label)
@@ -373,8 +382,8 @@ class BatchUploadScreen(QWidget):
 
         # Modern Fluent table
         self.table = QTableWidget()
-        self.table.setColumnCount(7)
-        self.table.setHorizontalHeaderLabels(["", "", "", "", "", "", ""])
+        self.table.setColumnCount(8)
+        self.table.setHorizontalHeaderLabels(["", "", "", "", "", "", "", ""])
         self.table.setRowCount(self._base_table_rows)
 
         # Apply table styling
@@ -392,32 +401,33 @@ class BatchUploadScreen(QWidget):
         # Show column separators to make the table easier to scan.
         self.table.setShowGrid(True)
 
+        # Smooth scrolling (avoid row/column snapping).
+        self.table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.table.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        try:
+            self.table.verticalScrollBar().setSingleStep(12)
+            self.table.horizontalScrollBar().setSingleStep(12)
+        except Exception:
+            pass
+
         # Auto-fill rows when the table viewport resizes
         self.table.viewport().installEventFilter(self)
 
         # Enable corner clipping for rounded borders
         self.table.setCornerButtonEnabled(False)
 
-        # Column widths - responsive design
+        # Column widths - fixed (horizontal scrolling as needed).
         header = self.table.horizontalHeader()
-        # Disable manual column resizing (no interactive splitters).
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)    # Brand
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)    # Code - fixed
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)  # URL - flexible
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)  # Description - flexible
-        # NOTE: ResizeToContents can inflate the table's minimum width after hide/show,
-        # which in turn can make the main window grow when toggling Excel ↔ Manual.
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)    # Frameset - fixed
-        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)    # Disclaimer - fixed
-        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)    # Delete - fixed
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
 
-        # Set minimum widths for stretching columns
-        self.table.setColumnWidth(0, SIZES['col_w_200'])  # Brand default (placeholder fits without squeezing others)
-        self.table.setColumnWidth(1, SIZES['col_w_140'])  # Code fixed
-        self.table.setColumnWidth(3, SIZES['col_w_200'])  # Description minimum
-        self.table.setColumnWidth(4, SIZES['check_col_width'])  # Frameset
-        self.table.setColumnWidth(5, SIZES['check_col_width_sm'])  # Disclaimer
-        self.table.setColumnWidth(6, SIZES['col_w_60'])   # Delete fixed
+        self.table.setColumnWidth(0, SIZES['col_w_240'])  # Brand
+        self.table.setColumnWidth(1, SIZES['col_w_180'])  # Code
+        self.table.setColumnWidth(2, SIZES['col_w_420'])  # URL / Code
+        self.table.setColumnWidth(3, SIZES['col_w_420'])  # Description
+        self.table.setColumnWidth(4, SIZES['col_w_120'])  # Frameset
+        self.table.setColumnWidth(5, SIZES['col_w_120'])  # Disclaimer
+        self.table.setColumnWidth(6, SIZES['col_w_120'])  # Order note
+        self.table.setColumnWidth(7, SIZES['col_w_56'])   # Delete
 
         # Populate initial rows
         for row in range(self._base_table_rows):
@@ -463,12 +473,16 @@ class BatchUploadScreen(QWidget):
         self.frameset_bulk.setToolTip(tr("batch.bulk.frameset.tip"))
         self.disclaimer_bulk.setText(tr("batch.bulk.disclaimer"))
         self.disclaimer_bulk.setToolTip(tr("batch.bulk.disclaimer.tip"))
+        self.order_note_bulk.setText(tr("batch.bulk.order_note"))
+        self.order_note_bulk.setToolTip(tr("batch.bulk.order_note.tip"))
 
         self.browse_btn.setText(tr("batch.browse_excel"))
         self.template_btn.setText(tr("batch.download_template"))
         self._set_excel_file_text(tr("batch.no_file"))
 
-        self._set_status_text(tr("batch.status.ready"))
+        # Keep the Start button area clean; don't show the "Ready" hint.
+        self._set_status_text("")
+        self.status_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
         self.start_btn.setText(tr("batch.start"))
 
         # Table headers
@@ -479,6 +493,7 @@ class BatchUploadScreen(QWidget):
             tr("batch.table.desc"),
             tr("batch.table.frameset"),
             tr("batch.table.disclaimer"),
+            tr("batch.table.order_note"),
             "",
         ])
 
@@ -611,6 +626,20 @@ class BatchUploadScreen(QWidget):
         disclaimer_layout.addWidget(disclaimer_check)
         self.table.setCellWidget(row, 5, disclaimer_container)
 
+        # Order note checkbox - centered with fixed approach
+        order_note_check = CheckBox("")
+        order_note_check.setProperty("ubTableCheck", True)
+        order_note_check.stateChanged.connect(self._validate)
+        order_note_container = QWidget()
+        order_note_container.setStyleSheet("background: transparent;")
+        order_note_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        order_note_layout = QHBoxLayout(order_note_container)
+        order_note_layout.setContentsMargins(SPACING['xs'], 0, SPACING['xs'], 0)
+        order_note_layout.setSpacing(0)
+        order_note_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        order_note_layout.addWidget(order_note_check)
+        self.table.setCellWidget(row, 6, order_note_container)
+
         # Delete button
         delete_btn = TransparentToolButton(FluentIcon.DELETE)
         delete_btn.setToolTip(self.main.i18n.tr("batch.row.remove.tip"))
@@ -624,7 +653,7 @@ class BatchUploadScreen(QWidget):
         delete_layout.addStretch(1)
         delete_layout.addWidget(delete_btn, 0, Qt.AlignmentFlag.AlignVCenter)
         delete_layout.addStretch(1)
-        self.table.setCellWidget(row, 6, delete_container)
+        self.table.setCellWidget(row, 7, delete_container)
 
     def _get_widget_from_cell(self, row, col, widget_type):
         """Helper to get widget from table cell (handles containers)"""
@@ -680,6 +709,7 @@ class BatchUploadScreen(QWidget):
         self.bulk_label.setVisible(is_manual)
         self.frameset_bulk.setVisible(is_manual)
         self.disclaimer_bulk.setVisible(is_manual)
+        self.order_note_bulk.setVisible(is_manual)
         self._manual_sep.setVisible(is_manual)
 
         is_excel = mode == "excel"
@@ -737,7 +767,7 @@ class BatchUploadScreen(QWidget):
 
     def _remove_row(self):
         """Remove a row from table"""
-        row = self._find_row_for_sender(6, TransparentToolButton)
+        row = self._find_row_for_sender(7, TransparentToolButton)
         if row is None:
             return
         if self.table.rowCount() > 1:
@@ -771,6 +801,14 @@ class BatchUploadScreen(QWidget):
             if checkbox:
                 checkbox.setChecked(checked)
 
+    def _toggle_all_order_notes(self, state):
+        """Toggle all order note checkboxes"""
+        checked = state == Qt.CheckState.Checked.value
+        for row in range(self.table.rowCount()):
+            checkbox = self._get_widget_from_cell(row, 6, CheckBox)
+            if checkbox:
+                checkbox.setChecked(checked)
+
     def _on_code_changed(self, text, field):
         """Handle product code field change with validation"""
         self._validate()
@@ -783,6 +821,12 @@ class BatchUploadScreen(QWidget):
         """Set status label text without allowing it to steal toolbar space."""
         if not hasattr(self, "status_label") or self.status_label is None:
             return
+
+        # Don't reserve toolbar space when there's nothing to show.
+        try:
+            self.status_label.setVisible(bool((text or "").strip()))
+        except Exception:
+            pass
 
         # Keep full text accessible on hover.
         try:
@@ -844,14 +888,9 @@ class BatchUploadScreen(QWidget):
 
         self.start_btn.setEnabled(valid_count > 0)
 
-        if valid_count > 0:
-            key = "batch.status.ready_one" if valid_count == 1 else "batch.status.ready_many"
-            self._set_status_text(self.main.i18n.tr(key, count=valid_count))
-            self.status_label.setStyleSheet(f"color: {COLORS['success']}; font-weight: 500;")
-        else:
-            # Don't nag the user; keep Start disabled quietly.
-            self._set_status_text("")
-            self.status_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        # Don't show a "Ready" hint; keep Start enabled/disabled quietly.
+        self._set_status_text("")
+        self.status_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
 
     def _handle_file_drop(self, filepath):
         """Handle file drop or click on drop zone"""
@@ -928,6 +967,9 @@ class BatchUploadScreen(QWidget):
                 disclaimer_raw = excel_row[5] if len(excel_row) > 5 else False
                 disclaimer = str(disclaimer_raw).lower() in ("yes", "true", "1") if isinstance(disclaimer_raw, str) else bool(disclaimer_raw)
 
+                order_raw = excel_row[6] if len(excel_row) > 6 else False
+                order_note = str(order_raw).lower() in ("yes", "true", "1") if isinstance(order_raw, str) else bool(order_raw)
+
                 # Setup row
                 self._setup_table_row(table_row)
 
@@ -956,6 +998,10 @@ class BatchUploadScreen(QWidget):
                 if disclaimer_checkbox:
                     disclaimer_checkbox.setChecked(disclaimer)
 
+                order_checkbox = self._get_widget_from_cell(table_row, 6, CheckBox)
+                if order_checkbox:
+                    order_checkbox.setChecked(order_note)
+
                 if brand and code and url:
                     valid_count += 1
                 else:
@@ -981,9 +1027,9 @@ class BatchUploadScreen(QWidget):
                 self.status_label.setStyleSheet(f"color: {COLORS['warning']}; font-weight: 500;")
                 self.start_btn.setEnabled(False)
             else:
-                key = "batch.excel.ready_from_excel_one" if valid_count == 1 else "batch.excel.ready_from_excel_many"
-                self._set_status_text(self.main.i18n.tr(key, count=valid_count))
-                self.status_label.setStyleSheet(f"color: {COLORS['success']}; font-weight: 500;")
+                # Don't show a "Ready" hint; keep Start enabled silently.
+                self._set_status_text("")
+                self.status_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
                 self.start_btn.setEnabled(valid_count > 0)
 
         except Exception as ex:
@@ -1015,12 +1061,12 @@ class BatchUploadScreen(QWidget):
             ws.title = self.main.i18n.tr("batch.title")
 
             # Headers
-            headers = ["Brand", "Product Code", "URL or Code", "Description", "Frameset", "Append Disclaimer"]
+            headers = ["Brand", "Product Code", "URL or Code", "Description", "Frameset", "Append Disclaimer", "Append Order Note"]
             ws.append(headers)
 
             # Examples
-            ws.append(["KROSS", "UB-1234", "https://kross.pl/product1", "Mountain Bike", "No", "Yes"])
-            ws.append(["Pinarello", "UB-5678", "https://pinarello.com/product2", "Road Bike", "Yes", "No"])
+            ws.append(["KROSS", "UB-1234", "https://kross.pl/product1", "Mountain Bike", "No", "Yes", "Yes"])
+            ws.append(["Pinarello", "UB-5678", "https://pinarello.com/product2", "Road Bike", "Yes", "No", "No"])
 
             # Style with our colors
             for cell in ws[1]:
@@ -1086,13 +1132,17 @@ class BatchUploadScreen(QWidget):
             disclaimer_checkbox = self._get_widget_from_cell(row, 5, CheckBox)
             disclaimer = disclaimer_checkbox.isChecked() if disclaimer_checkbox else False
 
+            order_checkbox = self._get_widget_from_cell(row, 6, CheckBox)
+            order_note = order_checkbox.isChecked() if order_checkbox else False
+
             items.append({
                 'brand': brand,
                 'code': code,
                 'url': url,
                 'description_name': desc,
                 'frameset_only': frameset,
-                'append_disclaimer': disclaimer
+                'append_disclaimer': disclaimer,
+                'append_order_note': order_note,
             })
 
         if not items:

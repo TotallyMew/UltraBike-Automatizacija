@@ -65,7 +65,9 @@ class MainWindow(FluentWindow):
 
         # Configure window
         self.setWindowTitle(self.i18n.tr("app.title"))
-        self.resize(1200, 800)
+        # Slightly larger default/min size to prevent batch tables/toolbars from getting squished.
+        self.resize(1300, 820)
+        self.setMinimumSize(1200, 780)
 
         # Set application font
         app_font = QFont()
