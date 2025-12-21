@@ -14,6 +14,10 @@ class SettingsManager:
         """
         Insert default settings if they don't exist
         """
+        DEFAULT_UPDATE_MANIFEST_URL = (
+            "https://raw.githubusercontent.com/TotallyMew/UltraBike_Automatizacija_Release/main/latest.json"
+        )
+
         desktop = str(Path.home() / "Desktop")
         default_kross = str(Path.home() / "Desktop" / "KROSS")
         defaults = [
@@ -64,8 +68,8 @@ class SettingsManager:
              ('update_check_enabled', 'true', 'bool', 'updates',
               'Check for application updates on startup', 'true'),
 
-             ('update_manifest_url', '', 'string', 'updates',
-              'URL to update manifest JSON (latest.json)', ''),
+             ('update_manifest_url', DEFAULT_UPDATE_MANIFEST_URL, 'string', 'updates',
+              'URL to update manifest JSON (latest.json)', DEFAULT_UPDATE_MANIFEST_URL),
         ]
         
         cursor = self.db.conn.cursor()
@@ -82,6 +86,22 @@ class SettingsManager:
                     (key, value, value_type, category, description, default_value)
                     VALUES (?, ?, ?, ?, ?, ?)
                 """, (key, value, value_type, category, description, default_value))
+            else:
+                # Backfill defaults for existing installs if the value is empty.
+                # This ensures update checks work by default without requiring manual scripts.
+                if key == 'update_manifest_url':
+                    try:
+                        row = cursor.execute(
+                            "SELECT value FROM settings WHERE key = ?", (key,)
+                        ).fetchone()
+                        current_val = (row[0] if row else '')
+                        if (current_val is None) or (str(current_val).strip() == ''):
+                            cursor.execute(
+                                "UPDATE settings SET value=?, default_value=? WHERE key=?",
+                                (DEFAULT_UPDATE_MANIFEST_URL, DEFAULT_UPDATE_MANIFEST_URL, key),
+                            )
+                    except Exception:
+                        pass
         
         self.db.conn.commit()
     

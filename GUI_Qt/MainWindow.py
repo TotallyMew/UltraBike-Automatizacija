@@ -1099,7 +1099,8 @@ class MainWindow(FluentWindow):
         if not url:
             return
 
-        current = get_app_version('1.1.0')
+        # If VERSION.txt is missing/corrupt, default low so updates still work.
+        current = get_app_version('0.0.0')
 
         from PySide6.QtCore import QThread, Signal
 
@@ -1180,10 +1181,13 @@ class MainWindow(FluentWindow):
                 try:
                     name = f"UltraBike_Automatizacija_Setup_{self.m.version}.exe"
                     path = download_to_temp(self.m.url, name)
-                    if getattr(self.m, 'sha256', None):
-                        actual = sha256_file(path)
-                        if actual.lower() != str(self.m.sha256).lower():
-                            raise RuntimeError('Downloaded update failed SHA256 verification')
+
+                    # SHA256 verification is now mandatory (enforced in fetch_update_manifest)
+                    # Always verify downloaded file matches manifest hash
+                    actual = sha256_file(path)
+                    if actual.lower() != str(self.m.sha256).lower():
+                        raise RuntimeError('Downloaded update failed SHA256 verification')
+
                     self.finished.emit(True, path, '')
                 except Exception as e:
                     self.finished.emit(False, '', str(e))
@@ -1205,7 +1209,16 @@ class MainWindow(FluentWindow):
                 return
 
             try:
-                run_installer(path, silent=False)
+                # Updates should be unattended: no destination/shortcut prompts and no immediate
+                # post-install launch (which can race with AV/file locks and cause transient DLL errors).
+                run_installer(path, silent=True)
+
+                # CRITICAL FIX: Wait for installer to launch and UAC dialog to appear
+                # Without this delay, app quits before UAC completes, causing installer to fail
+                # This ensures the installer process is stable before parent app exits
+                import time
+                time.sleep(5.0)  # 5 seconds allows UAC dialog to appear and user to respond
+
             except Exception as e:
                 InfoBar.error(
                     title=self.i18n.tr('update.error.title') if hasattr(self, 'i18n') else 'Update',

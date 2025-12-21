@@ -200,28 +200,58 @@ class BatchDescriptionsWorker(QThread):
             self.row_update.emit(row, tr("batchdesc.status.running"), "")
             self.log.emit(tr("batchdesc.progress.open", current=idx, total=total, code=code))
 
+
             try:
                 self._ensure_products_page(driver)
                 nav.navigate_to_product(brand, code)
 
-                self.log.emit(tr("batchdesc.progress.upload", current=idx, total=total, code=code))
-                uploaded = desc_manager.upload_to_prestashop(
-                    driver,
-                    product_code=code,
-                    name=desc,
-                    append_disclaimer=disclaimer,
-                )
-                if not uploaded:
-                    self.row_update.emit(row, tr("batchdesc.status.failed"), tr("batchdesc.item.failed_upload"))
-                    continue
+                did_upload = False
+                if desc:
+                    self.log.emit(tr("batchdesc.progress.upload", current=idx, total=total, code=code))
+                    uploaded = desc_manager.upload_to_prestashop(
+                        driver,
+                        product_code=code,
+                        name=desc,
+                        append_disclaimer=disclaimer,
+                    )
+                    if not uploaded:
+                        self.row_update.emit(row, tr("batchdesc.status.failed"), tr("batchdesc.item.failed_upload"))
+                        continue
+                    did_upload = True
 
-                if order_note:
+                # If no description, but disclaimer or order note is checked, still try to append
+                if (not desc) and (disclaimer or order_note):
+                    # Only disclaimer: append_disclaimer_if_missing (not implemented for short desc), so only order note is supported here
+                    if order_note:
+                        try:
+                            desc_manager.append_order_note_to_short_description(driver, product_code=code)
+                        except Exception:
+                            pass
+                elif order_note:
                     try:
                         desc_manager.append_order_note_to_short_description(driver, product_code=code)
                     except Exception:
-                        # Best effort; don't fail the whole row if short description update is flaky.
                         pass
 
+                # Scroll to and click the product title field for the last language edited before saving
+                try:
+                    # Use the last language from DescriptionManager (lv is last in the loop)
+                    from selenium.webdriver.support.ui import WebDriverWait
+                    from selenium.webdriver.support import expected_conditions as EC
+                    from selenium.webdriver.common.by import By
+                    # lang_id_map: lt=2, en=1, lv=3
+                    last_lang_id = "3"  # Latvian
+                    title_field_id = f"form_step1_name_{last_lang_id}"
+                    title_field = WebDriverWait(driver, 3).until(
+                        EC.presence_of_element_located((By.ID, title_field_id))
+                    )
+                    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", title_field)
+                    try:
+                        title_field.click()
+                    except Exception:
+                        driver.execute_script("arguments[0].click();", title_field)
+                except Exception:
+                    pass
                 self.log.emit(tr("batchdesc.progress.save", current=idx, total=total, code=code))
                 web.save_information()
                 time.sleep(0.5)
@@ -235,6 +265,8 @@ class BatchDescriptionsWorker(QThread):
 
 
 class BatchDescriptionsScreen(QWidget):
+
+        # ...existing code...
     def __init__(self, main_window, parent=None):
         super().__init__(parent)
         self.main = main_window
@@ -718,7 +750,8 @@ class BatchDescriptionsScreen(QWidget):
 
             for table_row, excel_row in enumerate(data_rows):
                 brand = str(excel_row[0]).strip() if len(excel_row) > 0 and excel_row[0] else ""
-                code = str(excel_row[1]).strip() if len(excel_row) > 1 and excel_row[1] else ""
+                code_raw = str(excel_row[1]).strip() if len(excel_row) > 1 and excel_row[1] else ""
+                code = self._normalize_code(code_raw)
                 desc = str(excel_row[2]).strip() if len(excel_row) > 2 and excel_row[2] else ""
 
                 disclaimer_raw = excel_row[3] if len(excel_row) > 3 else False
@@ -921,10 +954,13 @@ class BatchDescriptionsScreen(QWidget):
         self.table.setCellWidget(row, 1, wrap(code))
 
         desc = ComboBox()
-        desc.addItems(self.descriptions)
         desc.setPlaceholderText(self.main.i18n.tr("batch.optional"))
         desc.setMinimumHeight(SIZES['input_height'])
         desc.currentTextChanged.connect(self._validate)
+        desc.addItem(self.main.i18n.tr("batch.optional"))
+        for d in self.descriptions:
+            desc.addItem(d)
+        desc.setCurrentIndex(0)
         self.table.setCellWidget(row, 2, wrap(desc))
 
         disc = CheckBox("")
@@ -987,17 +1023,23 @@ class BatchDescriptionsScreen(QWidget):
             order = self._get_widget_from_cell(row, 4, CheckBox)
 
             brand = b.currentText().strip() if b else ""
-            code = c.text().strip() if c else ""
+            code_raw = c.text().strip() if c else ""
+            code = self._normalize_code(code_raw)
             desc = d.currentText().strip() if d else ""
             disclaimer = disc.isChecked() if disc else False
             order_note = order.isChecked() if order else False
 
-            if brand in self.brands and code and desc:
+            # Row is valid if brand and code are set, and at least one of:
+            # - description is selected (not placeholder)
+            # - disclaimer is checked
+            # - order note is checked
+            desc_selected = bool(desc) and desc != self.main.i18n.tr("batch.optional")
+            if brand in self.brands and code and (desc_selected or disclaimer or order_note):
                 items.append({
                     "row": row,
                     "brand": brand,
                     "code": code,
-                    "description": desc,
+                    "description": desc if desc_selected else "",
                     "append_disclaimer": disclaimer,
                     "append_order_note": order_note,
                 })
@@ -1147,11 +1189,26 @@ class BatchDescriptionsScreen(QWidget):
             return
         row_height = self.table.verticalHeader().defaultSectionSize() or 56
         target = (viewport_height + row_height - 1) // row_height + 1
-        target = max(self._base_table_rows, int(target))
-        target = min(target, 50)
+        # Remove minimum row limit
+        # Remove both minimum and maximum row limits
+        target = int(target)
         current = self.table.rowCount()
         if current >= target:
             return
         self.table.setRowCount(target)
         for r in range(current, target):
             self._setup_table_row(r)
+
+
+# Place static method at the end of the class
+    @staticmethod
+    def _normalize_code(raw: str) -> str:
+        """Normalize product code to always include UB- prefix.
+        Mirrors BatchTitles/BatchUploadDialog behavior.
+        """
+        code = (raw or "").strip()
+        if not code:
+            return ""
+        if code.upper().startswith("UB-"):
+            return code
+        return f"UB-{code}"

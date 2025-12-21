@@ -54,7 +54,11 @@ def is_newer_version(current: str, candidate: str) -> bool:
 
 
 def fetch_update_manifest(url: str, timeout: float = 10.0) -> UpdateManifest:
-    r = requests.get(url, timeout=timeout)
+    # Enforce HTTPS for security - prevent MITM attacks
+    if not url.startswith('https://'):
+        raise ValueError("Update manifest URL must use HTTPS")
+
+    r = requests.get(url, timeout=timeout, verify=True)
     r.raise_for_status()
     data = r.json()
 
@@ -63,10 +67,18 @@ def fetch_update_manifest(url: str, timeout: float = 10.0) -> UpdateManifest:
     sha256 = data.get("sha256")
     notes = data.get("notes")
 
+    # Require all critical fields including SHA256 for security
     if not version or not download_url:
         raise ValueError("Update manifest must include 'version' and 'url'")
 
-    sha256_s = str(sha256).strip() if sha256 else None
+    # Make SHA256 mandatory to prevent serving compromised installers
+    if not sha256:
+        raise ValueError("Update manifest must include 'sha256' for security verification")
+
+    sha256_s = str(sha256).strip()
+    if not sha256_s:
+        raise ValueError("Update manifest 'sha256' field cannot be empty")
+
     notes_s = str(notes) if notes is not None else None
     return UpdateManifest(version=version, url=download_url, sha256=sha256_s, notes=notes_s)
 
@@ -83,16 +95,20 @@ def download_to_temp(
     url: str,
     filename_hint: str,
     progress_cb: Optional[Callable[[int, int], None]] = None,
-    timeout: float = 20.0,
+    timeout: float = 120.0,  # Increased from 20s to 120s for large installers on slow connections
 ) -> str:
     """Download to %TEMP% and return the file path."""
+    # Enforce HTTPS for download URL security
+    if not url.startswith('https://'):
+        raise ValueError("Download URL must use HTTPS")
+
     safe_name = "".join(ch for ch in filename_hint if ch.isalnum() or ch in ("-", "_", "."))
     if not safe_name.lower().endswith(".exe"):
         safe_name += ".exe"
 
     dest = os.path.join(tempfile.gettempdir(), safe_name)
 
-    with requests.get(url, stream=True, timeout=timeout) as r:
+    with requests.get(url, stream=True, timeout=timeout, verify=True) as r:
         r.raise_for_status()
         total = int(r.headers.get("Content-Length", "0") or "0")
         downloaded = 0
@@ -112,9 +128,15 @@ def download_to_temp(
 
 
 def run_installer(installer_path: str, silent: bool = True) -> None:
-    args = [installer_path]
+    import sys
+    import os
 
-    # Inno Setup silent upgrade; closes app if needed.
+    # Verify installer exists before attempting to run
+    if not os.path.exists(installer_path):
+        raise FileNotFoundError(f"Installer not found: {installer_path}")
+
+    # Build command-line arguments for Inno Setup
+    args = [installer_path]
     if silent:
         args += [
             "/VERYSILENT",
@@ -126,8 +148,31 @@ def run_installer(installer_path: str, silent: bool = True) -> None:
             "/RESTARTAPPLICATIONS=no",
         ]
 
-    # Detach so the current process can exit.
-    subprocess.Popen(args, close_fds=True)
+    # Use Windows-specific ShellExecute for proper UAC elevation handling
+    # This keeps the process alive through the UAC dialog, preventing orphaning
+    if sys.platform == 'win32':
+        import ctypes
+
+        # Join arguments for ShellExecuteW (skip first arg which is the exe path)
+        params = " ".join(args[1:]) if len(args) > 1 else None
+
+        # ShellExecuteW with "runas" verb requests UAC elevation
+        # This is more robust than subprocess.Popen for installers
+        result = ctypes.windll.shell32.ShellExecuteW(
+            None,           # hwnd - no parent window
+            "open",         # lpOperation - use "open" instead of "runas" since installer handles elevation
+            installer_path, # lpFile - path to installer
+            params,         # lpParameters - command-line args
+            None,           # lpDirectory - use installer's directory
+            1               # nShowCmd - SW_SHOWNORMAL (1)
+        )
+
+        # ShellExecuteW returns a value > 32 on success, <= 32 on error
+        if result <= 32:
+            raise RuntimeError(f"Failed to launch installer (error code: {result})")
+    else:
+        # Fallback for non-Windows platforms (shouldn't happen for this app)
+        subprocess.Popen(args, close_fds=True)
 
 
 def build_manifest_dict(version: str, installer_url: str, sha256: str | None = None, notes: str | None = None) -> dict:

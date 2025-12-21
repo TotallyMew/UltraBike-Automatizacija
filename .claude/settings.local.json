@@ -15,7 +15,9 @@
       "Bash(dir:*)",
       "Bash(cat:*)",
       "Bash(ls:*)",
-      "Bash(timeout 10 python:*)"
+      "Bash(timeout 10 python:*)",
+      "Bash(powershell -ExecutionPolicy Bypass -File \"d:\\\\Iš desktop\\\\Programavimas\\\\Projects\\\\Python\\\\UltraBike_Automatizacija\\\\build_pyinstaller_clean.ps1\")",
+      "Bash(powershell -ExecutionPolicy Bypass -File \"d:\\\\Iš desktop\\\\Programavimas\\\\Projects\\\\Python\\\\UltraBike_Automatizacija\\\\Installer\\\\build_installer.ps1\":*)"
     ],
     "deny": [],
     "ask": []

@@ -1,14 +1,14 @@
 import time
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
+
 from selenium.common.exceptions import (
-    NoSuchElementException,
     ElementClickInterceptedException,
-                                        )
-import time
+    NoSuchElementException,
+    StaleElementReferenceException,
+    TimeoutException,
+)
 from selenium.webdriver.common.by import By
-from selenium.common.exceptions import NoSuchElementException
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
 
 
 
@@ -49,17 +49,74 @@ class WebInteractionHandler:
             # GUI/log should handle already-added feedback
             pass
 
-    def save_information(self):
+    def save_information(self, timeout: float = 3.0):
+        """Trigger PrestaShop save via ALT+SHIFT+S, then wait for completion.
+
+        Raises on failure so callers can surface a proper error.
+        """
+
+        from selenium.webdriver.common.keys import Keys
+
+        # Focus the body or a known input to ensure shortcut works
         try:
-            save_button = WebDriverWait(self.driver, 2).until(  
-                EC.element_to_be_clickable((By.CSS_SELECTOR, "input.btn.btn-primary.save.uppercase.ml-3"))
-            )
-            self.driver.execute_script("arguments[0].click();", save_button)
-            # GUI/log should handle success feedback
-        except:
-            # GUI/log should handle failure feedback
+            self.driver.switch_to.active_element.send_keys(Keys.NULL)
+        except Exception:
             pass
-        time.sleep(3)
+
+        # Send ALT+SHIFT+S
+        actions = None
+        try:
+            from selenium.webdriver.common.action_chains import ActionChains
+            actions = ActionChains(self.driver)
+            actions.key_down(Keys.ALT)
+            actions.key_down(Keys.SHIFT)
+            actions.send_keys('s')
+            actions.key_up(Keys.SHIFT)
+            actions.key_up(Keys.ALT)
+            actions.perform()
+        except Exception as e:
+            raise RuntimeError("Failed to send ALT+SHIFT+S") from e
+
+        self._wait_for_save_completion(timeout=timeout)
+
+    def _wait_for_save_completion(self, timeout: float = 3.0):
+        """Best-effort wait for save to finish.
+
+        PrestaShop UI varies; we mainly wait for the form submit to settle.
+        """
+
+        # If an error alert or growl error appears immediately, fail fast.
+        try:
+            WebDriverWait(self.driver, 1).until(
+                EC.presence_of_element_located(
+                    (
+                        By.CSS_SELECTOR,
+                        ".alert.alert-danger, .alert-danger, .notification.notification-danger, .growl.growl-error",
+                    )
+                )
+            )
+            # If it's a growl error, extract the message for better reporting
+            try:
+                growl = self.driver.find_element(By.CSS_SELECTOR, ".growl.growl-error .growl-message")
+                msg = growl.text.strip()
+                raise RuntimeError(f"PrestaShop growl error: {msg}")
+            except Exception:
+                raise RuntimeError("PrestaShop reported a save error")
+        except TimeoutException:
+            pass
+
+        # Wait until the save button is clickable again OR a notification appears.
+        try:
+            WebDriverWait(self.driver, timeout).until(
+                EC.any_of(
+                    EC.element_to_be_clickable((By.CSS_SELECTOR, "button.js-btn-save")),
+                    EC.element_to_be_clickable((By.CSS_SELECTOR, "input.btn.btn-primary.save.uppercase.ml-3")),
+                    EC.presence_of_element_located((By.CSS_SELECTOR, ".alert-success, .notification-success, .growl, .ps-alert-success, .alert.alert-success")),
+                )
+            )
+        except (TimeoutException, StaleElementReferenceException):
+            # Some saves trigger a soft refresh/navigation; treat as success.
+            pass
 
     def click_product_by_code(self, unique_code):
         try:

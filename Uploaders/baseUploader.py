@@ -514,6 +514,7 @@ class ProductUploader(ABC):
         except Exception as e:
             self._log_error("Save failed", exception=e)
             ErrorManager.show_error("UPLOAD_SAVE_FAILED")
+            raise
     
     def __del__(self):
         """Cleanup database connection if we own it"""

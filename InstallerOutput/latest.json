@@ -1,6 +1,6 @@
 ﻿{
-    "version":  "1.1.0",
-    "url":  "https://github.com/TotallyMew/UltraBike_Automatizacija_Release/releases/download/v1.1.0/UltraBike_Automatizacija_Setup_1.1.0.exe",
-    "sha256":  "e19f5474fbd37a735dd02db49ac51a00f8d0810157bf35e58ad209f67d776d6a",
-    "notes":  "1.1.0: batch UI layout/scroll improvements; batch titles changes; disclaimer + order-note append fixes for single \u0026 batch upload; order-note TinyMCE empty-paragraph cleanup."
+    "version":  "1.1.3",
+    "url":  "https://github.com/TotallyMew/UltraBike_Automatizacija_Release/releases/download/v1.1.3/UltraBike_Automatizacija_Setup_1.1.3.exe",
+    "sha256":  "0b2340e7bafe976762c6868a2cf34ac9a8309b7a9e311e043d906be3ad8dabab",
+    "notes":  "Critical update: Fixed UAC race condition causing update failures; Made SHA256 verification mandatory for security; Increased download timeout to 120s for slow connections; Enforced HTTPS for all update URLs"
 }
