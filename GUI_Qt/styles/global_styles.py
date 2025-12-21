@@ -154,4 +154,27 @@ def get_global_stylesheet():
         QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{
             background: none;
         }}
+
+        /* =====================
+           Table indicator-only CheckBox
+           ===================== */
+
+        /*
+        QFluentWidgets' CheckBox paints its own indicator using the style's
+        SE_CheckBoxIndicator rect, which is left-positioned by default.
+        For "indicator-only" checkboxes used in tables (no label), we center
+        the indicator subcontrol via a dynamic property.
+        */
+        CheckBox[ubTableCheck="true"],
+        QCheckBox[ubTableCheck="true"] {{
+            padding: 0px;
+            margin: 0px;
+        }}
+
+        CheckBox[ubTableCheck="true"]::indicator,
+        QCheckBox[ubTableCheck="true"]::indicator {{
+            subcontrol-origin: content;
+            subcontrol-position: center;
+            margin: 0px;
+        }}
     """

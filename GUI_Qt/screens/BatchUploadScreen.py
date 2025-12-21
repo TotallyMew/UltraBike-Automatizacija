@@ -270,19 +270,14 @@ class BatchUploadScreen(QWidget):
         toolbar_card.setBorderRadius(RADII['md'])
         toolbar_layout = QHBoxLayout(toolbar_card)
         toolbar_layout.setContentsMargins(*TOOLBAR_MARGINS)
-
-        # Manual toolbar
-        self.manual_toolbar = QWidget()
-        manual_tb_layout = QHBoxLayout(self.manual_toolbar)
-        manual_tb_layout.setContentsMargins(0, 0, 0, 0)
-        manual_tb_layout.setSpacing(CONTENT_SPACING)
+        toolbar_layout.setSpacing(CARD_SPACING)
 
         self.add_btn = PushButton("")
         add_btn = self.add_btn
         add_btn.setIcon(FluentIcon.ADD.icon())
         add_btn.clicked.connect(self._add_row)
 
-        self.clear_btn = TransparentPushButton("")
+        self.clear_btn = PushButton("")
         clear_btn = self.clear_btn
         clear_btn.setIcon(FluentIcon.DELETE.icon())
         clear_btn.clicked.connect(self._clear_all)
@@ -294,11 +289,18 @@ class BatchUploadScreen(QWidget):
 
         self.frameset_bulk = CheckBox("")
         frameset_bulk = self.frameset_bulk
+        frameset_bulk.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         frameset_bulk.stateChanged.connect(self._toggle_all_framesets)
 
         self.disclaimer_bulk = CheckBox("")
         disclaimer_bulk = self.disclaimer_bulk
+        disclaimer_bulk.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         disclaimer_bulk.stateChanged.connect(self._toggle_all_disclaimers)
+
+        # Spacer between Clear and Bulk Select (hide/show with manual controls)
+        self._manual_sep = QWidget()
+        self._manual_sep.setStyleSheet("background: transparent;")
+        self._manual_sep.setFixedWidth(ROW_SPACING)
 
         # Status + Start (kept in the top toolbar for parity with other batch screens)
         self.status_label = BodyLabel("")
@@ -307,54 +309,57 @@ class BatchUploadScreen(QWidget):
         self.start_btn = PrimaryPushButton("")
         self.start_btn.setIcon(FluentIcon.PLAY)
         self.start_btn.setEnabled(False)
-        self.start_btn.setFixedHeight(SIZES['button_height'])
         self.start_btn.clicked.connect(self._start_upload)
-
-        actions_widget = QWidget()
-        actions_widget.setStyleSheet("background: transparent;")
-        actions_layout = QHBoxLayout(actions_widget)
-        actions_layout.setContentsMargins(0, 0, 0, 0)
-        actions_layout.setSpacing(CONTENT_SPACING)
-        actions_layout.addWidget(self.status_label)
-        actions_layout.addWidget(self.start_btn)
-
-        manual_tb_layout.addWidget(add_btn)
-        manual_tb_layout.addWidget(clear_btn)
-        manual_tb_layout.addSpacing(ROW_SPACING)
-        manual_tb_layout.addWidget(bulk_label)
-        manual_tb_layout.addWidget(frameset_bulk)
-        manual_tb_layout.addWidget(disclaimer_bulk)
-        manual_tb_layout.addStretch(1)
-
-        # Excel toolbar
-        self.excel_toolbar = QWidget()
-        excel_tb_layout = QHBoxLayout(self.excel_toolbar)
-        excel_tb_layout.setContentsMargins(0, 0, 0, 0)
-        excel_tb_layout.setSpacing(CONTENT_SPACING)
 
         self.browse_btn = PushButton("")
         browse_btn = self.browse_btn
-        browse_btn.setIcon(FluentIcon.FOLDER)
+        browse_btn.setIcon(FluentIcon.FOLDER_ADD.icon())
         browse_btn.clicked.connect(self._browse_excel)
 
-        self.template_btn = TransparentPushButton("")
+        self.template_btn = PushButton("")
         template_btn = self.template_btn
-        template_btn.setIcon(FluentIcon.DOWNLOAD)
+        template_btn.setIcon(FluentIcon.DOWNLOAD.icon())
         template_btn.clicked.connect(self._download_template)
 
-        self.excel_file_label = BodyLabel("")
-        self.excel_file_label.setStyleSheet(f"color: {COLORS['text_secondary']}; margin-left: {SPACING['lg']}px;")
+        self.excel_file_label = CaptionLabel("")
+        self.excel_file_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self.excel_file_label.setMinimumWidth(0)
+        # Keep the excel controls packed to the right (like other batch screens).
+        # If this label expands, it pushes the buttons left and looks "offset".
+        self.excel_file_label.setMaximumWidth(SIZES['col_w_260'])
+        self.excel_file_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
 
-        excel_tb_layout.addWidget(browse_btn)
-        excel_tb_layout.addWidget(template_btn)
-        excel_tb_layout.addStretch()
-        excel_tb_layout.addWidget(self.excel_file_label)
+        # Spacer between excel file label and status (hide/show with excel controls)
+        self._excel_status_sep = QWidget()
+        self._excel_status_sep.setStyleSheet("background: transparent;")
+        self._excel_status_sep.setFixedWidth(CONTENT_SPACING)
 
-        self.excel_toolbar.setVisible(False)
+        # Expandable spacer that pushes status/start to the right.
+        # This keeps the Excel controls on the left in Excel mode.
+        self._toolbar_spacer = QWidget()
+        self._toolbar_spacer.setStyleSheet("background: transparent;")
+        self._toolbar_spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
 
-        toolbar_layout.addWidget(self.manual_toolbar, 1)
-        toolbar_layout.addWidget(self.excel_toolbar, 1)
-        toolbar_layout.addWidget(actions_widget, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        # Keep status messages from squeezing the bulk checkboxes.
+        # (Long validation text should clip inside this area, not steal toolbar space.)
+        self.status_label.setMinimumWidth(0)
+        self.status_label.setMaximumWidth(SIZES['col_w_160'])
+        self.status_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
+
+        # Match the other batch screens: a single toolbar layout.
+        toolbar_layout.addWidget(add_btn)
+        toolbar_layout.addWidget(clear_btn)
+        toolbar_layout.addWidget(self._manual_sep)
+        toolbar_layout.addWidget(bulk_label)
+        toolbar_layout.addWidget(frameset_bulk)
+        toolbar_layout.addWidget(disclaimer_bulk)
+        toolbar_layout.addWidget(template_btn)
+        toolbar_layout.addWidget(browse_btn)
+        toolbar_layout.addWidget(self.excel_file_label)
+        toolbar_layout.addWidget(self._excel_status_sep)
+        toolbar_layout.addWidget(self._toolbar_spacer)
+        toolbar_layout.addWidget(self.status_label)
+        toolbar_layout.addWidget(self.start_btn)
         layout.addWidget(toolbar_card)
 
         # === CONTENT AREA ===
@@ -400,14 +405,18 @@ class BatchUploadScreen(QWidget):
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)    # Code - fixed
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)  # URL - flexible
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)  # Description - flexible
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)  # Frameset - auto
-        header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)  # Disclaimer - auto
+        # NOTE: ResizeToContents can inflate the table's minimum width after hide/show,
+        # which in turn can make the main window grow when toggling Excel ↔ Manual.
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)    # Frameset - fixed
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)    # Disclaimer - fixed
         header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)    # Delete - fixed
 
         # Set minimum widths for stretching columns
         self.table.setColumnWidth(0, SIZES['col_w_200'])  # Brand default (placeholder fits without squeezing others)
         self.table.setColumnWidth(1, SIZES['col_w_140'])  # Code fixed
         self.table.setColumnWidth(3, SIZES['col_w_200'])  # Description minimum
+        self.table.setColumnWidth(4, SIZES['check_col_width'])  # Frameset
+        self.table.setColumnWidth(5, SIZES['check_col_width_sm'])  # Disclaimer
         self.table.setColumnWidth(6, SIZES['col_w_60'])   # Delete fixed
 
         # Populate initial rows
@@ -436,6 +445,10 @@ class BatchUploadScreen(QWidget):
 
         self.retranslate_ui()
 
+        # Ensure initial toolbar visibility matches the active mode.
+        # Without this, excel-mode controls can appear in manual mode until the user toggles pills.
+        self._switch_mode(self.current_mode)
+
     def retranslate_ui(self):
         tr = self.main.i18n.tr
 
@@ -453,9 +466,9 @@ class BatchUploadScreen(QWidget):
 
         self.browse_btn.setText(tr("batch.browse_excel"))
         self.template_btn.setText(tr("batch.download_template"))
-        self.excel_file_label.setText(tr("batch.no_file"))
+        self._set_excel_file_text(tr("batch.no_file"))
 
-        self.status_label.setText(tr("batch.status.ready"))
+        self._set_status_text(tr("batch.status.ready"))
         self.start_btn.setText(tr("batch.start"))
 
         # Table headers
@@ -569,6 +582,7 @@ class BatchUploadScreen(QWidget):
 
         # Frameset checkbox - centered with fixed approach
         frameset_check = CheckBox("")
+        frameset_check.setProperty("ubTableCheck", True)
         frameset_check.setVisible(False)
         frameset_check.stateChanged.connect(self._validate)
         # Let the checkbox use its natural size; the container layout will center it.
@@ -584,6 +598,7 @@ class BatchUploadScreen(QWidget):
 
         # Disclaimer checkbox - centered with fixed approach
         disclaimer_check = CheckBox("")
+        disclaimer_check.setProperty("ubTableCheck", True)
         disclaimer_check.stateChanged.connect(self._validate)
         # Let the checkbox use its natural size; the container layout will center it.
         disclaimer_container = QWidget()
@@ -634,15 +649,44 @@ class BatchUploadScreen(QWidget):
 
     def _switch_mode(self, mode):
         """Switch between manual and Excel mode"""
+        # Batch Upload has a weird sizing interaction on some systems where toggling
+        # Excel → Manual causes the top-level window to grow horizontally.
+        # To avoid that, temporarily lock the window width during the mode switch,
+        # then restore the previous min/max constraints once the layout settles.
+        win = self.window()
+        lock_w = None
+        prev_min_w = None
+        prev_max_w = None
+        try:
+            if win is not None and win.isWindow() and not win.isMaximized():
+                lock_w = int(win.width())
+                prev_min_w = int(win.minimumWidth())
+                prev_max_w = int(win.maximumWidth())
+                win.setMinimumWidth(lock_w)
+                win.setMaximumWidth(lock_w)
+        except Exception:
+            lock_w = None
+
         self.current_mode = mode
 
         # Update pills
         self.manual_pill.setChecked(mode == "manual")
         self.excel_pill.setChecked(mode == "excel")
 
-        # Update toolbars
-        self.manual_toolbar.setVisible(mode == "manual")
-        self.excel_toolbar.setVisible(mode == "excel")
+        # Update toolbar groups
+        is_manual = mode == "manual"
+        self.add_btn.setVisible(is_manual)
+        self.clear_btn.setVisible(is_manual)
+        self.bulk_label.setVisible(is_manual)
+        self.frameset_bulk.setVisible(is_manual)
+        self.disclaimer_bulk.setVisible(is_manual)
+        self._manual_sep.setVisible(is_manual)
+
+        is_excel = mode == "excel"
+        self.browse_btn.setVisible(is_excel)
+        self.template_btn.setVisible(is_excel)
+        self.excel_file_label.setVisible(is_excel)
+        self._excel_status_sep.setVisible(is_excel)
 
         # Update content visibility
         has_data = self._has_valid_rows()
@@ -653,6 +697,22 @@ class BatchUploadScreen(QWidget):
             self.table.setVisible(True)
             self.excel_empty.setVisible(False)
             QTimer.singleShot(0, self._ensure_table_fills_viewport)
+
+        if lock_w is not None:
+            def _unlock_width(window=win, min_w=prev_min_w, max_w=prev_max_w):
+                try:
+                    if window is None or (not window.isWindow()) or window.isMaximized():
+                        return
+                    # Restore previous constraints.
+                    if min_w is not None:
+                        window.setMinimumWidth(int(min_w))
+                    if max_w is not None:
+                        window.setMaximumWidth(int(max_w))
+                except Exception:
+                    pass
+
+            # Give Qt a moment to process pending layout/resizes.
+            QTimer.singleShot(120, _unlock_width)
 
     def _has_valid_rows(self):
         """Check if table has any valid data"""
@@ -719,6 +779,54 @@ class BatchUploadScreen(QWidget):
         """Handle URL field change with validation"""
         self._validate()
 
+    def _set_status_text(self, text: str) -> None:
+        """Set status label text without allowing it to steal toolbar space."""
+        if not hasattr(self, "status_label") or self.status_label is None:
+            return
+
+        # Keep full text accessible on hover.
+        try:
+            self.status_label.setToolTip(text)
+        except Exception:
+            pass
+
+        # Elide to the label's max width so it can't expand the toolbar.
+        try:
+            max_w = int(self.status_label.maximumWidth() or 0)
+        except Exception:
+            max_w = 0
+        if max_w <= 0:
+            max_w = SIZES['col_w_160']
+
+        try:
+            fm = self.status_label.fontMetrics()
+            self.status_label.setText(fm.elidedText(text, Qt.TextElideMode.ElideRight, max_w))
+        except Exception:
+            self.status_label.setText(text)
+
+    def _set_excel_file_text(self, text: str) -> None:
+        """Set excel file label without letting it stretch the toolbar."""
+        if not hasattr(self, "excel_file_label") or self.excel_file_label is None:
+            return
+
+        try:
+            self.excel_file_label.setToolTip(text)
+        except Exception:
+            pass
+
+        try:
+            max_w = int(self.excel_file_label.maximumWidth() or 0)
+        except Exception:
+            max_w = 0
+        if max_w <= 0:
+            max_w = SIZES['col_w_260']
+
+        try:
+            fm = self.excel_file_label.fontMetrics()
+            self.excel_file_label.setText(fm.elidedText(text, Qt.TextElideMode.ElideRight, max_w))
+        except Exception:
+            self.excel_file_label.setText(text)
+
     def _validate(self):
         """Validate all rows"""
         valid_count = 0
@@ -738,10 +846,11 @@ class BatchUploadScreen(QWidget):
 
         if valid_count > 0:
             key = "batch.status.ready_one" if valid_count == 1 else "batch.status.ready_many"
-            self.status_label.setText(self.main.i18n.tr(key, count=valid_count))
+            self._set_status_text(self.main.i18n.tr(key, count=valid_count))
             self.status_label.setStyleSheet(f"color: {COLORS['success']}; font-weight: 500;")
         else:
-            self.status_label.setText(self.main.i18n.tr("batch.status.need_one"))
+            # Don't nag the user; keep Start disabled quietly.
+            self._set_status_text("")
             self.status_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
 
     def _handle_file_drop(self, filepath):
@@ -762,6 +871,20 @@ class BatchUploadScreen(QWidget):
 
         if filename:
             self._load_excel(filename)
+
+    @staticmethod
+    def _normalize_code(raw: str) -> str:
+        """Normalize product code to always include UB- prefix.
+
+        Mirrors BatchTitles behavior: users can type codes without the prefix,
+        but uploads will always use UB-<code>.
+        """
+        code = (raw or "").strip()
+        if not code:
+            return ""
+        if code.upper().startswith("UB-"):
+            return code
+        return f"UB-{code}"
 
     def _load_excel(self, filename):
         """Load Excel file"""
@@ -842,13 +965,13 @@ class BatchUploadScreen(QWidget):
 
             # Update UI
             import os
-            self.excel_file_label.setText(os.path.basename(filename))
+            self._set_excel_file_text(os.path.basename(filename))
             self.table.setVisible(True)
             self.excel_empty.setVisible(False)
 
             # Update status
             if invalid_count > 0:
-                self.status_label.setText(
+                self._set_status_text(
                     self.main.i18n.tr(
                         "batch.excel.rows_fix_errors",
                         valid=valid_count,
@@ -859,7 +982,7 @@ class BatchUploadScreen(QWidget):
                 self.start_btn.setEnabled(False)
             else:
                 key = "batch.excel.ready_from_excel_one" if valid_count == 1 else "batch.excel.ready_from_excel_many"
-                self.status_label.setText(self.main.i18n.tr(key, count=valid_count))
+                self._set_status_text(self.main.i18n.tr(key, count=valid_count))
                 self.status_label.setStyleSheet(f"color: {COLORS['success']}; font-weight: 500;")
                 self.start_btn.setEnabled(valid_count > 0)
 
@@ -947,7 +1070,8 @@ class BatchUploadScreen(QWidget):
                 continue
 
             brand = brand_widget.currentText()
-            code = code_widget.text().strip()
+            code_raw = code_widget.text().strip()
+            code = self._normalize_code(code_raw)
             url = url_widget.text().strip()
 
             if not (brand in self.brands and code and url):

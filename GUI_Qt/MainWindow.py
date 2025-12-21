@@ -794,8 +794,43 @@ class MainWindow(FluentWindow):
                 else:
                     btn.setHoverBackgroundColor(hover_bg)
                     btn.setPressedBackgroundColor(pressed_bg)
+
+                # Some theme operations can reset qframelesswindow button colors
+                # after initialization. Enforce them via qproperty styling too.
+                try:
+                    fmt = QColor.NameFormat.HexArgb
+                    btn.setStyleSheet(
+                        "\n".join([
+                            f"qproperty-normalColor: {fg.name(fmt)};",
+                            f"qproperty-hoverColor: {fg.name(fmt)};",
+                            f"qproperty-pressedColor: {fg.name(fmt)};",
+                            f"qproperty-normalBackgroundColor: {transparent.name(fmt)};",
+                            f"qproperty-hoverBackgroundColor: {(close_hover if is_close else hover_bg).name(fmt)};",
+                            f"qproperty-pressedBackgroundColor: {(close_pressed if is_close else pressed_bg).name(fmt)};",
+                        ])
+                    )
+                except Exception:
+                    pass
             except Exception:
                 continue
+
+        # Re-apply once more after the event loop runs. This guards against
+        # late titleBar/button construction or theme updates that overwrite colors.
+        # Guarded to avoid an infinite singleShot loop.
+        try:
+            if not getattr(self, "_titlebar_theme_deferred", False):
+                self._titlebar_theme_deferred = True
+
+                def _late_apply() -> None:
+                    try:
+                        self._titlebar_theme_deferred = False
+                    except Exception:
+                        pass
+                    self._apply_titlebar_theme()
+
+                QTimer.singleShot(0, _late_apply)
+        except Exception:
+            pass
     def _switch_to_screen(self, index):
         """Switch to a different screen"""
         screen = self._ensure_screen_created(index)

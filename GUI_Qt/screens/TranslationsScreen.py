@@ -412,6 +412,7 @@ class TranslationsScreen(QWidget):
                 color: {header_text};
                 padding: {PADDINGS['table_header']};
                 border: none;
+                border-right: 1px solid {border_color};
                 border-bottom: 2px solid {COLORS['lavender_grey'] if is_dark else rgba_from_hex(COLORS['lavender_grey'], 0.3)};
                 font-weight: 600;
                 font-size: {FONTS['size_body']};
@@ -421,6 +422,7 @@ class TranslationsScreen(QWidget):
             }}
             QHeaderView::section:last {{
                 border-top-right-radius: {RADII['md']}px;
+                border-right: none;
             }}
         """)
 

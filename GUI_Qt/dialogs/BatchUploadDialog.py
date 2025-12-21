@@ -26,6 +26,19 @@ class BatchRowWidget(QWidget):
     deleted = Signal(object)  # Emits self when deleted
     changed = Signal()  # Emits when any value changes
 
+    @staticmethod
+    def _normalize_code(raw: str) -> str:
+        """Normalize product code to always include UB- prefix.
+
+        Mirrors BatchTitles behavior.
+        """
+        code = (raw or "").strip()
+        if not code:
+            return ""
+        if code.upper().startswith("UB-"):
+            return code
+        return f"UB-{code}"
+
     def __init__(self, brands, descriptions, tr, parent=None):
         super().__init__(parent)
         self.brands = brands
@@ -122,7 +135,7 @@ class BatchRowWidget(QWidget):
         """Get row data as dict"""
         return {
             'brand': self.brand_combo.currentText(),
-            'code': self.code_field.text().strip(),
+            'code': self._normalize_code(self.code_field.text()),
             'url': self.url_field.text().strip(),
             'description_name': self.desc_combo.currentText(),
             'frameset_only': self.frameset_check.isChecked(),

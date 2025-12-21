@@ -336,6 +336,12 @@ class BatchDescriptionsScreen(QWidget):
         self.excel_file_label = CaptionLabel("")
         self.excel_file_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
 
+        # Expandable spacer that pushes status/start to the right.
+        # This keeps the Excel controls on the left in Excel mode.
+        self._toolbar_spacer = QWidget()
+        self._toolbar_spacer.setStyleSheet("background: transparent;")
+        self._toolbar_spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+
         self.status_label = BodyLabel("")
         self.status_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
 
@@ -350,14 +356,22 @@ class BatchDescriptionsScreen(QWidget):
 
         toolbar_layout.addWidget(self.add_btn)
         toolbar_layout.addWidget(self.clear_btn)
-        toolbar_layout.addSpacing(ROW_SPACING)
+        # Spacer between Clear and Bulk Select (hide/show with manual controls)
+        self._manual_sep = QWidget()
+        self._manual_sep.setStyleSheet("background: transparent;")
+        self._manual_sep.setFixedWidth(ROW_SPACING)
+        toolbar_layout.addWidget(self._manual_sep)
         toolbar_layout.addWidget(self.bulk_label)
         toolbar_layout.addWidget(self.disclaimer_bulk)
-        toolbar_layout.addStretch(1)
         toolbar_layout.addWidget(self.template_btn)
         toolbar_layout.addWidget(self.browse_btn)
         toolbar_layout.addWidget(self.excel_file_label)
-        toolbar_layout.addSpacing(CONTENT_SPACING)
+        # Spacer between excel file label and status (hide/show with excel controls)
+        self._excel_status_sep = QWidget()
+        self._excel_status_sep.setStyleSheet("background: transparent;")
+        self._excel_status_sep.setFixedWidth(CONTENT_SPACING)
+        toolbar_layout.addWidget(self._excel_status_sep)
+        toolbar_layout.addWidget(self._toolbar_spacer)
         toolbar_layout.addWidget(self.status_label)
         toolbar_layout.addWidget(self.progress_ring)
         toolbar_layout.addWidget(self.start_btn)
@@ -603,10 +617,20 @@ class BatchDescriptionsScreen(QWidget):
         self.manual_pill.setChecked(mode == "manual")
         self.excel_pill.setChecked(mode == "excel")
 
+        is_manual = mode == "manual"
+        self.add_btn.setVisible(is_manual)
+        self.clear_btn.setVisible(is_manual)
+        self.bulk_label.setVisible(is_manual)
+        self.disclaimer_bulk.setVisible(is_manual)
+        if hasattr(self, "_manual_sep"):
+            self._manual_sep.setVisible(is_manual)
+
         is_excel = mode == "excel"
         self.template_btn.setVisible(is_excel)
         self.browse_btn.setVisible(is_excel)
         self.excel_file_label.setVisible(is_excel)
+        if hasattr(self, "_excel_status_sep"):
+            self._excel_status_sep.setVisible(is_excel)
 
         no_file = self.excel_file_label.text() == self.main.i18n.tr("batch.no_file")
         self.excel_drop.setVisible(is_excel and no_file)
@@ -848,6 +872,7 @@ class BatchDescriptionsScreen(QWidget):
         self.table.setCellWidget(row, 2, wrap(desc))
 
         disc = CheckBox("")
+        disc.setProperty("ubTableCheck", True)
         disc.stateChanged.connect(self._validate)
         disc_container = QWidget()
         disc_container.setStyleSheet("background: transparent;")
@@ -950,7 +975,8 @@ class BatchDescriptionsScreen(QWidget):
             self.status_label.setText(self.main.i18n.tr(key, count=valid))
             self.status_label.setStyleSheet(f"color: {COLORS['success']}; font-weight: 500;")
         else:
-            self.status_label.setText(self.main.i18n.tr("batch.status.need_one"))
+            # Keep Start disabled, but don't nag with a message.
+            self.status_label.setText("")
             self.status_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
 
     def _set_busy(self, busy: bool):
