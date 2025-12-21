@@ -10,7 +10,8 @@ from qfluentwidgets import (
     IndeterminateProgressRing, BodyLabel, TitleLabel, InfoBar, InfoBarPosition, CardWidget, isDarkTheme
 )
 
-from GUI_Qt.styles.theme_config import COLORS, FONTS
+from GUI_Qt.styles.theme_config import COLORS, FONTS, SIZES
+from GUI_Qt.styles.screen_theme import CARD_SPACING, CARD_SPACING_LARGE, CENTER_FORM_MARGINS, ROW_SPACING, CONTENT_SPACING
 
 from Config.BrowserConfig.BrowserManager import BrowserManager
 from Config.LoginConfig.LoginHandler import LoginHandler
@@ -96,10 +97,10 @@ class LoginScreen(QWidget):
 
         # Center container (card for better contrast in light theme)
         center_container = CardWidget()
-        center_container.setMaximumWidth(400)
+        center_container.setMaximumWidth(SIZES['center_form_max_width'])
         center_layout = QVBoxLayout(center_container)
-        center_layout.setSpacing(24)
-        center_layout.setContentsMargins(40, 40, 40, 40)
+        center_layout.setSpacing(CARD_SPACING_LARGE)
+        center_layout.setContentsMargins(*CENTER_FORM_MARGINS)
 
         # Title
         self.title_label = TitleLabel("")
@@ -113,12 +114,12 @@ class LoginScreen(QWidget):
         center_layout.addWidget(subtitle)
 
         # Spacer
-        center_layout.addSpacing(16)
+        center_layout.addSpacing(CARD_SPACING)
 
         # Email field with label on same line (horizontal)
         email_row = QWidget()
         email_row_layout = QVBoxLayout(email_row)
-        email_row_layout.setSpacing(8)
+        email_row_layout.setSpacing(ROW_SPACING)
         email_row_layout.setContentsMargins(0, 0, 0, 0)
 
         self.email_label = BodyLabel("")
@@ -133,7 +134,7 @@ class LoginScreen(QWidget):
         # Password field
         password_row = QWidget()
         password_row_layout = QVBoxLayout(password_row)
-        password_row_layout.setSpacing(8)
+        password_row_layout.setSpacing(ROW_SPACING)
         password_row_layout.setContentsMargins(0, 0, 0, 0)
 
         self.password_label = BodyLabel("")
@@ -148,7 +149,7 @@ class LoginScreen(QWidget):
         # Browser selection
         browser_row = QWidget()
         browser_row_layout = QVBoxLayout(browser_row)
-        browser_row_layout.setSpacing(8)
+        browser_row_layout.setSpacing(ROW_SPACING)
         browser_row_layout.setContentsMargins(0, 0, 0, 0)
 
         self.browser_label = BodyLabel("")
@@ -162,12 +163,12 @@ class LoginScreen(QWidget):
         center_layout.addWidget(browser_row)
 
         # Spacer
-        center_layout.addSpacing(16)
+        center_layout.addSpacing(CARD_SPACING)
 
         # Login button with progress ring
         button_row = QWidget()
         button_row_layout = QHBoxLayout(button_row)
-        button_row_layout.setSpacing(12)
+        button_row_layout.setSpacing(CONTENT_SPACING)
         button_row_layout.setContentsMargins(0, 0, 0, 0)
 
         self.login_button = PrimaryPushButton("")
@@ -175,7 +176,7 @@ class LoginScreen(QWidget):
         self.login_button.clicked.connect(self._handle_login)
 
         self.progress_ring = IndeterminateProgressRing()
-        self.progress_ring.setFixedSize(32, 32)
+        self.progress_ring.setFixedSize(SIZES['progress_ring_lg'], SIZES['progress_ring_lg'])
         self.progress_ring.setVisible(False)
 
         button_row_layout.addWidget(self.login_button, 1)
@@ -240,6 +241,12 @@ class LoginScreen(QWidget):
         self.login_worker.finished.connect(self._on_login_complete)
         self.login_worker.start()
 
+        # Preload heavy screens while Selenium login runs (avoids first-switch lag)
+        try:
+            self.main.start_screen_preload()
+        except Exception:
+            pass
+
     def _on_login_complete(self, success, message, driver):
         """Handle login completion"""
         # Hide loading state
@@ -264,6 +271,10 @@ class LoginScreen(QWidget):
             # Notify main window
             self.main.on_login_success(self.email_field.text().strip(), driver)
         else:
+            try:
+                self.main.cancel_screen_preload()
+            except Exception:
+                pass
             # Show error message
             InfoBar.error(
                 title=self.main.i18n.tr("login.failed.title"),

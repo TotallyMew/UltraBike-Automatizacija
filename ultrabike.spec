@@ -16,11 +16,18 @@ ROOT = Path(SPECPATH).resolve() if 'SPECPATH' in globals() else Path.cwd().resol
 # Non-sensitive runtime resources that must be available in frozen builds
 _datas = [
     (str(ROOT / "Assets" / "Translations" / "*.txt"), "Assets/Translations"),
+    (str(ROOT / "VERSION.txt"), "."),
 ]
 
 # Optional icon (won't fail if missing)
 _icon = ROOT / "might work.ico"
 _icon_path = str(_icon) if _icon.exists() else None
+
+# The EXE icon is embedded via EXE(icon=...), but the running Qt app also loads
+# the .ico at runtime to set the window/taskbar icon. Bundle it as data so
+# Utilities.ResourcePaths.resource_path() can find it in sys._MEIPASS.
+if _icon.exists():
+    _datas.append((str(_icon), "."))
 
 
 a = Analysis(

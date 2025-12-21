@@ -2,7 +2,11 @@ import os
 from datetime import datetime
 
 class Logger:
-    def __init__(self, log_dir="logs"):
+    def __init__(self, log_dir=None):
+        if log_dir is None:
+            from Utilities.AppPaths import get_default_logs_dir
+            log_dir = str(get_default_logs_dir())
+
         self.log_dir = log_dir
         os.makedirs(log_dir, exist_ok=True)
         

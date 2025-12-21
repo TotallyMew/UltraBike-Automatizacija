@@ -7,6 +7,14 @@ $ErrorActionPreference = "Stop"
 
 Write-Host "Building UltraBike (PyInstaller)" -ForegroundColor Cyan
 
+# Prefer the repo virtualenv by default to avoid permission issues with system Python.
+if (-not $PSBoundParameters.ContainsKey('Python') -or $Python -eq 'python') {
+  $venvPython = Join-Path (Get-Location) 'venv\Scripts\python.exe'
+  if (Test-Path -LiteralPath $venvPython) {
+    $Python = $venvPython
+  }
+}
+
 # Ensure PyInstaller is installed in the active environment
 ${prevEap} = $ErrorActionPreference
 try {

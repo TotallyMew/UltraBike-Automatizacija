@@ -19,7 +19,17 @@ from qfluentwidgets import (
     qconfig,
 )
 
-from GUI_Qt.styles.theme_config import COLORS, FONTS
+from GUI_Qt.styles.theme_config import COLORS, FONTS, RADII, SIZES, get_details_card_bg
+from GUI_Qt.styles.screen_theme import (
+    PAGE_MARGINS,
+    PAGE_SPACING,
+    CARD_MARGINS,
+    ICON_TEXT_GAP,
+    ROW_SPACING,
+    CONTENT_SPACING,
+    DETAILS_MARGINS,
+    DETAILS_SPACING,
+)
 
 
 class _TransparentLabelEventFilter(QObject):
@@ -140,7 +150,7 @@ class InfoScreen(QWidget):
             return
         is_dark = isDarkTheme()
         self.extra_details_card.setStyleSheet(
-            f"background-color: {'rgba(141,153,174,0.10)' if is_dark else 'rgba(43,45,66,0.04)'};"
+            f"background-color: {get_details_card_bg(is_dark)};"
             f"border: 1px solid {COLORS['border_dark'] if is_dark else COLORS['border_light']};"
         )
 
@@ -149,16 +159,16 @@ class InfoScreen(QWidget):
         self.setAutoFillBackground(True)
 
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(40, 20, 40, 20)
-        main_layout.setSpacing(16)
+        main_layout.setContentsMargins(*PAGE_MARGINS)
+        main_layout.setSpacing(PAGE_SPACING)
 
         # Header
         header = QHBoxLayout()
         title_container = QHBoxLayout()
-        title_container.setSpacing(12)
+        title_container.setSpacing(ICON_TEXT_GAP)
 
         title_icon = TransparentToolButton(FluentIcon.INFO, self)
-        title_icon.setFixedSize(32, 32)
+        title_icon.setFixedSize(SIZES['icon_lg'], SIZES['icon_lg'])
         title_icon.setEnabled(False)
 
         self.title_label = TitleLabel("")
@@ -176,16 +186,16 @@ class InfoScreen(QWidget):
         self.content = QWidget()
         content_layout = QVBoxLayout(self.content)
         # Reserve a right-side gutter so the vertical scrollbar never overlaps cards.
-        content_layout.setContentsMargins(0, 0, 20, 0)
-        content_layout.setSpacing(12)
+        content_layout.setContentsMargins(0, 0, PAGE_SPACING, 0)
+        content_layout.setSpacing(CONTENT_SPACING)
 
         def _make_card():
             c = CardWidget()
-            c.setBorderRadius(8)
+            c.setBorderRadius(RADII['md'])
             c.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
             l = QVBoxLayout(c)
-            l.setContentsMargins(24, 20, 24, 20)
-            l.setSpacing(8)
+            l.setContentsMargins(*CARD_MARGINS)
+            l.setSpacing(ROW_SPACING)
             return c, l
 
         def _add_dropdown(card_layout: QVBoxLayout, key: str):
@@ -193,7 +203,7 @@ class InfoScreen(QWidget):
 
             header = QHBoxLayout()
             header.setContentsMargins(0, 0, 0, 0)
-            header.setSpacing(8)
+            header.setSpacing(ROW_SPACING)
 
             title = StrongBodyLabel("")
             title.setObjectName(f"info_title_{key}")
@@ -201,20 +211,20 @@ class InfoScreen(QWidget):
             header.addStretch(1)
 
             btn = TransparentToolButton(FluentIcon.DOWN, self)
-            btn.setFixedSize(28, 28)
+            btn.setFixedSize(SIZES['icon_action'], SIZES['icon_action'])
             header.addWidget(btn)
             card_layout.addLayout(header)
 
             details_card = CardWidget()
             details_card.setVisible(False)
             details_layout = QVBoxLayout(details_card)
-            details_layout.setContentsMargins(12, 10, 12, 10)
-            details_layout.setSpacing(6)
+            details_layout.setContentsMargins(*DETAILS_MARGINS)
+            details_layout.setSpacing(DETAILS_SPACING)
 
             details = BodyLabel("")
             details.setWordWrap(True)
             details.setStyleSheet(
-                f"font-size: 11px; color: {COLORS['text_primary_dark'] if isDarkTheme() else COLORS['text_primary_light']};"
+                f"font-size: {FONTS['size_caption_sm']}; color: {COLORS['text_primary_dark'] if isDarkTheme() else COLORS['text_primary_light']};"
                 "background-color: transparent;"
             )
             details_layout.addWidget(details)
@@ -315,14 +325,14 @@ class InfoScreen(QWidget):
 
         extra_header = QHBoxLayout()
         extra_header.setContentsMargins(0, 0, 0, 0)
-        extra_header.setSpacing(8)
+        extra_header.setSpacing(ROW_SPACING)
 
         self.extra_title = StrongBodyLabel("")
         extra_header.addWidget(self.extra_title)
         extra_header.addStretch(1)
 
         self.extra_toggle_btn = TransparentToolButton(FluentIcon.DOWN, self)
-        self.extra_toggle_btn.setFixedSize(28, 28)
+        self.extra_toggle_btn.setFixedSize(SIZES['icon_action'], SIZES['icon_action'])
         self.extra_toggle_btn.clicked.connect(self._toggle_extra_steps)
         extra_header.addWidget(self.extra_toggle_btn)
 
@@ -331,13 +341,13 @@ class InfoScreen(QWidget):
         self.extra_details_card = CardWidget()
         self.extra_details_card.setVisible(False)
         extra_details_layout = QVBoxLayout(self.extra_details_card)
-        extra_details_layout.setContentsMargins(12, 10, 12, 10)
-        extra_details_layout.setSpacing(6)
+        extra_details_layout.setContentsMargins(*DETAILS_MARGINS)
+        extra_details_layout.setSpacing(DETAILS_SPACING)
 
         self.extra_text = BodyLabel("")
         self.extra_text.setWordWrap(True)
         self.extra_text.setStyleSheet(
-            f"font-size: 11px; color: {COLORS['text_primary_dark'] if isDarkTheme() else COLORS['text_primary_light']};"
+            f"font-size: {FONTS['size_caption_sm']}; color: {COLORS['text_primary_dark'] if isDarkTheme() else COLORS['text_primary_light']};"
         )
         extra_details_layout.addWidget(self.extra_text)
         exl.addWidget(self.extra_details_card)

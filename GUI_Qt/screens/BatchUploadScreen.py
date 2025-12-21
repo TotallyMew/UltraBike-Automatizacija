@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QFrame, QSizePolicy
 )
 from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, Signal, QTimer, QEvent
-from PySide6.QtGui import QColor, QDragEnterEvent, QDropEvent
+from PySide6.QtGui import QColor, QDragEnterEvent, QDropEvent, QStandardItemModel
 from qfluentwidgets import (
     LineEdit, ComboBox, CheckBox, PrimaryPushButton, PushButton,
     BodyLabel, TitleLabel, StrongBodyLabel, CaptionLabel,
@@ -18,7 +18,9 @@ from qfluentwidgets import (
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment
 from Managers.DescriptionManager import DescriptionManager
-from GUI_Qt.styles.theme_config import COLORS, FONTS, COMPONENT_COLORS
+from GUI_Qt.styles.theme_config import COLORS, FONTS, COMPONENT_COLORS, RADII, PADDINGS, SIZES, SPACING
+from GUI_Qt.styles.screen_theme import PAGE_MARGINS, PAGE_SPACING, CARD_MARGINS, CARD_SPACING, ICON_TEXT_GAP, ROW_SPACING, TOOLBAR_MARGINS, CONTENT_SPACING
+from GUI_Qt.styles.screen_theme import TABLE_CELL_MARGINS
 
 
 # Removed old ProductRow CardWidget class - replaced with modern table
@@ -39,16 +41,16 @@ class DropZoneWidget(QWidget):
     def _init_ui(self):
         layout = QVBoxLayout(self)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.setSpacing(20)
+        layout.setSpacing(PAGE_SPACING)
 
         # Icon
         icon = IconWidget(FluentIcon.DOCUMENT)
-        icon.setFixedSize(96, 96)
+        icon.setFixedSize(SIZES['icon_huge'], SIZES['icon_huge'])
 
         # Title
         self.title_label = StrongBodyLabel("")
         title = self.title_label
-        title.setStyleSheet(f"font-size: 16px; color: {COLORS['lavender_grey']};")
+        title.setStyleSheet(f"font-size: {FONTS['size_subtitle_2']}; color: {COLORS['lavender_grey']};")
 
         # Subtitle
         self.subtitle_label = CaptionLabel("")
@@ -99,7 +101,8 @@ class DropZoneWidget(QWidget):
         is_dark = isDarkTheme()
         border = COLORS['lavender_grey'] if is_dark else COLORS['space_indigo']
         dashed = COLORS['lavender_grey']
-        hover_bg = f"rgba(141, 153, 174, {0.10 if is_dark else 0.06})"
+        from GUI_Qt.styles.theme_config import get_hover_bg
+        hover_bg = get_hover_bg(is_dark)
 
         if is_drag_active:
             # Stronger visual state when file is being dragged over
@@ -107,7 +110,7 @@ class DropZoneWidget(QWidget):
                 DropZoneWidget {{
                     background-color: {hover_bg};
                     border: 2px solid {border};
-                    border-radius: 12px;
+                    border-radius: {RADII['lg']}px;
                 }}
             """)
             return
@@ -116,7 +119,7 @@ class DropZoneWidget(QWidget):
             DropZoneWidget {{
                 background-color: transparent;
                 border: 2px dashed {dashed};
-                border-radius: 12px;
+                border-radius: {RADII['lg']}px;
             }}
             DropZoneWidget:hover {{
                 border-color: {border};
@@ -219,22 +222,32 @@ class BatchUploadScreen(QWidget):
         self.setAutoFillBackground(True)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(40, 20, 40, 20)  # Fluent standard: 40px sides
-        layout.setSpacing(20)
+        layout.setContentsMargins(*PAGE_MARGINS)
+        layout.setSpacing(PAGE_SPACING)
 
         # === HEADER SECTION ===
         header = QHBoxLayout()
 
-        # Title
+        # Title with icon
+        title_container = QHBoxLayout()
+        title_container.setSpacing(ICON_TEXT_GAP)
+
+        title_icon = TransparentToolButton(FluentIcon.SYNC, self)
+        title_icon.setFixedSize(SIZES['icon_lg'], SIZES['icon_lg'])
+        title_icon.setEnabled(False)
+
         self.title_label = TitleLabel("")
-        header.addWidget(self.title_label)
+        title_container.addWidget(title_icon)
+        title_container.addWidget(self.title_label)
+
+        header.addLayout(title_container)
         header.addStretch()
 
         # Mode pills (Fluent Design style)
         mode_container = QWidget()
         mode_layout = QHBoxLayout(mode_container)
         mode_layout.setContentsMargins(0, 0, 0, 0)
-        mode_layout.setSpacing(8)
+        mode_layout.setSpacing(ROW_SPACING)
         mode_container.setStyleSheet("background: transparent;")
 
         self.manual_pill = PillPushButton("")
@@ -254,30 +267,30 @@ class BatchUploadScreen(QWidget):
 
         # === TOOLBAR SECTION ===
         toolbar_card = CardWidget()
-        toolbar_card.setBorderRadius(8)
+        toolbar_card.setBorderRadius(RADII['md'])
         toolbar_layout = QHBoxLayout(toolbar_card)
-        toolbar_layout.setContentsMargins(20, 16, 20, 16)
+        toolbar_layout.setContentsMargins(*TOOLBAR_MARGINS)
 
         # Manual toolbar
         self.manual_toolbar = QWidget()
         manual_tb_layout = QHBoxLayout(self.manual_toolbar)
         manual_tb_layout.setContentsMargins(0, 0, 0, 0)
-        manual_tb_layout.setSpacing(12)
+        manual_tb_layout.setSpacing(CONTENT_SPACING)
 
         self.add_btn = PushButton("")
         add_btn = self.add_btn
-        add_btn.setIcon(FluentIcon.ADD)
+        add_btn.setIcon(FluentIcon.ADD.icon())
         add_btn.clicked.connect(self._add_row)
 
         self.clear_btn = TransparentPushButton("")
         clear_btn = self.clear_btn
-        clear_btn.setIcon(FluentIcon.DELETE)
+        clear_btn.setIcon(FluentIcon.DELETE.icon())
         clear_btn.clicked.connect(self._clear_all)
 
         # Bulk selectors
         self.bulk_label = CaptionLabel("")
         bulk_label = self.bulk_label
-        bulk_label.setStyleSheet(f"color: {COLORS['text_secondary']}; margin-left: 20px;")
+        bulk_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
 
         self.frameset_bulk = CheckBox("")
         frameset_bulk = self.frameset_bulk
@@ -287,18 +300,37 @@ class BatchUploadScreen(QWidget):
         disclaimer_bulk = self.disclaimer_bulk
         disclaimer_bulk.stateChanged.connect(self._toggle_all_disclaimers)
 
+        # Status + Start (kept in the top toolbar for parity with other batch screens)
+        self.status_label = BodyLabel("")
+        self.status_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+
+        self.start_btn = PrimaryPushButton("")
+        self.start_btn.setIcon(FluentIcon.PLAY)
+        self.start_btn.setEnabled(False)
+        self.start_btn.setFixedHeight(SIZES['button_height'])
+        self.start_btn.clicked.connect(self._start_upload)
+
+        actions_widget = QWidget()
+        actions_widget.setStyleSheet("background: transparent;")
+        actions_layout = QHBoxLayout(actions_widget)
+        actions_layout.setContentsMargins(0, 0, 0, 0)
+        actions_layout.setSpacing(CONTENT_SPACING)
+        actions_layout.addWidget(self.status_label)
+        actions_layout.addWidget(self.start_btn)
+
         manual_tb_layout.addWidget(add_btn)
         manual_tb_layout.addWidget(clear_btn)
-        manual_tb_layout.addStretch()
+        manual_tb_layout.addSpacing(ROW_SPACING)
         manual_tb_layout.addWidget(bulk_label)
         manual_tb_layout.addWidget(frameset_bulk)
         manual_tb_layout.addWidget(disclaimer_bulk)
+        manual_tb_layout.addStretch(1)
 
         # Excel toolbar
         self.excel_toolbar = QWidget()
         excel_tb_layout = QHBoxLayout(self.excel_toolbar)
         excel_tb_layout.setContentsMargins(0, 0, 0, 0)
-        excel_tb_layout.setSpacing(12)
+        excel_tb_layout.setSpacing(CONTENT_SPACING)
 
         self.browse_btn = PushButton("")
         browse_btn = self.browse_btn
@@ -311,7 +343,7 @@ class BatchUploadScreen(QWidget):
         template_btn.clicked.connect(self._download_template)
 
         self.excel_file_label = BodyLabel("")
-        self.excel_file_label.setStyleSheet(f"color: {COLORS['text_secondary']}; margin-left: 20px;")
+        self.excel_file_label.setStyleSheet(f"color: {COLORS['text_secondary']}; margin-left: {SPACING['lg']}px;")
 
         excel_tb_layout.addWidget(browse_btn)
         excel_tb_layout.addWidget(template_btn)
@@ -320,16 +352,19 @@ class BatchUploadScreen(QWidget):
 
         self.excel_toolbar.setVisible(False)
 
-        toolbar_layout.addWidget(self.manual_toolbar)
-        toolbar_layout.addWidget(self.excel_toolbar)
+        toolbar_layout.addWidget(self.manual_toolbar, 1)
+        toolbar_layout.addWidget(self.excel_toolbar, 1)
+        toolbar_layout.addWidget(actions_widget, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         layout.addWidget(toolbar_card)
 
         # === CONTENT AREA ===
         content_card = CardWidget()
-        content_card.setBorderRadius(8)
+        content_card.setBorderRadius(RADII['md'])
         content_layout = QVBoxLayout(content_card)
-        content_layout.setContentsMargins(24, 20, 24, 20)  # Fluent standard card padding
-        content_layout.setSpacing(16)
+        # Keep content flush so the table doesn't sit inside a larger card background.
+        # Other batch tables don't have the extra padded background.
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(0)
 
         # Modern Fluent table
         self.table = QTableWidget()
@@ -345,10 +380,11 @@ class BatchUploadScreen(QWidget):
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.table.horizontalHeader().setStretchLastSection(False)
-        self.table.horizontalHeader().setMinimumHeight(48)
+        self.table.horizontalHeader().setMinimumHeight(SIZES['table_header_height'])
         self.table.verticalHeader().setVisible(False)
-        # Slightly taller rows prevent border clipping on high-DPI systems
-        self.table.verticalHeader().setDefaultSectionSize(60)
+        # Slightly taller rows prevent border/focus clipping on high-DPI systems
+        self.table.verticalHeader().setDefaultSectionSize(SIZES['table_row_height_lg'])
+        # Show column separators to make the table easier to scan.
         self.table.setShowGrid(True)
 
         # Auto-fill rows when the table viewport resizes
@@ -359,7 +395,8 @@ class BatchUploadScreen(QWidget):
 
         # Column widths - responsive design
         header = self.table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)  # Brand - flexible
+        # Disable manual column resizing (no interactive splitters).
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)    # Brand
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)    # Code - fixed
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)  # URL - flexible
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)  # Description - flexible
@@ -368,10 +405,10 @@ class BatchUploadScreen(QWidget):
         header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)    # Delete - fixed
 
         # Set minimum widths for stretching columns
-        self.table.setColumnWidth(0, 180)  # Brand minimum (avoid placeholder truncation)
-        self.table.setColumnWidth(1, 140)  # Code fixed
-        self.table.setColumnWidth(3, 200)  # Description minimum
-        self.table.setColumnWidth(6, 60)   # Delete fixed
+        self.table.setColumnWidth(0, SIZES['col_w_200'])  # Brand default (placeholder fits without squeezing others)
+        self.table.setColumnWidth(1, SIZES['col_w_140'])  # Code fixed
+        self.table.setColumnWidth(3, SIZES['col_w_200'])  # Description minimum
+        self.table.setColumnWidth(6, SIZES['col_w_60'])   # Delete fixed
 
         # Populate initial rows
         for row in range(self._base_table_rows):
@@ -396,23 +433,6 @@ class BatchUploadScreen(QWidget):
         content_layout.addWidget(self.excel_empty, 1)
 
         layout.addWidget(content_card, 1)
-
-        # === ACTION BAR ===
-        actions = QHBoxLayout()
-        self.status_label = BodyLabel("")
-        self.status_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
-
-        actions.addWidget(self.status_label)
-        actions.addStretch()
-
-        self.start_btn = PrimaryPushButton("")
-        self.start_btn.setIcon(FluentIcon.PLAY)
-        self.start_btn.setEnabled(False)
-        self.start_btn.setFixedHeight(40)
-        self.start_btn.clicked.connect(self._start_upload)
-
-        actions.addWidget(self.start_btn)
-        layout.addLayout(actions)
 
         self.retranslate_ui()
 
@@ -459,7 +479,7 @@ class BatchUploadScreen(QWidget):
             if brand_cell:
                 brand_combo = brand_cell.findChild(ComboBox)
                 if brand_combo:
-                    brand_combo.setPlaceholderText(tr("batch.select_brand"))
+                    self._ensure_combo_placeholder_item(brand_combo, tr("batch.select_brand"), self.brands)
 
             code_cell = self.table.cellWidget(row, 1)
             if code_cell:
@@ -486,21 +506,37 @@ class BatchUploadScreen(QWidget):
             container = QWidget()
             container.setStyleSheet("background: transparent;")
             container.setProperty("ubTableCell", True)
+            container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+
+            # Allow embedded widgets to shrink to the available cell width.
+            # Without this, QComboBox can keep a large implicit minimum width and get clipped.
+            try:
+                widget.setMinimumWidth(0)
+            except Exception:
+                pass
+            try:
+                widget.setSizePolicy(QSizePolicy.Policy.Expanding, widget.sizePolicy().verticalPolicy())
+            except Exception:
+                pass
+
             layout = QHBoxLayout(container)
             # Inset widgets from gridlines so their borders are never clipped/overdrawn
-            layout.setContentsMargins(10, 6, 10, 6)
+            # Extra vertical padding avoids clipping bottom borders/focus rings
+            layout.setContentsMargins(*TABLE_CELL_MARGINS)
             layout.setSpacing(0)
-            layout.addWidget(widget, 1)
-            layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+            layout.addWidget(widget, 1, Qt.AlignmentFlag.AlignVCenter)
             return container
 
         # Brand combo
         brand_combo = ComboBox()
-        brand_combo.addItems(self.brands)
-        brand_combo.setPlaceholderText(self.main.i18n.tr("batch.select_brand"))
-        brand_combo.setMinimumHeight(36)
+        self._ensure_combo_placeholder_item(
+            brand_combo,
+            self.main.i18n.tr("batch.select_brand"),
+            self.brands,
+            force_placeholder=True,
+        )
+        brand_combo.setMinimumHeight(SIZES['input_height'])
         brand_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        brand_combo.setMinimumWidth(160)
         brand_combo.currentTextChanged.connect(self._on_brand_change)
         brand_combo.currentTextChanged.connect(self._validate)
         self.table.setCellWidget(row, 0, create_centered_widget(brand_combo))
@@ -508,7 +544,7 @@ class BatchUploadScreen(QWidget):
         # Product code
         code_field = LineEdit()
         code_field.setPlaceholderText(self.main.i18n.tr("upload.code.placeholder"))
-        code_field.setMinimumHeight(36)
+        code_field.setMinimumHeight(SIZES['input_height'])
         code_field.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         code_field.textChanged.connect(lambda text, field=code_field: self._on_code_changed(text, field))
         self.table.setCellWidget(row, 1, create_centered_widget(code_field))
@@ -516,7 +552,7 @@ class BatchUploadScreen(QWidget):
         # URL
         url_field = LineEdit()
         url_field.setPlaceholderText(self.main.i18n.tr("upload.url.placeholder"))
-        url_field.setMinimumHeight(36)
+        url_field.setMinimumHeight(SIZES['input_height'])
         url_field.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         url_field.textChanged.connect(lambda text, field=url_field: self._on_url_changed(text, field))
         self.table.setCellWidget(row, 2, create_centered_widget(url_field))
@@ -526,7 +562,7 @@ class BatchUploadScreen(QWidget):
         desc_combo.addItem("")
         desc_combo.addItems(self.descriptions)
         desc_combo.setPlaceholderText(self.main.i18n.tr("batch.optional"))
-        desc_combo.setMinimumHeight(36)
+        desc_combo.setMinimumHeight(SIZES['input_height'])
         desc_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         desc_combo.currentTextChanged.connect(self._validate)
         self.table.setCellWidget(row, 3, create_centered_widget(desc_combo))
@@ -535,38 +571,44 @@ class BatchUploadScreen(QWidget):
         frameset_check = CheckBox("")
         frameset_check.setVisible(False)
         frameset_check.stateChanged.connect(self._validate)
-        frameset_check.setFixedSize(40, 40)  # Fixed size to force centering
+        # Let the checkbox use its natural size; the container layout will center it.
         frameset_container = QWidget()
         frameset_container.setStyleSheet("background: transparent;")
-        frameset_layout = QVBoxLayout(frameset_container)  # Use VBox for better control
-        frameset_layout.setContentsMargins(0, 0, 0, 0)
+        frameset_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        frameset_layout = QHBoxLayout(frameset_container)
+        frameset_layout.setContentsMargins(SPACING['xs'], 0, SPACING['xs'], 0)
         frameset_layout.setSpacing(0)
-        frameset_layout.addWidget(frameset_check, 0, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
+        frameset_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        frameset_layout.addWidget(frameset_check)
         self.table.setCellWidget(row, 4, frameset_container)
 
         # Disclaimer checkbox - centered with fixed approach
         disclaimer_check = CheckBox("")
         disclaimer_check.stateChanged.connect(self._validate)
-        disclaimer_check.setFixedSize(40, 40)  # Fixed size to force centering
+        # Let the checkbox use its natural size; the container layout will center it.
         disclaimer_container = QWidget()
         disclaimer_container.setStyleSheet("background: transparent;")
-        disclaimer_layout = QVBoxLayout(disclaimer_container)  # Use VBox for better control
-        disclaimer_layout.setContentsMargins(0, 0, 0, 0)
+        disclaimer_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        disclaimer_layout = QHBoxLayout(disclaimer_container)
+        disclaimer_layout.setContentsMargins(SPACING['xs'], 0, SPACING['xs'], 0)
         disclaimer_layout.setSpacing(0)
-        disclaimer_layout.addWidget(disclaimer_check, 0, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
+        disclaimer_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        disclaimer_layout.addWidget(disclaimer_check)
         self.table.setCellWidget(row, 5, disclaimer_container)
 
         # Delete button
         delete_btn = TransparentToolButton(FluentIcon.DELETE)
         delete_btn.setToolTip(self.main.i18n.tr("batch.row.remove.tip"))
-        delete_btn.setFixedSize(36, 36)
+        delete_btn.setFixedSize(SIZES['button_height_sm'], SIZES['button_height_sm'])
         delete_btn.clicked.connect(self._remove_row)
         delete_container = QWidget()
         delete_container.setStyleSheet("background: transparent;")
         delete_layout = QHBoxLayout(delete_container)
-        delete_layout.setContentsMargins(0, 0, 0, 0)
-        delete_layout.addWidget(delete_btn)
-        delete_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # Tight margins so the icon isn't pushed into the table border/scrollbar.
+        delete_layout.setContentsMargins(SPACING['xs'], 0, SPACING['xs'], 0)
+        delete_layout.addStretch(1)
+        delete_layout.addWidget(delete_btn, 0, Qt.AlignmentFlag.AlignVCenter)
+        delete_layout.addStretch(1)
         self.table.setCellWidget(row, 6, delete_container)
 
     def _get_widget_from_cell(self, row, col, widget_type):
@@ -685,7 +727,9 @@ class BatchUploadScreen(QWidget):
             code_widget = self._get_widget_from_cell(row, 1, LineEdit)
             url_widget = self._get_widget_from_cell(row, 2, LineEdit)
 
-            if (brand_widget and brand_widget.currentText() and
+            brand = brand_widget.currentText().strip() if brand_widget else ""
+
+            if (brand in self.brands and
                 code_widget and code_widget.text().strip() and
                 url_widget and url_widget.text().strip()):
                 valid_count += 1
@@ -906,7 +950,7 @@ class BatchUploadScreen(QWidget):
             code = code_widget.text().strip()
             url = url_widget.text().strip()
 
-            if not (brand and code and url):
+            if not (brand in self.brands and code and url):
                 continue
 
             desc_widget = self._get_widget_from_cell(row, 3, ComboBox)
@@ -1012,6 +1056,44 @@ class BatchUploadScreen(QWidget):
             parent=self
         )
 
+    def _ensure_combo_placeholder_item(
+        self,
+        combo: ComboBox,
+        placeholder_text: str,
+        valid_values: list[str],
+        force_placeholder: bool = False,
+    ) -> None:
+        """Ensure a visible, disabled placeholder item at index 0.
+
+        QComboBox placeholderText behavior can be inconsistent across styles/widgets.
+        This approach avoids a blank selectable row and prevents defaulting to a real brand.
+        """
+
+        combo.blockSignals(True)
+        try:
+            current = combo.currentText().strip()
+            keep_current = (not force_placeholder) and (current in valid_values)
+
+            combo.clear()
+            combo.addItem(placeholder_text)
+            combo.addItems(valid_values)
+
+            try:
+                model = combo.model()
+                if isinstance(model, QStandardItemModel):
+                    item = model.item(0)
+                    if item is not None:
+                        item.setEnabled(False)
+            except Exception:
+                pass
+
+            if keep_current:
+                combo.setCurrentText(current)
+            else:
+                combo.setCurrentIndex(0)
+        finally:
+            combo.blockSignals(False)
+
     def _update_table_theme(self):
         """Update table styling based on current theme"""
         is_dark = isDarkTheme()
@@ -1027,46 +1109,90 @@ class BatchUploadScreen(QWidget):
 
         text_color = COLORS['text_primary_dark'] if is_dark else COLORS['text_primary_light']
 
+        from GUI_Qt.styles.theme_config import (
+            get_embedded_input_border,
+            get_scrollbar_handle_bg,
+            get_scrollbar_handle_hover_bg,
+            get_selection_bg,
+        )
+
         # Stronger default borders for inputs embedded inside the table.
         # This avoids "border disappears" issues against light table backgrounds.
-        embedded_input_border = (
-            "rgba(141, 153, 174, 0.55)" if is_dark else "rgba(43, 45, 66, 0.30)"
-        )
+        embedded_input_border = get_embedded_input_border(is_dark)
+        embedded_input_bg = COMPONENT_COLORS['input']['bg_dark'] if is_dark else COMPONENT_COLORS['input']['bg_light']
+
 
         self.table.setStyleSheet(f"""
             QTableWidget {{
                 background-color: {bg_color};
                 alternate-background-color: {alt_bg};
                 border: 1px solid {border_color};
-                border-radius: 8px;
+                border-radius: {RADII['md']}px;
                 gridline-color: {border_color};
-                selection-background-color: rgba(139, 153, 174, 0.2);
+                selection-background-color: {get_selection_bg()};
                 color: {text_color};
             }}
+            QTableWidget::viewport {{
+                background-color: {bg_color};
+                border-bottom-left-radius: {RADII['md']}px;
+                border-bottom-right-radius: {RADII['md']}px;
+            }}
+            QAbstractScrollArea::corner {{
+                background: transparent;
+            }}
             QTableWidget::item {{
-                padding: 8px 12px;
+                padding: {PADDINGS['table_cell']};
                 color: {text_color};
                 border: none;
             }}
+            QTableWidget::item:focus {{
+                outline: none;
+            }}
+            QTableWidget:focus {{
+                outline: none;
+            }}
+            QTableView::item:focus, QAbstractItemView::item:focus {{
+                outline: none;
+            }}
+            QTableWidget QWidget:focus {{
+                outline: none;
+            }}
             QTableWidget::item:selected {{
-                background-color: {COLORS['lavender_grey']};
-                color: {COLORS['space_indigo'] if is_dark else COLORS['text_white']};
+                background-color: {get_selection_bg()};
+                color: {text_color};
             }}
             QHeaderView::section {{
                 background-color: {header_bg};
                 color: {header_text};
-                padding: 12px 12px;
+                padding: {PADDINGS['table_header']};
                 border: none;
+                border-bottom: 1px solid {border_color};
                 font-weight: 600;
-                font-size: 13px;
+                font-size: {FONTS['size_body_sm']};
                 letter-spacing: 0.5px;
                 text-transform: uppercase;
             }}
-            QHeaderView::section:first {{
-                border-top-left-radius: 8px;
+            QHeaderView {{
+                background: transparent;
+                border: none;
+            }}
+            QHeaderView::section {{
+                border-right: 1px solid {border_color};
             }}
             QHeaderView::section:last {{
-                border-top-right-radius: 8px;
+                border-right: none;
+            }}
+            QHeaderView::section:first {{
+                border-top-left-radius: {RADII['md']}px;
+            }}
+            QHeaderView::section:last {{
+                border-top-right-radius: {RADII['md']}px;
+            }}
+            QHeaderView::section:horizontal:first {{
+                border-top-left-radius: {RADII['md']}px;
+            }}
+            QHeaderView::section:horizontal:last {{
+                border-top-right-radius: {RADII['md']}px;
             }}
 
             /* Inputs inside table cells: add contrast + prevent gridline overlap */
@@ -1076,24 +1202,30 @@ class BatchUploadScreen(QWidget):
             QTableWidget QWidget[ubTableCell="true"] QLineEdit,
             QTableWidget QWidget[ubTableCell="true"] ComboBox,
             QTableWidget QWidget[ubTableCell="true"] QComboBox {{
+                background-color: {embedded_input_bg};
                 border: 1px solid {embedded_input_border};
+                border-bottom: 2px solid {embedded_input_border};
+                border-radius: {RADII['sm']}px;
+                padding: {PADDINGS['combo']};
+                outline: none;
             }}
 
             /* Custom scrollbar styling */
             QScrollBar:vertical {{
                 background: transparent;
-                width: 12px;
-                margin: 0px;
+                width: {SIZES['scrollbar_thickness']}px;
+                margin: {SPACING['xxs']}px {SPACING['xxs']}px {SPACING['xxs']}px 0px;
                 border: none;
             }}
             QScrollBar::handle:vertical {{
-                background: {'rgba(141, 153, 174, 0.3)' if is_dark else 'rgba(43, 45, 66, 0.2)'};
-                border-radius: 6px;
-                min-height: 30px;
-                margin: 0px 2px;
+                background: {get_scrollbar_handle_bg(is_dark)};
+                border-radius: {RADII['sm']}px;
+                min-height: {SIZES['scrollbar_handle_min']}px;
+                margin: 0px {SPACING['xxs']}px;
+                border: none;
             }}
             QScrollBar::handle:vertical:hover {{
-                background: {'rgba(141, 153, 174, 0.5)' if is_dark else 'rgba(43, 45, 66, 0.3)'};
+                background: {get_scrollbar_handle_hover_bg(is_dark)};
             }}
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
                 height: 0px;
@@ -1105,18 +1237,19 @@ class BatchUploadScreen(QWidget):
 
             QScrollBar:horizontal {{
                 background: transparent;
-                height: 12px;
-                margin: 0px;
+                height: {SIZES['scrollbar_thickness']}px;
+                margin: 0px {SPACING['xxs']}px {SPACING['xxs']}px {SPACING['xxs']}px;
                 border: none;
             }}
             QScrollBar::handle:horizontal {{
-                background: {'rgba(141, 153, 174, 0.3)' if is_dark else 'rgba(43, 45, 66, 0.2)'};
-                border-radius: 6px;
-                min-width: 30px;
-                margin: 2px 0px;
+                background: {get_scrollbar_handle_bg(is_dark)};
+                border-radius: {RADII['sm']}px;
+                min-width: {SIZES['scrollbar_handle_min']}px;
+                margin: {SPACING['xxs']}px 0px;
+                border: none;
             }}
             QScrollBar::handle:horizontal:hover {{
-                background: {'rgba(141, 153, 174, 0.5)' if is_dark else 'rgba(43, 45, 66, 0.3)'};
+                background: {get_scrollbar_handle_hover_bg(is_dark)};
             }}
             QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
                 width: 0px;

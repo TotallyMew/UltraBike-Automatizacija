@@ -9,9 +9,10 @@ from qfluentwidgets import (
     CardWidget, TitleLabel, StrongBodyLabel, BodyLabel, CaptionLabel,
     ComboBox, SwitchButton, FluentIcon, InfoBar, InfoBarPosition,
     isDarkTheme, setTheme, Theme, PushButton, LineEdit, ScrollArea,
-    PrimaryPushButton, qconfig
+    PrimaryPushButton, TransparentToolButton, qconfig
 )
-from GUI_Qt.styles.theme_config import COLORS
+from GUI_Qt.styles.theme_config import COLORS, FONTS, RADII, SIZES, rgba_from_hex
+from GUI_Qt.styles.screen_theme import PAGE_MARGINS, PAGE_SPACING, CARD_MARGINS, CARD_SPACING, ICON_TEXT_GAP, FOOTER_MARGINS
 from GUI_Qt.styles.screen_theme import enforce_transparent_labels
 from GUI_Qt.i18n import normalize_language, translate
 
@@ -183,7 +184,23 @@ class SettingsScreen(QWidget):
         # Apply background color based on theme - using our color scheme
         is_dark = self._preview_theme_is_dark
         bg_color = COLORS['space_indigo'] if is_dark else COLORS['platinum']
-        self.setStyleSheet(f"SettingsScreen {{ background-color: {bg_color}; }}")
+        text_primary = COLORS['text_primary_dark'] if is_dark else COLORS['text_primary_light']
+        text_caption = COLORS['lavender_grey'] if is_dark else COLORS['text_secondary']
+        self.setStyleSheet(
+            f"""
+            SettingsScreen {{
+                background-color: {bg_color};
+            }}
+            SettingsScreen TitleLabel,
+            SettingsScreen StrongBodyLabel,
+            SettingsScreen BodyLabel {{
+                color: {text_primary};
+            }}
+            SettingsScreen CaptionLabel {{
+                color: {text_caption};
+            }}
+            """
+        )
 
         # Scroll area for all settings
         self.scroll = ScrollArea()
@@ -195,14 +212,26 @@ class SettingsScreen(QWidget):
         self.content_widget.setObjectName("contentWidget")
         self.content_widget.setStyleSheet(f"#contentWidget {{ background-color: {bg_color}; }}")
         layout = QVBoxLayout(self.content_widget)
-        layout.setContentsMargins(40, 20, 40, 20)  # Proper side margins
-        layout.setSpacing(20)
+        layout.setContentsMargins(*PAGE_MARGINS)
+        layout.setSpacing(PAGE_SPACING)
 
         # Header
         header = QHBoxLayout()
+
+        title_container = QHBoxLayout()
+        title_container.setSpacing(ICON_TEXT_GAP)
+
+        title_icon = TransparentToolButton(FluentIcon.SETTING, self)
+        title_icon.setFixedSize(SIZES['icon_lg'], SIZES['icon_lg'])
+        title_icon.setEnabled(False)
+
         title_label = TitleLabel(translate(self._preview_lang_code, "settings.title"))
         self._ui["title_label"] = title_label
-        header.addWidget(title_label)
+
+        title_container.addWidget(title_icon)
+        title_container.addWidget(title_label)
+
+        header.addLayout(title_container)
         header.addStretch()
         layout.addLayout(header)
 
@@ -211,21 +240,21 @@ class SettingsScreen(QWidget):
 
         # === LANGUAGE CARD ===
         language_card = CardWidget()
-        language_card.setBorderRadius(8)
+        language_card.setBorderRadius(RADII['md'])
         language_layout = QVBoxLayout(language_card)
-        language_layout.setContentsMargins(24, 20, 24, 20)
-        language_layout.setSpacing(16)
+        language_layout.setContentsMargins(*CARD_MARGINS)
+        language_layout.setSpacing(CARD_SPACING)
 
         # Language header
         lang_header = QHBoxLayout()
         from qfluentwidgets import IconWidget
         lang_icon = IconWidget(FluentIcon.GLOBE)
-        lang_icon.setFixedSize(24, 24)
+        lang_icon.setFixedSize(SIZES['icon_md'], SIZES['icon_md'])
         lang_title = StrongBodyLabel(translate(self._preview_lang_code, "settings.language.title"))
         self._ui["lang_title"] = lang_title
-        lang_title.setStyleSheet("font-size: 16px;")
+        lang_title.setStyleSheet(f"font-size: {FONTS['size_subtitle_2']};")
         lang_header.addWidget(lang_icon)
-        lang_header.addSpacing(12)
+        lang_header.addSpacing(ICON_TEXT_GAP)
         lang_header.addWidget(lang_title)
         lang_header.addStretch()
         language_layout.addLayout(lang_header)
@@ -233,14 +262,13 @@ class SettingsScreen(QWidget):
         # Language description
         lang_desc = CaptionLabel(translate(self._preview_lang_code, "settings.language.desc"))
         self._ui["lang_desc"] = lang_desc
-        lang_desc.setStyleSheet(f"color: {COLORS['text_secondary']};")
         language_layout.addWidget(lang_desc)
 
         # Language selector
         lang_selector_layout = QHBoxLayout()
         lang_label = BodyLabel(translate(self._preview_lang_code, "settings.language.label"))
         self._ui["lang_label"] = lang_label
-        lang_label.setMinimumWidth(100)
+        lang_label.setMinimumWidth(SIZES['label_min_width'])
 
         self.language_combo = ComboBox()
         # NOTE: QFluentWidgets ComboBox placeholder behavior can mask index 0.
@@ -249,7 +277,7 @@ class SettingsScreen(QWidget):
         self.language_combo.addItem(translate(self._preview_lang_code, "settings.language.placeholder"))
         self.language_combo.addItems(["English", "Lithuanian"])
         self.language_combo.setPlaceholderText("")
-        self.language_combo.setMinimumWidth(200)
+        self.language_combo.setMinimumWidth(SIZES['field_min_width_md'])
         self.language_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.language_combo.currentTextChanged.connect(self._on_language_change)
 
@@ -262,20 +290,20 @@ class SettingsScreen(QWidget):
 
         # === BROWSER CARD ===
         browser_card = CardWidget()
-        browser_card.setBorderRadius(8)
+        browser_card.setBorderRadius(RADII['md'])
         browser_layout = QVBoxLayout(browser_card)
-        browser_layout.setContentsMargins(24, 20, 24, 20)
-        browser_layout.setSpacing(16)
+        browser_layout.setContentsMargins(*CARD_MARGINS)
+        browser_layout.setSpacing(CARD_SPACING)
 
         # Browser header
         browser_header = QHBoxLayout()
         browser_icon = IconWidget(FluentIcon.GLOBE)
-        browser_icon.setFixedSize(24, 24)
+        browser_icon.setFixedSize(SIZES['icon_md'], SIZES['icon_md'])
         browser_title = StrongBodyLabel(translate(self._preview_lang_code, "settings.browser.title"))
         self._ui["browser_title"] = browser_title
-        browser_title.setStyleSheet("font-size: 16px;")
+        browser_title.setStyleSheet(f"font-size: {FONTS['size_subtitle_2']};")
         browser_header.addWidget(browser_icon)
-        browser_header.addSpacing(12)
+        browser_header.addSpacing(ICON_TEXT_GAP)
         browser_header.addWidget(browser_title)
         browser_header.addStretch()
         browser_layout.addLayout(browser_header)
@@ -283,18 +311,17 @@ class SettingsScreen(QWidget):
         # Browser description
         browser_desc = CaptionLabel(translate(self._preview_lang_code, "settings.browser.desc"))
         self._ui["browser_desc"] = browser_desc
-        browser_desc.setStyleSheet(f"color: {COLORS['text_secondary']};")
         browser_layout.addWidget(browser_desc)
 
         # Browser selector
         browser_selector_layout = QHBoxLayout()
         browser_label = BodyLabel(translate(self._preview_lang_code, "settings.browser.label"))
         self._ui["browser_label"] = browser_label
-        browser_label.setMinimumWidth(100)
+        browser_label.setMinimumWidth(SIZES['label_min_width'])
 
         self.browser_combo = ComboBox()
         self.browser_combo.addItems(["Chrome", "Firefox", "Edge"])
-        self.browser_combo.setMinimumWidth(200)
+        self.browser_combo.setMinimumWidth(SIZES['field_min_width_md'])
         self.browser_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         browser_selector_layout.addWidget(browser_label)
@@ -306,20 +333,20 @@ class SettingsScreen(QWidget):
 
         # === FEATURES CARD ===
         features_card = CardWidget()
-        features_card.setBorderRadius(8)
+        features_card.setBorderRadius(RADII['md'])
         features_layout = QVBoxLayout(features_card)
-        features_layout.setContentsMargins(24, 20, 24, 20)
-        features_layout.setSpacing(16)
+        features_layout.setContentsMargins(*CARD_MARGINS)
+        features_layout.setSpacing(CARD_SPACING)
 
         # Features header
         features_header = QHBoxLayout()
         features_icon = IconWidget(FluentIcon.SETTING)
-        features_icon.setFixedSize(24, 24)
+        features_icon.setFixedSize(SIZES['icon_md'], SIZES['icon_md'])
         features_title = StrongBodyLabel(translate(self._preview_lang_code, "settings.features.title"))
         self._ui["features_title"] = features_title
-        features_title.setStyleSheet("font-size: 16px;")
+        features_title.setStyleSheet(f"font-size: {FONTS['size_subtitle_2']};")
         features_header.addWidget(features_icon)
-        features_header.addSpacing(12)
+        features_header.addSpacing(ICON_TEXT_GAP)
         features_header.addWidget(features_title)
         features_header.addStretch()
         features_layout.addLayout(features_header)
@@ -332,7 +359,6 @@ class SettingsScreen(QWidget):
         download_images_label.setStyleSheet("font-weight: 500;")
         download_images_sublabel = CaptionLabel(translate(self._preview_lang_code, "settings.features.download.desc"))
         self._ui["download_images_sublabel"] = download_images_sublabel
-        download_images_sublabel.setStyleSheet(f"color: {COLORS['text_secondary']};")
         download_images_info.addWidget(download_images_label)
         download_images_info.addWidget(download_images_sublabel)
 
@@ -351,7 +377,6 @@ class SettingsScreen(QWidget):
         auto_save_label.setStyleSheet("font-weight: 500;")
         auto_save_sublabel = CaptionLabel(translate(self._preview_lang_code, "settings.features.autosave.desc"))
         self._ui["auto_save_sublabel"] = auto_save_sublabel
-        auto_save_sublabel.setStyleSheet(f"color: {COLORS['text_secondary']};")
         auto_save_info.addWidget(auto_save_label)
         auto_save_info.addWidget(auto_save_sublabel)
 
@@ -370,7 +395,6 @@ class SettingsScreen(QWidget):
         auto_delete_label.setStyleSheet("font-weight: 500;")
         auto_delete_sublabel = CaptionLabel(translate(self._preview_lang_code, "settings.features.auto_delete_pabaigta.desc"))
         self._ui["auto_delete_sublabel"] = auto_delete_sublabel
-        auto_delete_sublabel.setStyleSheet(f"color: {COLORS['text_secondary']};")
         auto_delete_info.addWidget(auto_delete_label)
         auto_delete_info.addWidget(auto_delete_sublabel)
 
@@ -385,20 +409,20 @@ class SettingsScreen(QWidget):
 
         # === THEME CARD ===
         theme_card = CardWidget()
-        theme_card.setBorderRadius(8)
+        theme_card.setBorderRadius(RADII['md'])
         theme_layout = QVBoxLayout(theme_card)
-        theme_layout.setContentsMargins(24, 20, 24, 20)
-        theme_layout.setSpacing(16)
+        theme_layout.setContentsMargins(*CARD_MARGINS)
+        theme_layout.setSpacing(CARD_SPACING)
 
         # Theme header
         theme_header = QHBoxLayout()
         theme_icon = IconWidget(FluentIcon.BRUSH)
-        theme_icon.setFixedSize(24, 24)
+        theme_icon.setFixedSize(SIZES['icon_md'], SIZES['icon_md'])
         theme_title = StrongBodyLabel(translate(self._preview_lang_code, "settings.appearance.title"))
         self._ui["theme_title"] = theme_title
-        theme_title.setStyleSheet("font-size: 16px;")
+        theme_title.setStyleSheet(f"font-size: {FONTS['size_subtitle_2']};")
         theme_header.addWidget(theme_icon)
-        theme_header.addSpacing(12)
+        theme_header.addSpacing(ICON_TEXT_GAP)
         theme_header.addWidget(theme_title)
         theme_header.addStretch()
         theme_layout.addLayout(theme_header)
@@ -406,7 +430,6 @@ class SettingsScreen(QWidget):
         # Theme description
         theme_desc = CaptionLabel(translate(self._preview_lang_code, "settings.appearance.desc"))
         self._ui["theme_desc"] = theme_desc
-        theme_desc.setStyleSheet(f"color: {COLORS['text_secondary']};")
         theme_layout.addWidget(theme_desc)
 
         # Theme toggle
@@ -418,7 +441,6 @@ class SettingsScreen(QWidget):
         theme_label.setStyleSheet("font-weight: 500;")
         theme_sublabel = CaptionLabel(translate(self._preview_lang_code, "settings.appearance.dark.desc"))
         self._ui["theme_sublabel"] = theme_sublabel
-        theme_sublabel.setStyleSheet(f"color: {COLORS['text_secondary']};")
         theme_info_layout.addWidget(theme_label)
         theme_info_layout.addWidget(theme_sublabel)
 
@@ -435,20 +457,20 @@ class SettingsScreen(QWidget):
 
         # === PATHS CARD ===
         paths_card = CardWidget()
-        paths_card.setBorderRadius(8)
+        paths_card.setBorderRadius(RADII['md'])
         paths_layout = QVBoxLayout(paths_card)
-        paths_layout.setContentsMargins(24, 20, 24, 20)
-        paths_layout.setSpacing(16)
+        paths_layout.setContentsMargins(*CARD_MARGINS)
+        paths_layout.setSpacing(CARD_SPACING)
 
         # Paths header
         paths_header = QHBoxLayout()
         paths_icon = IconWidget(FluentIcon.FOLDER)
-        paths_icon.setFixedSize(24, 24)
+        paths_icon.setFixedSize(SIZES['icon_md'], SIZES['icon_md'])
         paths_title = StrongBodyLabel(translate(self._preview_lang_code, "settings.paths.title"))
         self._ui["paths_title"] = paths_title
-        paths_title.setStyleSheet("font-size: 16px;")
+        paths_title.setStyleSheet(f"font-size: {FONTS['size_subtitle_2']};")
         paths_header.addWidget(paths_icon)
-        paths_header.addSpacing(12)
+        paths_header.addSpacing(ICON_TEXT_GAP)
         paths_header.addWidget(paths_title)
         paths_header.addStretch()
         paths_layout.addLayout(paths_header)
@@ -456,7 +478,6 @@ class SettingsScreen(QWidget):
         # Paths description
         paths_desc = CaptionLabel(translate(self._preview_lang_code, "settings.paths.desc"))
         self._ui["paths_desc"] = paths_desc
-        paths_desc.setStyleSheet(f"color: {COLORS['text_secondary']};")
         paths_layout.addWidget(paths_desc)
 
         # KROSS path
@@ -473,7 +494,7 @@ class SettingsScreen(QWidget):
         kross_browse_btn = PushButton(translate(self._preview_lang_code, "settings.paths.browse"))
         self._ui["kross_browse_btn"] = kross_browse_btn
         kross_browse_btn.setIcon(FluentIcon.FOLDER)
-        kross_browse_btn.setFixedWidth(100)
+        kross_browse_btn.setFixedWidth(SIZES['browse_button_width'])
         kross_browse_btn.clicked.connect(lambda: self._browse_folder('kross_download_path', self.kross_path_field))
 
         kross_input_layout.addWidget(self.kross_path_field)
@@ -497,7 +518,7 @@ class SettingsScreen(QWidget):
         repo_browse_btn = PushButton(translate(self._preview_lang_code, "settings.paths.browse"))
         self._ui["repo_browse_btn"] = repo_browse_btn
         repo_browse_btn.setIcon(FluentIcon.FOLDER)
-        repo_browse_btn.setFixedWidth(100)
+        repo_browse_btn.setFixedWidth(SIZES['browse_button_width'])
         repo_browse_btn.clicked.connect(lambda: self._browse_folder('repository_path', self.repo_path_field))
 
         repo_input_layout.addWidget(self.repo_path_field)
@@ -511,25 +532,20 @@ class SettingsScreen(QWidget):
 
         # === INFO CARD ===
         info_card = CardWidget()
-        info_card.setBorderRadius(8)
+        info_card.setBorderRadius(RADII['md'])
         info_layout = QVBoxLayout(info_card)
-        info_layout.setContentsMargins(24, 20, 24, 20)
-        info_layout.setSpacing(12)
+        info_layout.setContentsMargins(*CARD_MARGINS)
+        info_layout.setSpacing(CARD_SPACING)
 
         info_title = StrongBodyLabel(translate(self._preview_lang_code, "settings.about.title"))
         self._ui["info_title"] = info_title
-        info_title.setStyleSheet("font-size: 16px;")
+        info_title.setStyleSheet(f"font-size: {FONTS['size_subtitle_2']};")
         info_layout.addWidget(info_title)
 
         app_name = BodyLabel(translate(self._preview_lang_code, "settings.about.app"))
         self._ui["app_name"] = app_name
         app_name.setStyleSheet(f"color: {COLORS['lavender_grey']};")
         info_layout.addWidget(app_name)
-
-        version = CaptionLabel(translate(self._preview_lang_code, "settings.about.version"))
-        self._ui["version"] = version
-        version.setStyleSheet(f"color: {COLORS['text_secondary']};")
-        info_layout.addWidget(version)
 
         layout.addWidget(info_card)
 
@@ -543,13 +559,13 @@ class SettingsScreen(QWidget):
         # === SAVE BUTTON (Fixed at bottom) ===
         button_container = QWidget()
         button_layout = QHBoxLayout(button_container)
-        button_layout.setContentsMargins(20, 12, 20, 12)
+        button_layout.setContentsMargins(*FOOTER_MARGINS)
         button_layout.addStretch()
 
         save_btn = PrimaryPushButton(translate(self._preview_lang_code, "settings.save"))
         self._ui["save_btn"] = save_btn
         save_btn.setIcon(FluentIcon.SAVE)
-        save_btn.setFixedHeight(40)
+        save_btn.setFixedHeight(SIZES['button_height'])
         save_btn.clicked.connect(self._save_all_settings)
 
         button_layout.addWidget(save_btn)
@@ -712,8 +728,6 @@ class SettingsScreen(QWidget):
             self._ui["info_title"].setText(tr("settings.about.title"))
         if "app_name" in self._ui:
             self._ui["app_name"].setText(tr("settings.about.app"))
-        if "version" in self._ui:
-            self._ui["version"].setText(tr("settings.about.version"))
         if "save_btn" in self._ui:
             self._ui["save_btn"].setText(tr("settings.save"))
 
@@ -732,16 +746,16 @@ class SettingsScreen(QWidget):
             }}
             QScrollBar:vertical {{
                 background: transparent;
-                width: 12px;
+                width: {SIZES['scrollbar_thickness']}px;
                 margin: 0px;
             }}
             QScrollBar::handle:vertical {{
-                background: {'rgba(141, 153, 174, 0.3)' if is_dark else 'rgba(43, 45, 66, 0.2)'};
-                border-radius: 6px;
-                min-height: 30px;
+                background: {rgba_from_hex(COLORS['lavender_grey'], 0.3) if is_dark else rgba_from_hex(COLORS['space_indigo'], 0.2)};
+                border-radius: {RADII['sm']}px;
+                min-height: {SIZES['scrollbar_handle_min']}px;
             }}
             QScrollBar::handle:vertical:hover {{
-                background: {'rgba(141, 153, 174, 0.5)' if is_dark else 'rgba(43, 45, 66, 0.3)'};
+                background: {rgba_from_hex(COLORS['lavender_grey'], 0.5) if is_dark else rgba_from_hex(COLORS['space_indigo'], 0.3)};
             }}
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
                 height: 0px;
@@ -859,8 +873,25 @@ class SettingsScreen(QWidget):
         is_dark = isDarkTheme()
         bg_color = COLORS['space_indigo'] if is_dark else COLORS['platinum']
 
+        text_primary = COLORS['text_primary_dark'] if is_dark else COLORS['text_primary_light']
+        text_caption = COLORS['lavender_grey'] if is_dark else COLORS['text_secondary']
+
         # Update main background
-        self.setStyleSheet(f"SettingsScreen {{ background-color: {bg_color}; }}")
+        self.setStyleSheet(
+            f"""
+            SettingsScreen {{
+                background-color: {bg_color};
+            }}
+            SettingsScreen TitleLabel,
+            SettingsScreen StrongBodyLabel,
+            SettingsScreen BodyLabel {{
+                color: {text_primary};
+            }}
+            SettingsScreen CaptionLabel {{
+                color: {text_caption};
+            }}
+            """
+        )
 
         # Update content widget background
         if self.content_widget:

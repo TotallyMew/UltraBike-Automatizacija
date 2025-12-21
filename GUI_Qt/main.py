@@ -62,9 +62,22 @@ def main():
         icon_file = resource_path("might work.ico")
         if icon_file.exists():
             app_icon = QIcon(str(icon_file))
-            app.setWindowIcon(app_icon)
+            if not app_icon.isNull():
+                app.setWindowIcon(app_icon)
     except Exception:
         app_icon = None
+
+    # Fallback: if the .ico isn't present in the frozen bundle for any reason,
+    # try to use the icon embedded in the executable.
+    if app_icon is None and sys.platform.startswith("win"):
+        try:
+            if getattr(sys, "frozen", False):
+                exe_icon = QIcon(sys.executable)
+                if not exe_icon.isNull():
+                    app_icon = exe_icon
+                    app.setWindowIcon(app_icon)
+        except Exception:
+            app_icon = None
 
     # Apply Fluent Design theme
     apply_theme(app)

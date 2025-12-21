@@ -8,14 +8,16 @@ from PySide6.QtWidgets import (
     QTextEdit, QTabWidget, QPushButton, QInputDialog, QMessageBox as QMsgBox
 )
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtGui import QKeySequence, QShortcut, QPalette, QColor
 from qfluentwidgets import (
     CardWidget, TransparentToolButton, FluentIcon,
     TitleLabel, BodyLabel, CaptionLabel, InfoBar, InfoBarPosition,
     isDarkTheme, PrimaryPushButton, LineEdit, PushButton, qconfig
 )
 from Managers.DescriptionManager import DescriptionManager
-from GUI_Qt.styles.theme_config import COLORS, FONTS
+from GUI_Qt.styles.theme_config import COLORS, FONTS, RADII, PADDINGS, rgba_from_hex
+from GUI_Qt.styles.theme_config import SIZES
+from GUI_Qt.styles.screen_theme import PAGE_MARGINS, PAGE_SPACING, ICON_TEXT_GAP, PANEL_MARGINS, CONTENT_SPACING, ROW_SPACING
 
 
 class DescriptionsScreen(QWidget):
@@ -33,6 +35,13 @@ class DescriptionsScreen(QWidget):
         self._init_ui()
         self._load_description_list()
         self._setup_shortcuts()
+
+        # Retranslate when app language changes.
+        if hasattr(self.main, "i18n"):
+            try:
+                self.main.i18n.languageChanged.connect(lambda _c: self.retranslate_ui())
+            except Exception:
+                pass
 
         # Connect to theme change signal
         qconfig.themeChangedFinished.connect(self._on_theme_changed)
@@ -63,18 +72,18 @@ class DescriptionsScreen(QWidget):
 
         # Main layout
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(40, 20, 40, 20)  # Fluent standard: 40px sides
-        main_layout.setSpacing(16)
+        main_layout.setContentsMargins(*PAGE_MARGINS)
+        main_layout.setSpacing(PAGE_SPACING)
 
         # === HEADER ===
         header = QHBoxLayout()
 
         # Title with icon
         title_container = QHBoxLayout()
-        title_container.setSpacing(12)
+        title_container.setSpacing(ICON_TEXT_GAP)
 
         title_icon = TransparentToolButton(FluentIcon.DOCUMENT, self)
-        title_icon.setFixedSize(32, 32)
+        title_icon.setFixedSize(SIZES['icon_lg'], SIZES['icon_lg'])
         title_icon.setEnabled(False)
 
         self.title_label = TitleLabel("")
@@ -91,8 +100,8 @@ class DescriptionsScreen(QWidget):
         self.current_name_label.setStyleSheet(f"""
             background-color: {COLORS['lavender_grey']};
             color: white;
-            padding: 8px 16px;
-            border-radius: 6px;
+            padding: {PADDINGS['pill']};
+            border-radius: {RADII['sm']}px;
             font-weight: 600;
         """)
         self.current_name_label.setVisible(False)
@@ -102,16 +111,16 @@ class DescriptionsScreen(QWidget):
 
         # === MAIN CONTENT (SIDE BY SIDE) ===
         content_layout = QHBoxLayout()
-        content_layout.setSpacing(16)
+        content_layout.setSpacing(PAGE_SPACING)
 
         # LEFT PANEL - Description List
         left_panel = CardWidget()
-        left_panel.setBorderRadius(8)
-        left_panel.setMinimumWidth(250)
+        left_panel.setBorderRadius(RADII['md'])
+        left_panel.setMinimumWidth(SIZES['sidebar_min_width'])
 
         left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(16, 16, 16, 16)
-        left_layout.setSpacing(12)
+        left_layout.setContentsMargins(*PANEL_MARGINS)
+        left_layout.setSpacing(CONTENT_SPACING)
 
         # List header
         list_header = QHBoxLayout()
@@ -120,7 +129,7 @@ class DescriptionsScreen(QWidget):
         list_title.setStyleSheet(f"font-weight: 600; color: {COLORS['text_secondary']};")
 
         self.refresh_btn = TransparentToolButton(FluentIcon.SYNC, self)
-        self.refresh_btn.setFixedSize(28, 28)
+        self.refresh_btn.setFixedSize(SIZES['icon_action'], SIZES['icon_action'])
         self.refresh_btn.clicked.connect(self._load_description_list)
 
         list_header.addWidget(list_title)
@@ -138,7 +147,7 @@ class DescriptionsScreen(QWidget):
 
         # List buttons
         list_btn_layout = QVBoxLayout()
-        list_btn_layout.setSpacing(8)
+        list_btn_layout.setSpacing(ROW_SPACING)
 
         self.new_btn = PrimaryPushButton("")
         self.new_btn.setIcon(FluentIcon.ADD.icon())
@@ -158,26 +167,27 @@ class DescriptionsScreen(QWidget):
 
         # RIGHT PANEL - Tabs with HTML Editors (with max-width for readability)
         right_panel = CardWidget()
-        right_panel.setBorderRadius(8)
+        right_panel.setBorderRadius(RADII['md'])
 
         right_layout = QVBoxLayout(right_panel)
-        right_layout.setContentsMargins(16, 16, 16, 16)
-        right_layout.setSpacing(12)
+        right_layout.setContentsMargins(*PANEL_MARGINS)
+        right_layout.setSpacing(CONTENT_SPACING)
 
         # Editor tabs
         self.tabs = QTabWidget()
 
         # Lithuanian tab
         self.lt_editor = self._create_html_editor()
-        self.tabs.addTab(self.lt_editor, "🇱🇹 Lietuvių")
+        self.tabs.addTab(self.lt_editor, "")
 
         # English tab
         self.en_editor = self._create_html_editor()
-        self.tabs.addTab(self.en_editor, "🇬🇧 English")
+
+        self.tabs.addTab(self.en_editor, "")
 
         # Latvian tab
         self.lv_editor = self._create_html_editor()
-        self.tabs.addTab(self.lv_editor, "🇱🇻 Latviešu")
+        self.tabs.addTab(self.lv_editor, "")
 
         self._style_tabs()
 
@@ -185,11 +195,11 @@ class DescriptionsScreen(QWidget):
 
         # Action buttons
         action_layout = QHBoxLayout()
-        action_layout.setSpacing(12)
+        action_layout.setSpacing(CONTENT_SPACING)
 
         self.save_btn = PrimaryPushButton("")
         self.save_btn.setIcon(FluentIcon.SAVE.icon())
-        self.save_btn.setFixedHeight(36)
+        self.save_btn.setFixedHeight(SIZES['button_height_sm'])
         self.save_btn.setEnabled(False)
         self.save_btn.clicked.connect(self._handle_save)
 
@@ -209,7 +219,7 @@ class DescriptionsScreen(QWidget):
         container = QWidget()
         layout = QVBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
+        layout.setSpacing(ROW_SPACING)
 
         # Warning message
         warning = QHBoxLayout()
@@ -232,19 +242,7 @@ class DescriptionsScreen(QWidget):
         editor.setObjectName("html_editor")
 
         # Apply styling immediately
-        is_dark = isDarkTheme()
-        editor.setStyleSheet(f"""
-            QTextEdit {{
-                background-color: {COLORS['bg_alt_dark'] if is_dark else COLORS['bg_light']};
-                color: {COLORS['text_primary_dark'] if is_dark else COLORS['text_primary_light']};
-                border: 1px solid {COLORS['border_dark'] if is_dark else COLORS['border_light']};
-                border-radius: 6px;
-                font-family: {FONTS['family_mono']};
-                font-size: 14px;
-                line-height: 1.5;
-                padding: 12px;
-            }}
-        """)
+        self._style_editor(editor)
 
         layout.addWidget(editor)
 
@@ -257,6 +255,14 @@ class DescriptionsScreen(QWidget):
 
     def retranslate_ui(self):
         tr = self.main.i18n.tr
+
+        # Tab titles
+        try:
+            self.tabs.setTabText(0, tr("descriptions.tab.lt"))
+            self.tabs.setTabText(1, tr("descriptions.tab.en"))
+            self.tabs.setTabText(2, tr("descriptions.tab.lv"))
+        except Exception:
+            pass
 
         self.title_label.setText(tr("descriptions.title"))
         self.list_title.setText(tr("descriptions.saved"))
@@ -278,26 +284,30 @@ class DescriptionsScreen(QWidget):
     def _style_list(self):
         """Apply styling to description list"""
         is_dark = isDarkTheme()
+        bg = COLORS['lavender_grey'] if is_dark else COLORS['bg_light']
+        border = COLORS['border_dark'] if is_dark else COLORS['border_light']
+        text = COLORS['space_indigo'] if is_dark else COLORS['text_primary_light']
+        hover_bg = rgba_from_hex(COLORS['space_indigo'], 0.12 if is_dark else 0.05)
         self.description_list.setStyleSheet(f"""
             QListWidget {{
-                background-color: {COLORS['bg_alt_dark'] if is_dark else COLORS['bg_light']};
-                border: 1px solid {COLORS['border_dark'] if is_dark else COLORS['border_light']};
-                border-radius: 6px;
-                padding: 4px;
+                background-color: {bg};
+                border: 1px solid {border};
+                border-radius: {RADII['sm']}px;
+                padding: {PADDINGS['xs']};
                 font-family: {FONTS['family']};
                 font-size: {FONTS['size_body']};
-                color: {COLORS['text_primary_dark'] if is_dark else COLORS['text_primary_light']};
+                color: {text};
             }}
             QListWidget::item {{
-                padding: 12px;
-                border-radius: 4px;
+                padding: {PADDINGS['table_header']};
+                border-radius: {RADII['xs']}px;
                 margin: 2px;
             }}
             QListWidget::item:hover {{
-                background-color: {'rgba(141, 153, 174, ' + COLORS['hover_opacity_dark'] + ')' if is_dark else 'rgba(43, 45, 66, ' + COLORS['hover_opacity_light'] + ')'};
+                background-color: {hover_bg};
             }}
             QListWidget::item:selected {{
-                background-color: {COLORS['lavender_grey']};
+                background-color: {COLORS['space_indigo']};
                 color: {COLORS['text_white']};
             }}
         """)
@@ -308,18 +318,18 @@ class DescriptionsScreen(QWidget):
         self.tabs.setStyleSheet(f"""
             QTabWidget::pane {{
                 border: 1px solid {COLORS['border_dark'] if is_dark else COLORS['border_light']};
-                border-radius: 6px;
+                border-radius: {RADII['sm']}px;
                 top: -1px;
                 background-color: {COLORS['bg_alt_dark'] if is_dark else COLORS['bg_light']};
             }}
             QTabBar::tab {{
                 background-color: {COLORS['bg_alt_dark'] if is_dark else COLORS['bg_light']};
                 color: {COLORS['text_secondary'] if not is_dark else COLORS['text_primary_dark']};
-                padding: 10px 20px;
+                padding: {PADDINGS['tab']};
                 border: 1px solid {COLORS['border_dark'] if is_dark else COLORS['border_light']};
                 border-bottom: none;
-                border-top-left-radius: 6px;
-                border-top-right-radius: 6px;
+                border-top-left-radius: {RADII['sm']}px;
+                border-top-right-radius: {RADII['sm']}px;
                 margin-right: 2px;
                 font-family: {FONTS['family']};
                 font-size: {FONTS['size_body']};
@@ -330,7 +340,7 @@ class DescriptionsScreen(QWidget):
                 font-weight: {FONTS['weight_semibold']};
             }}
             QTabBar::tab:hover:!selected {{
-                background-color: {'rgba(141, 153, 174, 0.2)' if is_dark else 'rgba(43, 45, 66, 0.1)'};
+                background-color: {rgba_from_hex(COLORS['lavender_grey'], 0.2) if is_dark else rgba_from_hex(COLORS['space_indigo'], 0.1)};
             }}
         """)
 
@@ -586,18 +596,32 @@ class DescriptionsScreen(QWidget):
     def _style_editor(self, editor):
         """Apply styling to HTML editor"""
         is_dark = isDarkTheme()
+        bg = COLORS['lavender_grey'] if is_dark else COLORS['bg_light']
+        text = COLORS['space_indigo'] if is_dark else COLORS['text_primary_light']
+        border = COLORS['border_dark'] if is_dark else COLORS['border_light']
         editor.setStyleSheet(f"""
             QTextEdit {{
-                background-color: {COLORS['bg_alt_dark'] if is_dark else COLORS['bg_light']};
-                color: {COLORS['text_primary_dark'] if is_dark else COLORS['text_primary_light']};
-                border: 1px solid {COLORS['border_dark'] if is_dark else COLORS['border_light']};
-                border-radius: 6px;
+                background-color: {bg};
+                color: {text};
+                border: 1px solid {border};
+                border-radius: {RADII['sm']}px;
                 font-family: {FONTS['family_mono']};
-                font-size: 13px;
+                font-size: {FONTS['size_body_sm']};
                 line-height: 1.5;
-                padding: 12px;
+                padding: {PADDINGS['table_header']};
             }}
         """)
+
+        # Improve placeholder readability (Qt uses palette role PlaceholderText).
+        try:
+            palette = editor.palette()
+            if is_dark:
+                palette.setColor(QPalette.ColorRole.PlaceholderText, QColor(43, 45, 66, 140))
+            else:
+                palette.setColor(QPalette.ColorRole.PlaceholderText, QColor(107, 114, 128, 180))
+            editor.setPalette(palette)
+        except Exception:
+            pass
 
     def _on_theme_changed(self):
         """Handle theme change event"""

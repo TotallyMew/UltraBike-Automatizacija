@@ -13,9 +13,20 @@ from qfluentwidgets import (
     CardWidget, PushButton, LineEdit, ComboBox, TransparentToolButton,
     FluentIcon, TitleLabel, StrongBodyLabel, BodyLabel, CaptionLabel,
     InfoBar, InfoBarPosition, isDarkTheme, SearchLineEdit,
-    PrimaryPushButton, MessageBox, Dialog, qconfig
+    PrimaryPushButton, MessageBox, Dialog, IconWidget, qconfig
 )
-from GUI_Qt.styles.theme_config import COLORS, FONTS
+from GUI_Qt.styles.theme_config import COLORS, FONTS, RADII, PADDINGS, SIZES, rgba_from_hex
+from GUI_Qt.styles.screen_theme import (
+    PAGE_MARGINS,
+    PAGE_SPACING,
+    CARD_MARGINS,
+    CARD_SPACING,
+    ICON_TEXT_GAP,
+    FOOTER_MARGINS,
+    CONTENT_SPACING,
+    ROW_SPACING,
+    MICRO_SPACING,
+)
 
 
 class EditTranslationDialog(MessageBox):
@@ -36,7 +47,7 @@ class EditTranslationDialog(MessageBox):
         # Add custom content
         content_widget = QWidget()
         layout = QVBoxLayout(content_widget)
-        layout.setSpacing(12)
+        layout.setSpacing(CONTENT_SPACING)
         layout.setContentsMargins(0, 0, 0, 0)
 
         # Category (editable)
@@ -65,10 +76,10 @@ class EditTranslationDialog(MessageBox):
 
         layout.addWidget(category_label)
         layout.addWidget(self.category_combo)
-        layout.addSpacing(8)
+        layout.addSpacing(ROW_SPACING)
         layout.addWidget(base_label)
         layout.addWidget(self.base_input)
-        layout.addSpacing(8)
+        layout.addSpacing(ROW_SPACING)
         layout.addWidget(translation_label)
         layout.addWidget(self.translation_input)
 
@@ -101,7 +112,7 @@ class AddTranslationDialog(MessageBox):
         # Add custom content
         content_widget = QWidget()
         layout = QVBoxLayout(content_widget)
-        layout.setSpacing(12)
+        layout.setSpacing(CONTENT_SPACING)
         layout.setContentsMargins(0, 0, 0, 0)
 
         # Category selector
@@ -125,10 +136,10 @@ class AddTranslationDialog(MessageBox):
 
         layout.addWidget(category_label)
         layout.addWidget(self.category_combo)
-        layout.addSpacing(8)
+        layout.addSpacing(ROW_SPACING)
         layout.addWidget(original_label)
         layout.addWidget(self.original_input)
-        layout.addSpacing(8)
+        layout.addSpacing(ROW_SPACING)
         layout.addWidget(translation_label)
         layout.addWidget(self.translation_input)
 
@@ -185,19 +196,18 @@ class TranslationsScreen(QWidget):
 
         # Main layout
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(40, 20, 40, 20)  # Fluent standard: 40px sides
-        layout.setSpacing(20)
+        layout.setContentsMargins(*PAGE_MARGINS)
+        layout.setSpacing(PAGE_SPACING)
 
         # === HEADER SECTION ===
         header = QHBoxLayout()
 
         # Title with icon
         title_container = QHBoxLayout()
-        title_container.setSpacing(12)
+        title_container.setSpacing(ICON_TEXT_GAP)
 
-        title_icon = TransparentToolButton(FluentIcon.LANGUAGE, self)
-        title_icon.setFixedSize(32, 32)
-        title_icon.setEnabled(False)
+        title_icon = IconWidget(FluentIcon.LANGUAGE)
+        title_icon.setFixedSize(SIZES['icon_lg'], SIZES['icon_lg'])
 
         self.title_label = TitleLabel("")
 
@@ -209,11 +219,12 @@ class TranslationsScreen(QWidget):
 
         # Statistics badge
         self.stats_label = BodyLabel("")
+        self.stats_label.setProperty("ubAllowBg", True)
         self.stats_label.setStyleSheet(f"""
             background-color: {COLORS['lavender_grey']};
             color: white;
-            padding: 6px 16px;
-            border-radius: 6px;
+            padding: {PADDINGS['badge']};
+            border-radius: {RADII['sm']}px;
             font-weight: 500;
         """)
         header.addWidget(self.stats_label)
@@ -222,15 +233,15 @@ class TranslationsScreen(QWidget):
 
         # === TOOLBAR SECTION ===
         toolbar_card = CardWidget()
-        toolbar_card.setBorderRadius(8)
+        toolbar_card.setBorderRadius(RADII['md'])
         toolbar_layout = QHBoxLayout(toolbar_card)
-        toolbar_layout.setContentsMargins(24, 20, 24, 20)  # Fluent standard card padding
-        toolbar_layout.setSpacing(16)  # Fluent 4px increment
+        toolbar_layout.setContentsMargins(*CARD_MARGINS)
+        toolbar_layout.setSpacing(CARD_SPACING)
 
         # Search bar - flexible width with min/max constraints
         self.search_input = SearchLineEdit()
         self.search_input.setPlaceholderText("")
-        self.search_input.setMinimumWidth(200)
+        self.search_input.setMinimumWidth(SIZES['field_min_width_md'])
         self.search_input.textChanged.connect(self._apply_filters)
 
         # Brand filter - flexible width
@@ -240,12 +251,12 @@ class TranslationsScreen(QWidget):
 
         self.brand_filter = ComboBox()
         self._populate_brand_filter()
-        self.brand_filter.setMinimumWidth(120)
+        self.brand_filter.setMinimumWidth(SIZES['field_min_width_sm'])
         self.brand_filter.currentTextChanged.connect(self._apply_filters)
 
         # Add button
         self.add_btn = PrimaryPushButton("")
-        self.add_btn.setIcon(FluentIcon.ADD)
+        self.add_btn.setIcon(FluentIcon.ADD.icon())
         self.add_btn.clicked.connect(self._show_add_dialog)
 
         # Refresh button
@@ -295,10 +306,10 @@ class TranslationsScreen(QWidget):
 
         # === PAGINATION ===
         pagination_card = CardWidget()
-        pagination_card.setBorderRadius(8)
+        pagination_card.setBorderRadius(RADII['md'])
         pagination_layout = QHBoxLayout(pagination_card)
-        pagination_layout.setContentsMargins(20, 12, 20, 12)
-        pagination_layout.setSpacing(12)
+        pagination_layout.setContentsMargins(*FOOTER_MARGINS)
+        pagination_layout.setSpacing(CONTENT_SPACING)
 
         self.page_info = BodyLabel("")
         self.page_info.setStyleSheet(f"color: {COLORS['text_secondary']};")
@@ -381,11 +392,11 @@ class TranslationsScreen(QWidget):
             QTableWidget {{
                 background-color: {bg_color};
                 border: 1px solid {border_color};
-                border-radius: 8px;
+                border-radius: {RADII['md']}px;
                 gridline-color: {border_color};
             }}
             QTableWidget::item {{
-                padding: 8px;
+                padding: {PADDINGS['table_cell']};
                 color: {text_color};
                 border-bottom: 1px solid {border_color};
             }}
@@ -394,22 +405,22 @@ class TranslationsScreen(QWidget):
                 color: {COLORS['space_indigo'] if is_dark else COLORS['text_white']};
             }}
             QTableWidget::item:hover {{
-                background-color: {'rgba(141, 153, 174, 0.1)' if is_dark else 'rgba(43, 45, 66, 0.05)'};
+                background-color: {rgba_from_hex(COLORS['lavender_grey'], 0.1) if is_dark else rgba_from_hex(COLORS['space_indigo'], 0.05)};
             }}
             QHeaderView::section {{
                 background-color: {header_bg};
                 color: {header_text};
-                padding: 12px 8px;
+                padding: {PADDINGS['table_header']};
                 border: none;
-                border-bottom: 2px solid {COLORS['lavender_grey'] if is_dark else 'rgba(141, 153, 174, 0.3)'};
+                border-bottom: 2px solid {COLORS['lavender_grey'] if is_dark else rgba_from_hex(COLORS['lavender_grey'], 0.3)};
                 font-weight: 600;
-                font-size: 14px;
+                font-size: {FONTS['size_body']};
             }}
             QHeaderView::section:first {{
-                border-top-left-radius: 8px;
+                border-top-left-radius: {RADII['md']}px;
             }}
             QHeaderView::section:last {{
-                border-top-right-radius: 8px;
+                border-top-right-radius: {RADII['md']}px;
             }}
         """)
 
@@ -524,16 +535,16 @@ class TranslationsScreen(QWidget):
             # Actions
             actions_widget = QWidget()
             actions_layout = QHBoxLayout(actions_widget)
-            actions_layout.setContentsMargins(8, 2, 8, 2)
-            actions_layout.setSpacing(8)
+            actions_layout.setContentsMargins(ROW_SPACING, MICRO_SPACING, ROW_SPACING, MICRO_SPACING)
+            actions_layout.setSpacing(ROW_SPACING)
 
             edit_btn = TransparentToolButton(FluentIcon.EDIT, self)
-            edit_btn.setFixedSize(32, 32)
+            edit_btn.setFixedSize(SIZES['icon_lg'], SIZES['icon_lg'])
             edit_btn.setToolTip(self.main.i18n.tr("translations.edit.tip"))
             edit_btn.clicked.connect(lambda checked, _id=tid: self._edit_translation(_id))
 
             delete_btn = TransparentToolButton(FluentIcon.DELETE, self)
-            delete_btn.setFixedSize(32, 32)
+            delete_btn.setFixedSize(SIZES['icon_lg'], SIZES['icon_lg'])
             delete_btn.setToolTip(self.main.i18n.tr("translations.delete.tip"))
             delete_btn.clicked.connect(lambda checked, _id=tid, o=original: self._delete_translation(_id, o))
 
@@ -542,7 +553,7 @@ class TranslationsScreen(QWidget):
             actions_layout.addStretch()
 
             self.table.setCellWidget(row_idx, 3, actions_widget)
-            self.table.setRowHeight(row_idx, 44)
+            self.table.setRowHeight(row_idx, SIZES['table_row_height'])
 
     def _prev_page(self):
         """Go to previous page"""

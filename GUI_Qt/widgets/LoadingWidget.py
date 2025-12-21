@@ -7,6 +7,9 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout
 from PySide6.QtCore import Qt
 from qfluentwidgets import IndeterminateProgressRing, BodyLabel, TitleLabel
 
+from GUI_Qt.styles.screen_theme import CARD_SPACING_LARGE
+from GUI_Qt.styles.theme_config import SIZES
+
 
 class LoadingWidget(QWidget):
     """Loading screen with spinner and message"""
@@ -23,7 +26,7 @@ class LoadingWidget(QWidget):
 
         layout = QVBoxLayout(self)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.setSpacing(24)
+        layout.setSpacing(CARD_SPACING_LARGE)
 
         # Title
         title = TitleLabel(self.tr("loading.title"))
@@ -32,7 +35,7 @@ class LoadingWidget(QWidget):
 
         # Loading spinner
         self.spinner = IndeterminateProgressRing(self)
-        self.spinner.setFixedSize(80, 80)
+        self.spinner.setFixedSize(SIZES['spinner'], SIZES['spinner'])
         spinner_container = QWidget()
         spinner_layout = QVBoxLayout(spinner_container)
         spinner_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)

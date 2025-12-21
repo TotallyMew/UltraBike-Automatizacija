@@ -5,7 +5,7 @@ Manages navigation, state, and screen switching
 
 from PySide6.QtWidgets import QWidget, QStackedWidget, QHBoxLayout, QApplication, QLineEdit
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QColor
 from qfluentwidgets import FluentWindow, NavigationItemPosition, FluentIcon, MessageBox, InfoBar, InfoBarPosition
 
 import queue
@@ -16,8 +16,16 @@ from Config.LoginConfig.CredentialManager import CredentialManager
 from Database.DatabaseManager import DatabaseManager
 from Database.SettingsManager import SettingsManager
 from Utilities.Logger import Logger
+from Utilities.Version import get_app_version
+from Utilities.Updater import fetch_update_manifest, is_newer_version, download_to_temp, sha256_file, run_installer
+from Utilities.AppPaths import get_default_db_path, get_data_dir
 from GUI_Qt.styles.theme_config import FONTS
 from GUI_Qt.styles.theme_config import COLORS
+from GUI_Qt.styles.theme_config import SPACING
+from GUI_Qt.styles.theme_config import RADII
+from GUI_Qt.styles.theme_config import PADDINGS
+from GUI_Qt.styles.theme_config import SIZES
+from GUI_Qt.styles.screen_theme import NAV_VERSION_MARGINS, NAV_VERSION_SPACING
 from GUI_Qt.i18n import I18nManager, translate
 
 
@@ -33,9 +41,20 @@ class MainWindow(FluentWindow):
         self.logger = Logger()
 
         # Database setup
+        first_run = False
+        try:
+            first_run = not get_default_db_path().exists()
+        except Exception:
+            first_run = False
+
         self.db = DatabaseManager()
         self.settings = SettingsManager(self.db)
         self.credential_manager = CredentialManager(self.db)
+
+        # If installed via Inno Setup and this is a fresh install, start the app
+        # in the language chosen in the installer wizard.
+        if first_run:
+            self._apply_installer_language_if_present()
 
         # Localization (read from DB settings)
         self.i18n = I18nManager(self.settings)
@@ -68,8 +87,10 @@ class MainWindow(FluentWindow):
         self.translations_screen = None
         self.descriptions_screen = None
         self.batch_descriptions_screen = None
+        self.batch_titles_screen = None
         self.folder_creator_screen = None
         self.basso_images_screen = None
+        self.pinarello_images_screen = None
         self.account_screen = None
         self.settings_screen = None
         self.info_screen = None
@@ -77,9 +98,26 @@ class MainWindow(FluentWindow):
         # Top bar reference
         self.top_bar = None
 
+        # Update check (best-effort; won't block app startup)
+        self._update_check_scheduled = False
+        self._update_worker = None
+
+        # Screen preloading (to avoid first-switch lag)
+        self._screen_preload_active = False
+        self._screen_preload_cancelled = False
+        self._screen_preload_queue = []
+
         # Setup UI
         self._init_navigation()
         self._init_window()
+
+        # Ensure the frameless title bar stays readable across themes
+        try:
+            from qfluentwidgets import qconfig
+            qconfig.themeChangedFinished.connect(self._on_global_theme_changed)
+        except Exception:
+            pass
+        self._apply_titlebar_theme()
 
         # Apply translations to any static UI created above
         self._retranslate_ui(self.i18n.language.code)
@@ -92,6 +130,196 @@ class MainWindow(FluentWindow):
 
         # Setup GUI-backed prompt handling for ErrorManager
         self._init_prompt_handling()
+
+    def _apply_installer_language_if_present(self) -> None:
+        try:
+            marker = get_data_dir() / "install_language.txt"
+            if not marker.exists():
+                return
+
+            raw = marker.read_text(encoding="utf-8", errors="ignore").strip()
+            if raw not in ("English", "Lithuanian"):
+                return
+
+            self.settings.set("language", raw)
+
+            try:
+                marker.unlink(missing_ok=True)
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    def start_screen_preload(self) -> None:
+        """Best-effort: eagerly construct heavy screens during login wait.
+
+        Qt widgets must be created in the GUI thread, so we do it incrementally
+        via QTimer while the Selenium login thread is running.
+        """
+        if self._screen_preload_active:
+            return
+
+        self._screen_preload_active = True
+        self._screen_preload_cancelled = False
+
+        # Only the heavy ones that typically lag on first visit.
+        self._screen_preload_queue = [
+            1,  # Batch Upload
+            2,  # History
+            3,  # Translations
+            4,  # Descriptions
+            5,  # Batch Descriptions
+        ]
+
+        def _step() -> None:
+            if self._screen_preload_cancelled:
+                self._screen_preload_active = False
+                self._screen_preload_queue = []
+                return
+
+            if not self._screen_preload_queue:
+                self._screen_preload_active = False
+                return
+
+            index = self._screen_preload_queue.pop(0)
+            try:
+                self._ensure_screen_created(index)
+            except Exception:
+                # Preloading is best-effort; never crash the login flow.
+                pass
+
+            # Let the event loop breathe between heavy widget builds.
+            QTimer.singleShot(50, _step)
+
+        QTimer.singleShot(0, _step)
+
+    def cancel_screen_preload(self) -> None:
+        """Cancel any in-progress screen preloading."""
+        self._screen_preload_cancelled = True
+
+    def _add_created_screens_to_stack(self) -> None:
+        """If screens were constructed before content_stack existed, add them now."""
+        try:
+            # Only safe after show_main created self.content_stack.
+            if not hasattr(self, 'content_stack'):
+                return
+
+            mapping = [
+                (getattr(self, 'upload_screen', None), "nav.upload"),
+                (getattr(self, 'batch_upload_screen', None), "nav.batch"),
+                (getattr(self, 'history_screen', None), "nav.history"),
+                (getattr(self, 'translations_screen', None), "nav.translations"),
+                (getattr(self, 'descriptions_screen', None), "nav.descriptions"),
+                (getattr(self, 'batch_descriptions_screen', None), "nav.batch_descriptions"),
+                (getattr(self, 'batch_titles_screen', None), "nav.batch_titles"),
+                (getattr(self, 'folder_creator_screen', None), "nav.folders"),
+                (getattr(self, 'basso_images_screen', None), "nav.basso_images"),
+                (getattr(self, 'pinarello_images_screen', None), "nav.pinarello_images"),
+                (getattr(self, 'account_screen', None), "nav.account"),
+                (getattr(self, 'settings_screen', None), "nav.settings"),
+                (getattr(self, 'info_screen', None), "nav.info"),
+            ]
+
+            for screen, key in mapping:
+                if screen is not None:
+                    self._add_screen_to_stack(screen, self.i18n.tr(key))
+        except Exception:
+            pass
+
+    def _ensure_screen_created(self, index: int):
+        """Create a screen if needed and add it to the content stack when possible."""
+        if index == 0:  # Upload
+            if not self.upload_screen:
+                from GUI_Qt.screens.UploadScreen import UploadScreen
+                self.upload_screen = UploadScreen(self)
+            self._add_screen_to_stack(self.upload_screen, self.i18n.tr("nav.upload"))
+            return self.upload_screen
+
+        if index == 1:  # Batch Upload
+            if not self.batch_upload_screen:
+                from GUI_Qt.screens.BatchUploadScreen import BatchUploadScreen
+                self.batch_upload_screen = BatchUploadScreen(self)
+            self._add_screen_to_stack(self.batch_upload_screen, self.i18n.tr("nav.batch"))
+            return self.batch_upload_screen
+
+        if index == 2:  # History
+            if not self.history_screen:
+                from GUI_Qt.screens.HistoryScreen import HistoryScreen
+                self.history_screen = HistoryScreen(self)
+            self._add_screen_to_stack(self.history_screen, self.i18n.tr("nav.history"))
+            return self.history_screen
+
+        if index == 3:  # Translations
+            if not self.translations_screen:
+                from GUI_Qt.screens.TranslationsScreen import TranslationsScreen
+                self.translations_screen = TranslationsScreen(self)
+            self._add_screen_to_stack(self.translations_screen, self.i18n.tr("nav.translations"))
+            return self.translations_screen
+
+        if index == 4:  # Descriptions
+            if not self.descriptions_screen:
+                from GUI_Qt.screens.DescriptionsScreen import DescriptionsScreen
+                self.descriptions_screen = DescriptionsScreen(self)
+            self._add_screen_to_stack(self.descriptions_screen, self.i18n.tr("nav.descriptions"))
+            return self.descriptions_screen
+
+        if index == 5:  # Batch descriptions
+            if not self.batch_descriptions_screen:
+                from GUI_Qt.screens.BatchDescriptionsScreen import BatchDescriptionsScreen
+                self.batch_descriptions_screen = BatchDescriptionsScreen(self)
+            self._add_screen_to_stack(self.batch_descriptions_screen, self.i18n.tr("nav.batch_descriptions"))
+            return self.batch_descriptions_screen
+
+        if index == 12:  # Batch titles
+            if not self.batch_titles_screen:
+                from GUI_Qt.screens.BatchTitlesScreen import BatchTitlesScreen
+                self.batch_titles_screen = BatchTitlesScreen(self)
+            self._add_screen_to_stack(self.batch_titles_screen, self.i18n.tr("nav.batch_titles"))
+            return self.batch_titles_screen
+
+        if index == 6:  # Folder creator
+            if not self.folder_creator_screen:
+                from GUI_Qt.screens.FolderCreatorScreen import FolderCreatorScreen
+                self.folder_creator_screen = FolderCreatorScreen(self)
+            self._add_screen_to_stack(self.folder_creator_screen, self.i18n.tr("nav.folders"))
+            return self.folder_creator_screen
+
+        if index == 7:  # Basso images
+            if not self.basso_images_screen:
+                from GUI_Qt.screens.BassoImageScreen import BassoImageScreen
+                self.basso_images_screen = BassoImageScreen(self)
+            self._add_screen_to_stack(self.basso_images_screen, self.i18n.tr("nav.basso_images"))
+            return self.basso_images_screen
+
+        if index == 11:  # Pinarello images
+            if not self.pinarello_images_screen:
+                from GUI_Qt.screens.PinarelloImageScreen import PinarelloImageScreen
+                self.pinarello_images_screen = PinarelloImageScreen(self)
+            self._add_screen_to_stack(self.pinarello_images_screen, self.i18n.tr("nav.pinarello_images"))
+            return self.pinarello_images_screen
+
+        if index == 8:  # Account
+            if not self.account_screen:
+                from GUI_Qt.screens.AccountScreen import AccountScreen
+                self.account_screen = AccountScreen(self)
+            self._add_screen_to_stack(self.account_screen, self.i18n.tr("nav.account"))
+            return self.account_screen
+
+        if index == 9:  # Settings
+            if not self.settings_screen:
+                from GUI_Qt.screens.SettingsScreen import SettingsScreen
+                self.settings_screen = SettingsScreen(self)
+            self._add_screen_to_stack(self.settings_screen, self.i18n.tr("nav.settings"))
+            return self.settings_screen
+
+        if index == 10:  # Info
+            if not self.info_screen:
+                from GUI_Qt.screens.InfoScreen import InfoScreen
+                self.info_screen = InfoScreen(self)
+            self._add_screen_to_stack(self.info_screen, self.i18n.tr("nav.info"))
+            return self.info_screen
+
+        return None
 
     def _init_prompt_handling(self):
         """Initialize a request queue polled by the GUI to answer background prompt requests."""
@@ -126,8 +354,10 @@ class MainWindow(FluentWindow):
                     input_widget = QLineEdit()
                     input_widget.setPlaceholderText(self.i18n.tr("prompt.retry.placeholder"))
                     # Style input to match Fluent color scheme
-                    input_widget.setStyleSheet(f"background-color: {COLORS['lavender_grey']}; color: white; padding: 8px; border-radius: 6px;")
-                    input_widget.setMinimumWidth(420)
+                    input_widget.setStyleSheet(
+                        f"background-color: {COLORS['lavender_grey']}; color: white; padding: {PADDINGS['input']}; border-radius: {RADII['sm']}px;"
+                    )
+                    input_widget.setMinimumWidth(SIZES['panel_min_width'])
                     dialog.textLayout.addWidget(input_widget)
                     dialog.yesButton.setText(self.i18n.tr("prompt.retry.yes"))
                     dialog.cancelButton.setText(self.i18n.tr("prompt.retry.cancel"))
@@ -244,6 +474,14 @@ class MainWindow(FluentWindow):
             position=NavigationItemPosition.TOP
         )
 
+        self._nav_items["batch_titles"] = self.navigationInterface.addItem(
+            routeKey="batch_titles",
+            icon=FluentIcon.EDIT,
+            text=self.i18n.tr("nav.batch_titles"),
+            onClick=lambda: self._switch_to_screen(12),
+            position=NavigationItemPosition.TOP
+        )
+
         self._nav_items["folders"] = self.navigationInterface.addItem(
             routeKey="folders",
             icon=FluentIcon.FOLDER,
@@ -257,6 +495,14 @@ class MainWindow(FluentWindow):
             icon=FluentIcon.PHOTO,
             text=self.i18n.tr("nav.basso_images"),
             onClick=lambda: self._switch_to_screen(7),
+            position=NavigationItemPosition.TOP
+        )
+
+        self._nav_items["pinarello_images"] = self.navigationInterface.addItem(
+            routeKey="pinarello_images",
+            icon=FluentIcon.PHOTO,
+            text=self.i18n.tr("nav.pinarello_images"),
+            onClick=lambda: self._switch_to_screen(11),
             position=NavigationItemPosition.TOP
         )
 
@@ -286,6 +532,51 @@ class MainWindow(FluentWindow):
             position=NavigationItemPosition.BOTTOM
         )
 
+        # Version label in navigation footer (under everything)
+        try:
+            from PySide6.QtWidgets import QHBoxLayout
+            from qfluentwidgets import BodyLabel, IconWidget
+            from qfluentwidgets.components.navigation.navigation_widget import NavigationWidget
+            from Utilities.Version import get_app_version
+
+            self.navigationInterface.addSeparator(NavigationItemPosition.BOTTOM)
+
+            version_widget = NavigationWidget(isSelectable=False)
+            version_layout = QHBoxLayout(version_widget)
+            version_layout.setContentsMargins(*NAV_VERSION_MARGINS)
+            version_layout.setSpacing(NAV_VERSION_SPACING)
+
+            version_icon = IconWidget()
+            version_icon.setIcon(FluentIcon.APPLICATION)
+            version_icon.setFixedSize(SIZES['icon_xs'], SIZES['icon_xs'])
+            try:
+                version_icon.setStyleSheet(f"color: {COLORS['text_secondary']};")
+            except Exception:
+                pass
+            version_layout.addWidget(version_icon, 0, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+
+            version_label = BodyLabel(get_app_version('1.1.0'))
+            version_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+            try:
+                version_label.setStyleSheet(
+                    f"color: {COLORS['text_secondary']};"
+                )
+            except Exception:
+                pass
+            version_layout.addWidget(version_label, 1, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+
+            # Keep a reference in case we want to update later
+            self._nav_items["version"] = version_label
+
+            self.navigationInterface.addWidget(
+                routeKey="version",
+                widget=version_widget,
+                onClick=None,
+                position=NavigationItemPosition.BOTTOM,
+            )
+        except Exception:
+            pass
+
     def apply_language_preview(self, lang_code: str) -> None:
         """Temporarily translate app chrome without changing persisted language.
 
@@ -301,6 +592,7 @@ class MainWindow(FluentWindow):
             self._set_nav_item_text("batch_descriptions", translate(lang_code, "nav.batch_descriptions"))
             self._set_nav_item_text("folders", translate(lang_code, "nav.folders"))
             self._set_nav_item_text("basso_images", translate(lang_code, "nav.basso_images"))
+            self._set_nav_item_text("pinarello_images", translate(lang_code, "nav.pinarello_images"))
             self._set_nav_item_text("account", translate(lang_code, "nav.account"))
             self._set_nav_item_text("settings", translate(lang_code, "nav.settings"))
             self._set_nav_item_text("info", translate(lang_code, "nav.info"))
@@ -337,7 +629,7 @@ class MainWindow(FluentWindow):
 
             pw = PasswordLineEdit()
             pw.setPlaceholderText(self.i18n.tr("master.password.placeholder"))
-            pw.setMinimumWidth(360)
+            pw.setMinimumWidth(SIZES['dialog_min_width'])
             pw.returnPressed.connect(lambda: dialog.accept())
             dialog.textLayout.addWidget(pw)
             dialog.yesButton.setText(self.i18n.tr("master.unlock"))
@@ -385,6 +677,7 @@ class MainWindow(FluentWindow):
             self._set_nav_item_text("batch_descriptions", self.i18n.tr("nav.batch_descriptions"))
             self._set_nav_item_text("folders", self.i18n.tr("nav.folders"))
             self._set_nav_item_text("basso_images", self.i18n.tr("nav.basso_images"))
+            self._set_nav_item_text("pinarello_images", self.i18n.tr("nav.pinarello_images"))
             self._set_nav_item_text("account", self.i18n.tr("nav.account"))
             self._set_nav_item_text("settings", self.i18n.tr("nav.settings"))
             self._set_nav_item_text("info", self.i18n.tr("nav.info"))
@@ -398,8 +691,10 @@ class MainWindow(FluentWindow):
                 getattr(self, "translations_screen", None),
                 getattr(self, "descriptions_screen", None),
                 getattr(self, "batch_descriptions_screen", None),
+                getattr(self, "batch_titles_screen", None),
                 getattr(self, "folder_creator_screen", None),
                 getattr(self, "basso_images_screen", None),
+                getattr(self, "pinarello_images_screen", None),
                 getattr(self, "account_screen", None),
                 getattr(self, "settings_screen", None),
                 getattr(self, "info_screen", None),
@@ -421,75 +716,91 @@ class MainWindow(FluentWindow):
         # Force navigation to stay expanded
         self.navigationInterface.expand(useAni=False)
 
+        # The NavigationInterface shows a return/back button by default.
+        # In this app it isn't wired to a stack navigation action, so hide it.
+        try:
+            self.navigationInterface.panel.setReturnButtonVisible(False)
+        except Exception:
+            pass
+
+        # Keep title bar buttons + title text readable in both themes
+        try:
+            from qfluentwidgets import qconfig
+            qconfig.themeChangedFinished.connect(self._on_global_theme_changed)
+        except Exception:
+            pass
+        self._apply_titlebar_theme()
+
+    def _on_global_theme_changed(self):
+        """Re-apply theme-dependent window chrome after theme switches."""
+        try:
+            self.update_container_backgrounds()
+        except Exception:
+            pass
+        self._apply_titlebar_theme()
+
+    @staticmethod
+    def _qcolor(hex_color: str, alpha: int = 255) -> QColor:
+        c = QColor(hex_color)
+        c.setAlpha(alpha)
+        return c
+
+    def _apply_titlebar_theme(self) -> None:
+        """Ensure window title bar text/buttons have sufficient contrast."""
+        try:
+            from qfluentwidgets import isDarkTheme
+            is_dark = isDarkTheme()
+        except Exception:
+            return
+
+        tb = getattr(self, 'titleBar', None)
+        if tb is None:
+            return
+
+        title_color = COLORS['text_primary_dark'] if is_dark else COLORS['text_primary_light']
+
+        # Add a bit of spacing between icon and title
+        try:
+            if hasattr(tb, 'titleLabel') and tb.titleLabel is not None:
+                tb.titleLabel.setStyleSheet(
+                    f"color: {title_color}; background: transparent; padding-left: {SPACING['sm']}px;"
+                )
+        except Exception:
+            pass
+
+        # Title bar buttons (min/max/close) come from qframelesswindow and default to black icons.
+        fg = QColor(title_color)
+        transparent = QColor(0, 0, 0, 0)
+
+        hover_bg = self._qcolor(COLORS['lavender_grey' if is_dark else 'space_indigo'], 46 if is_dark else 26)
+        pressed_bg = self._qcolor(COLORS['lavender_grey' if is_dark else 'space_indigo'], 78 if is_dark else 46)
+
+        close_hover = self._qcolor(COLORS['flag_red'], 110 if is_dark else 70)
+        close_pressed = self._qcolor(COLORS['flag_red'], 160 if is_dark else 110)
+
+        for attr, is_close in (("minBtn", False), ("maxBtn", False), ("closeBtn", True)):
+            btn = getattr(tb, attr, None)
+            if btn is None:
+                continue
+            try:
+                btn.setNormalColor(fg)
+                btn.setHoverColor(fg)
+                btn.setPressedColor(fg)
+
+                btn.setNormalBackgroundColor(transparent)
+                if is_close:
+                    btn.setHoverBackgroundColor(close_hover)
+                    btn.setPressedBackgroundColor(close_pressed)
+                else:
+                    btn.setHoverBackgroundColor(hover_bg)
+                    btn.setPressedBackgroundColor(pressed_bg)
+            except Exception:
+                continue
     def _switch_to_screen(self, index):
         """Switch to a different screen"""
-        # Lazy load screens
-        if index == 0:  # Upload
-            if not self.upload_screen:
-                from GUI_Qt.screens.UploadScreen import UploadScreen
-                self.upload_screen = UploadScreen(self)
-                self._add_screen_to_stack(self.upload_screen, self.i18n.tr("nav.upload"))
-            self._show_screen(self.upload_screen)
-        elif index == 1:  # Batch Upload
-            if not self.batch_upload_screen:
-                from GUI_Qt.screens.BatchUploadScreen import BatchUploadScreen
-                self.batch_upload_screen = BatchUploadScreen(self)
-                self._add_screen_to_stack(self.batch_upload_screen, self.i18n.tr("nav.batch"))
-            self._show_screen(self.batch_upload_screen)
-        elif index == 2:  # History
-            if not self.history_screen:
-                from GUI_Qt.screens.HistoryScreen import HistoryScreen
-                self.history_screen = HistoryScreen(self)
-                self._add_screen_to_stack(self.history_screen, self.i18n.tr("nav.history"))
-            self._show_screen(self.history_screen)
-        elif index == 3:  # Translations
-            if not self.translations_screen:
-                from GUI_Qt.screens.TranslationsScreen import TranslationsScreen
-                self.translations_screen = TranslationsScreen(self)
-                self._add_screen_to_stack(self.translations_screen, self.i18n.tr("nav.translations"))
-            self._show_screen(self.translations_screen)
-        elif index == 4:  # Descriptions
-            if not self.descriptions_screen:
-                from GUI_Qt.screens.DescriptionsScreen import DescriptionsScreen
-                self.descriptions_screen = DescriptionsScreen(self)
-                self._add_screen_to_stack(self.descriptions_screen, self.i18n.tr("nav.descriptions"))
-            self._show_screen(self.descriptions_screen)
-        elif index == 5:  # Batch descriptions
-            if not self.batch_descriptions_screen:
-                from GUI_Qt.screens.BatchDescriptionsScreen import BatchDescriptionsScreen
-                self.batch_descriptions_screen = BatchDescriptionsScreen(self)
-                self._add_screen_to_stack(self.batch_descriptions_screen, self.i18n.tr("nav.batch_descriptions"))
-            self._show_screen(self.batch_descriptions_screen)
-        elif index == 6:  # Folder creator
-            if not self.folder_creator_screen:
-                from GUI_Qt.screens.FolderCreatorScreen import FolderCreatorScreen
-                self.folder_creator_screen = FolderCreatorScreen(self)
-                self._add_screen_to_stack(self.folder_creator_screen, self.i18n.tr("nav.folders"))
-            self._show_screen(self.folder_creator_screen)
-        elif index == 7:  # Basso images
-            if not self.basso_images_screen:
-                from GUI_Qt.screens.BassoImageScreen import BassoImageScreen
-                self.basso_images_screen = BassoImageScreen(self)
-                self._add_screen_to_stack(self.basso_images_screen, self.i18n.tr("nav.basso_images"))
-            self._show_screen(self.basso_images_screen)
-        elif index == 8:  # Account
-            if not self.account_screen:
-                from GUI_Qt.screens.AccountScreen import AccountScreen
-                self.account_screen = AccountScreen(self)
-                self._add_screen_to_stack(self.account_screen, self.i18n.tr("nav.account"))
-            self._show_screen(self.account_screen)
-        elif index == 9:  # Settings
-            if not self.settings_screen:
-                from GUI_Qt.screens.SettingsScreen import SettingsScreen
-                self.settings_screen = SettingsScreen(self)
-                self._add_screen_to_stack(self.settings_screen, self.i18n.tr("nav.settings"))
-            self._show_screen(self.settings_screen)
-        elif index == 10:  # Info
-            if not self.info_screen:
-                from GUI_Qt.screens.InfoScreen import InfoScreen
-                self.info_screen = InfoScreen(self)
-                self._add_screen_to_stack(self.info_screen, self.i18n.tr("nav.info"))
-            self._show_screen(self.info_screen)
+        screen = self._ensure_screen_created(index)
+        if screen is not None:
+            self._show_screen(screen)
 
     def _add_screen_to_stack(self, screen, name):
         """Add screen to content stack if not already added"""
@@ -627,6 +938,13 @@ class MainWindow(FluentWindow):
         # Show loading
         self._show_loading(self.i18n.tr("loading.connecting"))
 
+        # While the Selenium login thread runs, build the heavy screens so
+        # switching later doesn't stutter.
+        try:
+            self.start_screen_preload()
+        except Exception:
+            pass
+
         # Start auto-login worker
         worker = AutoLoginWorker(email, password, self.settings, self.credential_manager)
 
@@ -663,7 +981,12 @@ class MainWindow(FluentWindow):
 
         # Create top bar if not exists
         if not self.top_bar:
-            self.top_bar = TopBar(self.current_user, self.logout, self.i18n.tr, self)
+            self.top_bar = TopBar(self._get_topbar_user_text(), self.reconnect_browser, self.logout, self.i18n.tr, self)
+        else:
+            try:
+                self.top_bar.update_user(self._get_topbar_user_text())
+            except Exception:
+                pass
 
         # Create main content container with top bar and content area
         main_container = QWidget()
@@ -700,8 +1023,173 @@ class MainWindow(FluentWindow):
         self.stackedWidget.addWidget(main_container)
         self.stackedWidget.setCurrentWidget(main_container)
 
+        # If any screens were pre-constructed before content_stack existed, add them now.
+        self._add_created_screens_to_stack()
+
         # Switch to upload screen by default
         self._switch_to_screen(0)
+
+        # Optional: check for updates after the UI is visible
+        self._schedule_update_check()
+
+    def _schedule_update_check(self) -> None:
+        if self._update_check_scheduled:
+            return
+        self._update_check_scheduled = True
+
+        try:
+            enabled = bool(self.settings.get('update_check_enabled', True))
+        except Exception:
+            enabled = True
+        if not enabled:
+            return
+
+        try:
+            url = (self.settings.get('update_manifest_url', '') or '').strip()
+        except Exception:
+            url = ''
+        if not url:
+            return
+
+        QTimer.singleShot(2500, lambda: self.check_for_updates(interactive=False))
+
+    def check_for_updates(self, interactive: bool = True) -> None:
+        """Check update manifest and (if newer) prompt to download+install."""
+        try:
+            url = (self.settings.get('update_manifest_url', '') or '').strip()
+        except Exception:
+            url = ''
+        if not url:
+            return
+
+        current = get_app_version('1.1.0')
+
+        from PySide6.QtCore import QThread, Signal
+
+        class _UpdateCheckWorker(QThread):
+            finished = Signal(bool, object, str)  # ok, manifest, error
+
+            def __init__(self, manifest_url: str):
+                super().__init__()
+                self.manifest_url = manifest_url
+
+            def run(self):
+                try:
+                    manifest = fetch_update_manifest(self.manifest_url)
+                    self.finished.emit(True, manifest, '')
+                except Exception as e:
+                    self.finished.emit(False, None, str(e))
+
+        worker = _UpdateCheckWorker(url)
+
+        def _on_checked(ok: bool, manifest, error: str):
+            if not ok:
+                if interactive:
+                    InfoBar.error(
+                        title=self.i18n.tr('update.error.title') if hasattr(self, 'i18n') else 'Update',
+                        content=error or 'Failed to check for updates',
+                        orient=Qt.Orientation.Horizontal,
+                        isClosable=True,
+                        position=InfoBarPosition.TOP,
+                        duration=4000,
+                        parent=self,
+                    )
+                return
+
+            if not is_newer_version(current, manifest.version):
+                if interactive:
+                    InfoBar.success(
+                        title=self.i18n.tr('update.uptodate.title') if hasattr(self, 'i18n') else 'Update',
+                        content=self.i18n.tr('update.uptodate.content') if hasattr(self, 'i18n') else 'You are up to date.',
+                        orient=Qt.Orientation.Horizontal,
+                        isClosable=True,
+                        position=InfoBarPosition.TOP,
+                        duration=2500,
+                        parent=self,
+                    )
+                return
+
+            title = self.i18n.tr('update.available.title') if hasattr(self, 'i18n') else 'Update available'
+            body = (self.i18n.tr('update.available.content', version=manifest.version)
+                    if hasattr(self, 'i18n') else f'New version {manifest.version} is available. Download and install now?')
+            if getattr(manifest, 'notes', None):
+                body = f"{body}\n\n{manifest.notes}"
+
+            dialog = MessageBox(title, body, self)
+            dialog.yesButton.setText(self.i18n.tr('update.available.yes') if hasattr(self, 'i18n') else 'Update')
+            dialog.cancelButton.setText(self.i18n.tr('update.available.no') if hasattr(self, 'i18n') else 'Later')
+            if not dialog.exec():
+                return
+
+            self._download_and_install_update(manifest)
+
+        worker.finished.connect(_on_checked)
+        worker.start()
+        self._update_worker = worker
+
+    def _download_and_install_update(self, manifest) -> None:
+        from PySide6.QtCore import QThread, Signal
+
+        self._show_loading(self.i18n.tr('update.downloading') if hasattr(self, 'i18n') else 'Downloading update...')
+
+        class _DownloadWorker(QThread):
+            finished = Signal(bool, str, str)  # ok, path, error
+
+            def __init__(self, m):
+                super().__init__()
+                self.m = m
+
+            def run(self):
+                try:
+                    name = f"UltraBike_Automatizacija_Setup_{self.m.version}.exe"
+                    path = download_to_temp(self.m.url, name)
+                    if getattr(self.m, 'sha256', None):
+                        actual = sha256_file(path)
+                        if actual.lower() != str(self.m.sha256).lower():
+                            raise RuntimeError('Downloaded update failed SHA256 verification')
+                    self.finished.emit(True, path, '')
+                except Exception as e:
+                    self.finished.emit(False, '', str(e))
+
+        worker = _DownloadWorker(manifest)
+
+        def _done(ok: bool, path: str, error: str):
+            if not ok:
+                self._show_loading('')
+                InfoBar.error(
+                    title=self.i18n.tr('update.error.title') if hasattr(self, 'i18n') else 'Update',
+                    content=error or 'Failed to download update',
+                    orient=Qt.Orientation.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP,
+                    duration=5000,
+                    parent=self,
+                )
+                return
+
+            try:
+                run_installer(path, silent=False)
+            except Exception as e:
+                InfoBar.error(
+                    title=self.i18n.tr('update.error.title') if hasattr(self, 'i18n') else 'Update',
+                    content=str(e),
+                    orient=Qt.Orientation.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP,
+                    duration=5000,
+                    parent=self,
+                )
+                return
+
+            # Exit so installer can replace files.
+            try:
+                QApplication.instance().quit()
+            except Exception:
+                pass
+
+        worker.finished.connect(_done)
+        worker.start()
+        self._update_worker = worker
 
     def on_login_success(self, email, driver):
         """Called when login succeeds"""
@@ -723,6 +1211,137 @@ class MainWindow(FluentWindow):
                         pass
 
         self.show_main()
+
+    def _get_topbar_user_text(self) -> str:
+        """Return what the top bar should display for the current user."""
+        email = self.current_user or ""
+        try:
+            display_name = (self.settings.get('display_name', '') or '').strip()
+        except Exception:
+            display_name = ''
+        if display_name:
+            return display_name
+        # Never show full email in the UI; fallback to local-part.
+        if email and "@" in email:
+            return (email.split("@", 1)[0] or "").strip()
+        return email
+
+    def refresh_topbar_user(self) -> None:
+        """Refresh top bar label after settings changes."""
+        if getattr(self, 'top_bar', None):
+            try:
+                self.top_bar.update_user(self._get_topbar_user_text())
+            except Exception:
+                pass
+
+    def _is_driver_alive(self) -> bool:
+        """Best-effort check whether the current Selenium driver is still usable."""
+        if not self.driver:
+            return False
+        try:
+            _ = self.driver.current_url
+            return True
+        except Exception:
+            try:
+                self.driver = None
+            except Exception:
+                pass
+            return False
+
+    def reconnect_browser(self):
+        """Recreate Selenium driver and re-login using the 24h session, if available."""
+        from qfluentwidgets import InfoBar, InfoBarPosition
+        from PySide6.QtCore import Qt
+        from PySide6.QtCore import QThread, Signal
+
+        if self._is_driver_alive():
+            InfoBar.success(
+                title=self.i18n.tr("topbar.reconnect.ok.title"),
+                content=self.i18n.tr("topbar.reconnect.ok.content"),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=2000,
+                parent=self,
+            )
+            return
+
+        class _ReconnectWorker(QThread):
+            finished = Signal(bool, str, object, str)  # success, message, driver, email
+
+            def __init__(self, main):
+                super().__init__()
+                self.main = main
+
+            def run(self):
+                driver = None
+                try:
+                    from Database.SessionManager import SessionManager
+                    sm = SessionManager(self.main.db)
+                    email, password = sm.get_credentials_from_session()
+                    if not (email and password):
+                        self.finished.emit(False, self.main.i18n.tr("topbar.reconnect.no_session"), None, "")
+                        return
+
+                    from Config.BrowserConfig.BrowserManager import BrowserManager
+                    browser_choice = self.main.settings.get_browser_choice() or "Chrome"
+                    bm = BrowserManager()
+                    driver = bm.setup_browser(browser_choice, retry_callback=lambda: False)
+                    if driver is None:
+                        self.finished.emit(False, self.main.i18n.tr("login.browser_init_failed"), None, "")
+                        return
+
+                    from Config.LoginConfig.LoginHandler import LoginHandler
+                    lh = LoginHandler(driver, self.main.credential_manager)
+                    ok = lh.login(credentials_callback=lambda: (email, password), retry_callback=lambda: False, max_attempts=1)
+                    if not ok:
+                        try:
+                            driver.quit()
+                        except Exception:
+                            pass
+                        self.finished.emit(False, self.main.i18n.tr("topbar.reconnect.login_failed"), None, "")
+                        return
+
+                    self.finished.emit(True, self.main.i18n.tr("topbar.reconnect.done"), driver, email)
+                except Exception as e:
+                    try:
+                        if driver:
+                            driver.quit()
+                    except Exception:
+                        pass
+                    self.finished.emit(False, str(e), None, "")
+
+        worker = _ReconnectWorker(self)
+
+        def _done(success: bool, message: str, driver, email: str):
+            if success:
+                self.driver = driver
+                if email:
+                    self.current_user = email
+                self.refresh_topbar_user()
+                InfoBar.success(
+                    title=self.i18n.tr("topbar.reconnect.title"),
+                    content=message,
+                    orient=Qt.Orientation.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP,
+                    duration=2500,
+                    parent=self,
+                )
+            else:
+                InfoBar.error(
+                    title=self.i18n.tr("topbar.reconnect.title"),
+                    content=message,
+                    orient=Qt.Orientation.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP,
+                    duration=4000,
+                    parent=self,
+                )
+
+        worker.finished.connect(_done)
+        worker.start()
+        self._reconnect_worker = worker
 
     def logout(self):
         """Logout and return to login"""

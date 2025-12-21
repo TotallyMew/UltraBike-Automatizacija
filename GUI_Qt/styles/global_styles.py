@@ -3,7 +3,19 @@ Global stylesheet overrides for consistent theming
 """
 
 from qfluentwidgets import isDarkTheme
-from GUI_Qt.styles.theme_config import COLORS, COMPONENT_COLORS
+from GUI_Qt.styles.theme_config import (
+    COLORS,
+    COMPONENT_COLORS,
+    RADII,
+    PADDINGS,
+    SPACING,
+    SIZES,
+    get_card_border_light,
+    get_scrollbar_handle_bg,
+    get_scrollbar_handle_hover_bg,
+    get_subtle_border,
+    get_subtle_item_hover_bg,
+)
 
 
 def get_global_stylesheet():
@@ -23,13 +35,13 @@ def get_global_stylesheet():
             color: {input_colors['text_dark'] if is_dark else input_colors['text_light']};
             border: 1px solid {input_colors['border_dark'] if is_dark else input_colors['border_light']};
             border-bottom: 1px solid {input_colors['border_dark'] if is_dark else input_colors['border_light']};
-            border-radius: 6px;
-            padding: 8px 12px;
+            border-radius: {RADII['sm']}px;
+            padding: {PADDINGS['input']};
         }}
 
         LineEdit:hover, PasswordLineEdit:hover, SearchLineEdit:hover, QLineEdit:hover {{
-            border: 1px solid {'rgba(141, 153, 174, 0.55)' if is_dark else 'rgba(43, 45, 66, 0.35)'};
-            border-bottom: 1px solid {'rgba(141, 153, 174, 0.55)' if is_dark else 'rgba(43, 45, 66, 0.35)'};
+            border: 1px solid {get_subtle_border(is_dark)};
+            border-bottom: 1px solid {get_subtle_border(is_dark)};
         }}
 
         LineEdit:focus, PasswordLineEdit:focus, SearchLineEdit:focus, QLineEdit:focus {{
@@ -47,12 +59,12 @@ def get_global_stylesheet():
             background-color: {input_colors['bg_dark'] if is_dark else input_colors['bg_light']};
             color: {input_colors['text_dark'] if is_dark else input_colors['text_light']};
             border: 1px solid {input_colors['border_dark'] if is_dark else input_colors['border_light']};
-            border-radius: 6px;
-            padding: 6px 10px;
+            border-radius: {RADII['sm']}px;
+            padding: {PADDINGS['combo']};
         }}
 
         ComboBox:hover, QComboBox:hover {{
-            border: 1px solid {'rgba(141, 153, 174, 0.55)' if is_dark else 'rgba(43, 45, 66, 0.35)'};
+            border: 1px solid {get_subtle_border(is_dark)};
         }}
 
         ComboBox:focus, QComboBox:focus {{
@@ -70,17 +82,17 @@ def get_global_stylesheet():
         }}
 
         QComboBox QAbstractItemView::item {{
-            padding: 8px 10px;
+            padding: {PADDINGS['combo_item']};
         }}
 
         QComboBox QAbstractItemView::item:hover {{
-            background-color: {'rgba(141, 153, 174, 0.20)' if is_dark else 'rgba(43, 45, 66, 0.08)'};
+            background-color: {get_subtle_item_hover_bg(is_dark)};
         }}
 
         /* CardWidget - add subtle separation in light theme */
         CardWidget {{
-            border-radius: 8px;
-            border: 1px solid {COLORS['border_dark'] if is_dark else "rgba(141, 153, 174, 0.28)"};
+            border-radius: {RADII['md']}px;
+            border: 1px solid {COLORS['border_dark'] if is_dark else get_card_border_light()};
         }}
 
         /* Avoid white-on-white scroll areas in light theme */
@@ -91,20 +103,20 @@ def get_global_stylesheet():
         /* Global ScrollBar Styling - Fluent Design System */
         QScrollBar:vertical {{
             background: transparent;
-            width: 12px;
+            width: {SIZES['scrollbar_thickness']}px;
             margin: 0px;
             border: none;
         }}
 
         QScrollBar::handle:vertical {{
-            background: {'rgba(141, 153, 174, 0.3)' if is_dark else 'rgba(43, 45, 66, 0.2)'};
-            border-radius: 6px;
-            min-height: 30px;
-            margin: 0px 2px;
+            background: {get_scrollbar_handle_bg(is_dark)};
+            border-radius: {RADII['sm']}px;
+            min-height: {SIZES['scrollbar_handle_min']}px;
+            margin: 0px {SPACING['xxs']}px;
         }}
 
         QScrollBar::handle:vertical:hover {{
-            background: {'rgba(141, 153, 174, 0.5)' if is_dark else 'rgba(43, 45, 66, 0.3)'};
+            background: {get_scrollbar_handle_hover_bg(is_dark)};
         }}
 
         QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
@@ -118,20 +130,20 @@ def get_global_stylesheet():
 
         QScrollBar:horizontal {{
             background: transparent;
-            height: 12px;
+            height: {SIZES['scrollbar_thickness']}px;
             margin: 0px;
             border: none;
         }}
 
         QScrollBar::handle:horizontal {{
-            background: {'rgba(141, 153, 174, 0.3)' if is_dark else 'rgba(43, 45, 66, 0.2)'};
-            border-radius: 6px;
-            min-width: 30px;
-            margin: 2px 0px;
+            background: {get_scrollbar_handle_bg(is_dark)};
+            border-radius: {RADII['sm']}px;
+            min-width: {SIZES['scrollbar_handle_min']}px;
+            margin: {SPACING['xxs']}px 0px;
         }}
 
         QScrollBar::handle:horizontal:hover {{
-            background: {'rgba(141, 153, 174, 0.5)' if is_dark else 'rgba(43, 45, 66, 0.3)'};
+            background: {get_scrollbar_handle_hover_bg(is_dark)};
         }}
 
         QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{

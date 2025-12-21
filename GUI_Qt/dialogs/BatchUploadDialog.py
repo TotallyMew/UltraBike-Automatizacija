@@ -11,11 +11,14 @@ from PySide6.QtCore import Qt, Signal
 from qfluentwidgets import (
     LineEdit, ComboBox, CheckBox, PrimaryPushButton, PushButton,
     BodyLabel, StrongBodyLabel, TransparentToolButton, FluentIcon,
-    MessageBox, InfoBar, InfoBarPosition
+    MessageBox, InfoBar, InfoBarPosition, isDarkTheme, qconfig
 )
 import openpyxl
 from openpyxl.styles import Font, PatternFill
 from Managers.DescriptionManager import DescriptionManager
+
+from GUI_Qt.styles.theme_config import get_text_color, get_status_text_color, get_status_row_style, FONTS, SPACING, SIZES
+from GUI_Qt.styles.screen_theme import CARD_SPACING, CONTENT_SPACING, ROW_SPACING, MICRO_SPACING
 
 
 class BatchRowWidget(QWidget):
@@ -41,26 +44,26 @@ class BatchRowWidget(QWidget):
 
     def _init_ui(self):
         layout = QHBoxLayout(self)
-        layout.setSpacing(8)
+        layout.setSpacing(ROW_SPACING)
         layout.setContentsMargins(0, 0, 0, 0)
 
         # Brand dropdown
         self.brand_combo = ComboBox()
         self.brand_combo.addItems(self.brands)
-        self.brand_combo.setMinimumWidth(120)
+        self.brand_combo.setMinimumWidth(SIZES['field_min_width_sm'])
         self.brand_combo.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
         self.brand_combo.currentTextChanged.connect(self._on_brand_change)
         self.brand_combo.currentTextChanged.connect(self.changed.emit)
 
         # Product code
         self.code_field = LineEdit()
-        self.code_field.setMinimumWidth(120)
+        self.code_field.setMinimumWidth(SIZES['field_min_width_sm'])
         self.code_field.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
         self.code_field.textChanged.connect(self.changed.emit)
 
         # URL/Code
         self.url_field = LineEdit()
-        self.url_field.setMinimumWidth(260)
+        self.url_field.setMinimumWidth(SIZES['field_min_width_lg'])
         self.url_field.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.url_field.textChanged.connect(self.changed.emit)
 
@@ -68,27 +71,27 @@ class BatchRowWidget(QWidget):
         self.desc_combo = ComboBox()
         self.desc_combo.addItem("")  # Empty option
         self.desc_combo.addItems(self.descriptions)
-        self.desc_combo.setMinimumWidth(200)
+        self.desc_combo.setMinimumWidth(SIZES['field_min_width_md'])
         self.desc_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.desc_combo.currentTextChanged.connect(self.changed.emit)
 
         # Frameset checkbox (hidden by default)
         self.frameset_check = CheckBox()
         self.frameset_check.setVisible(False)
-        self.frameset_check.setMinimumWidth(70)
+        self.frameset_check.setMinimumWidth(SIZES['check_col_width'])
         self.frameset_check.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.frameset_check.stateChanged.connect(self.changed.emit)
 
         # Disclaimer checkbox
         self.disclaimer_check = CheckBox()
-        self.disclaimer_check.setMinimumWidth(50)
+        self.disclaimer_check.setMinimumWidth(SIZES['check_col_width_sm'])
         self.disclaimer_check.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.disclaimer_check.stateChanged.connect(self.changed.emit)
 
         # Delete button
         self._delete_btn = TransparentToolButton(FluentIcon.DELETE, self)
         self._delete_btn.clicked.connect(lambda: self.deleted.emit(self))
-        self._delete_btn.setFixedWidth(32)
+        self._delete_btn.setFixedWidth(SIZES['icon_lg'])
 
         layout.addWidget(self.brand_combo, 0)
         layout.addWidget(self.code_field, 0)
@@ -165,10 +168,33 @@ class BatchUploadDialog(QDialog):
 
         self._init_ui()
 
+        try:
+            qconfig.themeChangedFinished.connect(self._on_theme_changed)
+        except Exception:
+            pass
+
         if hasattr(self.main, "i18n") and hasattr(self.main.i18n, "languageChanged"):
             self.main.i18n.languageChanged.connect(self.retranslate_ui)
 
         self.retranslate_ui()
+
+        self._apply_theme()
+
+    def _on_theme_changed(self):
+        self._apply_theme()
+
+        # If Excel preview is visible, re-apply row/state styling.
+        if hasattr(self, 'excel_preview_widget') and self.excel_preview_widget.isVisible():
+            self._validate_excel()
+
+    def _apply_theme(self):
+        is_dark = isDarkTheme()
+
+        if hasattr(self, 'excel_filename_label'):
+            self.excel_filename_label.setStyleSheet(f"color: {get_text_color(is_dark, 'tertiary')};")
+
+        if hasattr(self, '_empty_text2'):
+            self._empty_text2.setStyleSheet(f"color: {get_text_color(is_dark, 'tertiary')};")
 
     def retranslate_ui(self):
         self.setWindowTitle(self._tr("batch.title"))
@@ -218,11 +244,11 @@ class BatchUploadDialog(QDialog):
     def _init_ui(self):
         """Initialize UI"""
         layout = QVBoxLayout(self)
-        layout.setSpacing(16)
+        layout.setSpacing(CARD_SPACING)
 
         # Title
         self._title_label = StrongBodyLabel("")
-        self._title_label.setStyleSheet("font-size: 20px;")
+        self._title_label.setStyleSheet(f"font-size: {FONTS['size_subtitle_1']};")
         layout.addWidget(self._title_label)
 
         # Tabs
@@ -251,12 +277,12 @@ class BatchUploadDialog(QDialog):
         """Create manual entry tab"""
         widget = QWidget()
         layout = QVBoxLayout(widget)
-        layout.setSpacing(12)
+        layout.setSpacing(CONTENT_SPACING)
 
         # Header row
         header = QWidget()
         header_layout = QHBoxLayout(header)
-        header_layout.setSpacing(8)
+        header_layout.setSpacing(ROW_SPACING)
         header_layout.setContentsMargins(0, 0, 0, 0)
 
         self._manual_header_brand = BodyLabel("")
@@ -271,30 +297,30 @@ class BatchUploadDialog(QDialog):
         # Frameset select-all
         frameset_col = QWidget()
         frameset_col_layout = QVBoxLayout(frameset_col)
-        frameset_col_layout.setSpacing(2)
+        frameset_col_layout.setSpacing(MICRO_SPACING)
         frameset_col_layout.setContentsMargins(0, 0, 0, 0)
         self._frameset_label = BodyLabel("")
         self.frameset_select_all = CheckBox()
         self.frameset_select_all.stateChanged.connect(self._toggle_all_framesets)
         frameset_col_layout.addWidget(self._frameset_label)
         frameset_col_layout.addWidget(self.frameset_select_all)
-        frameset_col.setFixedWidth(70)
+        frameset_col.setFixedWidth(SIZES['check_col_width'])
         header_layout.addWidget(frameset_col)
 
         # Disclaimer select-all
         disc_col = QWidget()
         disc_col_layout = QVBoxLayout(disc_col)
-        disc_col_layout.setSpacing(2)
+        disc_col_layout.setSpacing(MICRO_SPACING)
         disc_col_layout.setContentsMargins(0, 0, 0, 0)
         self._disc_label = BodyLabel("")
         self.disc_select_all = CheckBox()
         self.disc_select_all.stateChanged.connect(self._toggle_all_disclaimers)
         disc_col_layout.addWidget(self._disc_label)
         disc_col_layout.addWidget(self.disc_select_all)
-        disc_col.setFixedWidth(50)
+        disc_col.setFixedWidth(SIZES['check_col_width_sm'])
         header_layout.addWidget(disc_col)
 
-        header_layout.addSpacing(32)  # Space for delete button
+        header_layout.addSpacing(SPACING["xxl"])  # Space for delete button
         header_layout.addStretch()
 
         layout.addWidget(header)
@@ -306,7 +332,7 @@ class BatchUploadDialog(QDialog):
 
         rows_container = QWidget()
         self.manual_rows_layout = QVBoxLayout(rows_container)
-        self.manual_rows_layout.setSpacing(8)
+        self.manual_rows_layout.setSpacing(ROW_SPACING)
         self.manual_rows_layout.addStretch()
 
         scroll.setWidget(rows_container)
@@ -337,7 +363,7 @@ class BatchUploadDialog(QDialog):
         """Create Excel upload tab"""
         widget = QWidget()
         layout = QVBoxLayout(widget)
-        layout.setSpacing(12)
+        layout.setSpacing(CONTENT_SPACING)
 
         # File selection
         file_row = QHBoxLayout()
@@ -355,7 +381,7 @@ class BatchUploadDialog(QDialog):
         layout.addLayout(file_row)
 
         self.excel_filename_label = BodyLabel("")
-        self.excel_filename_label.setStyleSheet("color: #9CA3AF;")
+        self.excel_filename_label.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'tertiary')};")
         layout.addWidget(self.excel_filename_label)
 
         # Empty state
@@ -368,7 +394,7 @@ class BatchUploadDialog(QDialog):
         self._empty_text1 = BodyLabel("")
         self._empty_text1.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._empty_text2 = BodyLabel("")
-        self._empty_text2.setStyleSheet("color: #9CA3AF;")
+        self._empty_text2.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'tertiary')};")
         self._empty_text2.setAlignment(Qt.AlignmentFlag.AlignCenter)
         empty_layout.addWidget(empty_icon)
         empty_layout.addWidget(self._empty_text1)
@@ -379,7 +405,7 @@ class BatchUploadDialog(QDialog):
         self.excel_preview_widget = QWidget()
         self.excel_preview_widget.setVisible(False)
         preview_layout = QVBoxLayout(self.excel_preview_widget)
-        preview_layout.setSpacing(8)
+        preview_layout.setSpacing(ROW_SPACING)
 
         self._preview_title = StrongBodyLabel("")
         preview_layout.addWidget(self._preview_title)
@@ -391,7 +417,7 @@ class BatchUploadDialog(QDialog):
 
         preview_container = QWidget()
         self.excel_rows_layout = QVBoxLayout(preview_container)
-        self.excel_rows_layout.setSpacing(8)
+        self.excel_rows_layout.setSpacing(ROW_SPACING)
         self.excel_rows_layout.addStretch()
 
         preview_scroll.setWidget(preview_container)
@@ -493,7 +519,7 @@ class BatchUploadDialog(QDialog):
 
             if not header_row:
                 self.excel_status_label.setText(self._tr("batch.excel.header_missing"))
-                self.excel_status_label.setStyleSheet("color: #F59E0B;")
+                self.excel_status_label.setStyleSheet(f"color: {get_status_text_color('warning')};")
                 self.start_btn.setEnabled(False)
                 wb.close()
                 return
@@ -539,21 +565,21 @@ class BatchUploadDialog(QDialog):
 
                 if row_widget.is_valid():
                     valid_count += 1
-                    row_widget.setStyleSheet("background-color: #ECFDF5; border-radius: 4px; padding: 4px;")
+                    row_widget.setStyleSheet(get_status_row_style(isDarkTheme(), 'valid'))
                 else:
                     invalid_count += 1
-                    row_widget.setStyleSheet("background-color: #FEF2F2; border-radius: 4px; padding: 4px;")
+                    row_widget.setStyleSheet(get_status_row_style(isDarkTheme(), 'invalid'))
 
                 self.excel_rows_layout.insertWidget(self.excel_rows_layout.count() - 1, row_widget)
 
             # Update status
             if invalid_count > 0:
                 self.excel_status_label.setText(self._tr("batch.excel.rows_valid_invalid", valid=valid_count, invalid=invalid_count))
-                self.excel_status_label.setStyleSheet("color: #F59E0B;")
+                self.excel_status_label.setStyleSheet(f"color: {get_status_text_color('warning')};")
                 self.start_btn.setEnabled(False)
             else:
                 self.excel_status_label.setText(self._tr("batch.excel.rows_valid_ready", valid=valid_count))
-                self.excel_status_label.setStyleSheet("color: #10B981;")
+                self.excel_status_label.setStyleSheet(f"color: {get_status_text_color('success')};")
                 self.start_btn.setEnabled(valid_count > 0)
 
             # Show preview, hide empty state
@@ -564,7 +590,7 @@ class BatchUploadDialog(QDialog):
 
         except Exception as ex:
             self.excel_status_label.setText(self._tr("batch.excel.error", error=str(ex)))
-            self.excel_status_label.setStyleSheet("color: #EF4444;")
+            self.excel_status_label.setStyleSheet(f"color: {get_status_text_color('error')};")
             self.start_btn.setEnabled(False)
 
     def _validate_excel(self):
@@ -577,10 +603,10 @@ class BatchUploadDialog(QDialog):
             if isinstance(widget, BatchRowWidget):
                 if widget.is_valid():
                     valid_count += 1
-                    widget.setStyleSheet("background-color: #ECFDF5; border-radius: 4px; padding: 4px;")
+                    widget.setStyleSheet(get_status_row_style(isDarkTheme(), 'valid'))
                 else:
                     invalid_count += 1
-                    widget.setStyleSheet("background-color: #FEF2F2; border-radius: 4px; padding: 4px;")
+                    widget.setStyleSheet(get_status_row_style(isDarkTheme(), 'invalid'))
 
         # Only update if widgets exist
         if hasattr(self, 'excel_status_label'):
@@ -588,10 +614,10 @@ class BatchUploadDialog(QDialog):
                 self.excel_status_label.setText(
                     self._tr("batch.excel.rows_valid_invalid", valid=valid_count, invalid=invalid_count)
                 )
-                self.excel_status_label.setStyleSheet("color: #F59E0B;")
+                self.excel_status_label.setStyleSheet(f"color: {get_status_text_color('warning')};")
             else:
                 self.excel_status_label.setText(self._tr("batch.excel.rows_valid_ready", valid=valid_count))
-                self.excel_status_label.setStyleSheet("color: #10B981;")
+                self.excel_status_label.setStyleSheet(f"color: {get_status_text_color('success')};")
 
         if hasattr(self, 'start_btn'):
             if invalid_count > 0:

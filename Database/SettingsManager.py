@@ -1,4 +1,5 @@
 from datetime import datetime
+from pathlib import Path
 
 class SettingsManager:
     """
@@ -13,15 +14,17 @@ class SettingsManager:
         """
         Insert default settings if they don't exist
         """
+        desktop = str(Path.home() / "Desktop")
+        default_kross = str(Path.home() / "Desktop" / "KROSS")
         defaults = [
             # Paths
             ('download_images', 'false', 'bool', 'paths', 
              'Download and upload bicycle images', 'false'),
             
-            ('kross_download_path', 'C:\\Users\\User\\Desktop\\Darbas\\Dviraciai\\KROSS', 
+            ('kross_download_path', default_kross,
              'path', 'paths', 'Path to download KROSS images', ''),
             
-            ('repository_path', 'C:\\Users\\User\\Desktop', 
+            ('repository_path', desktop,
              'path', 'paths', 'Base path for bicycle folders', ''),
             
             # Processing
@@ -53,6 +56,16 @@ class SettingsManager:
 
             ('language', 'English', 'string', 'ui',
              'Application language (English/Lithuanian)', 'English'),
+
+              ('display_name', '', 'string', 'ui',
+               'Display name shown in the top bar', ''),
+
+             # Updates
+             ('update_check_enabled', 'true', 'bool', 'updates',
+              'Check for application updates on startup', 'true'),
+
+             ('update_manifest_url', '', 'string', 'updates',
+              'URL to update manifest JSON (latest.json)', ''),
         ]
         
         cursor = self.db.conn.cursor()

@@ -17,7 +17,61 @@ from PySide6.QtWidgets import QLabel, QWidget
 
 from qfluentwidgets import ScrollArea, isDarkTheme
 
-from GUI_Qt.styles.theme_config import COLORS, FONTS
+from GUI_Qt.styles.theme_config import COLORS, FONTS, SPACING
+
+
+# =====================
+# Fluent layout presets
+# =====================
+
+# Windows/Fluent-style page gutters used across this app.
+# Keep these centralized so we can tune spacing globally.
+PAGE_MARGINS = (SPACING["xxxl"], SPACING["lg"], SPACING["xxxl"], SPACING["lg"])  # 40,20,40,20
+PAGE_SPACING = SPACING["lg"]  # 20
+
+# Standard card padding (used for toolbars/sections)
+CARD_MARGINS = (SPACING["xl"], SPACING["lg"], SPACING["xl"], SPACING["lg"])  # 24,20,24,20
+CARD_SPACING = SPACING["base"]  # 16
+
+# Large cards (forms) need slightly more breathing room.
+CARD_MARGINS_LARGE = (SPACING["xxl"], SPACING["xxl"], SPACING["xxl"], SPACING["xxl"])  # 32
+CARD_SPACING_LARGE = SPACING["xl"]  # 24
+
+# Centered form containers (Login / MasterPassword) use larger padding.
+CENTER_FORM_MARGINS = (SPACING["xxxl"], SPACING["xxxl"], SPACING["xxxl"], SPACING["xxxl"])  # 40
+
+# Compact inline gaps
+ROW_SPACING = SPACING["sm"]  # 8
+ICON_TEXT_GAP = SPACING["md"]  # 12
+
+# Common content gaps (used in many forms and card internals)
+CONTENT_SPACING = SPACING["md"]  # 12
+
+# Common paddings used across toolbars/footers/panels
+TOOLBAR_MARGINS = (SPACING["lg"], SPACING["base"], SPACING["lg"], SPACING["base"])  # 20,16,20,16
+FOOTER_MARGINS = (SPACING["lg"], SPACING["md"], SPACING["lg"], SPACING["md"])  # 20,12,20,12
+PANEL_MARGINS = (SPACING["base"], SPACING["base"], SPACING["base"], SPACING["base"])  # 16
+
+# Small gaps used in compact sublayouts
+MICRO_SPACING = SPACING["xxs"]  # 2
+TIGHT_SPACING = SPACING["xs"]   # 4
+
+# Non-grid but repeated in a few places (kept exact for parity)
+MID_SPACING = 10
+
+# Common “pill”/chip padding for compact labels (keep exact for UX parity)
+PILL_MARGINS = (10, 8, 10, 8)
+
+# Table cell widget margins (prevents gridlines from overlapping input borders)
+TABLE_CELL_MARGINS = (SPACING["md"], SPACING["sm"], SPACING["md"], SPACING["sm"])  # 12,8,12,8
+
+# Reused “details” layout constants (kept exact to avoid UI regressions)
+DETAILS_MARGINS = (12, 10, 12, 10)
+DETAILS_SPACING = 6
+
+# Navigation footer (version label) layout
+NAV_VERSION_MARGINS = (SPACING["base"], SPACING["xs"], SPACING["base"], 6)
+NAV_VERSION_SPACING = 6
 
 
 class _TransparentLabelEventFilter(QObject):
@@ -45,6 +99,10 @@ def _normalize_label_widget(label: QLabel) -> None:
     """Apply the strongest safe transparency settings to a label."""
 
     try:
+        # Some labels (badges/counters) intentionally use backgrounds.
+        if bool(label.property("ubAllowBg")):
+            return
+
         label.setAutoFillBackground(False)
         label.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
         label.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)

@@ -10,6 +10,9 @@ from qfluentwidgets import (
     PrimaryPushButton, InfoBar, InfoBarPosition
 )
 
+from GUI_Qt.styles.theme_config import SIZES
+from GUI_Qt.styles.screen_theme import CARD_SPACING, CARD_SPACING_LARGE, CENTER_FORM_MARGINS, ROW_SPACING
+
 
 class MasterPasswordSetupDialog(QWidget):
     """Master password setup screen (first run)"""
@@ -31,10 +34,10 @@ class MasterPasswordSetupDialog(QWidget):
 
         # Center container
         center_container = QWidget()
-        center_container.setMaximumWidth(400)
+        center_container.setMaximumWidth(SIZES['center_form_max_width'])
         center_layout = QVBoxLayout(center_container)
-        center_layout.setSpacing(24)
-        center_layout.setContentsMargins(40, 40, 40, 40)
+        center_layout.setSpacing(CARD_SPACING_LARGE)
+        center_layout.setContentsMargins(*CENTER_FORM_MARGINS)
 
         # Title
         title = TitleLabel(self.main.i18n.tr("master.setup.title"))
@@ -47,12 +50,12 @@ class MasterPasswordSetupDialog(QWidget):
         center_layout.addWidget(subtitle)
 
         # Spacer
-        center_layout.addSpacing(16)
+        center_layout.addSpacing(CARD_SPACING)
 
         # Password field
         password_row = QWidget()
         password_row_layout = QVBoxLayout(password_row)
-        password_row_layout.setSpacing(8)
+        password_row_layout.setSpacing(ROW_SPACING)
         password_row_layout.setContentsMargins(0, 0, 0, 0)
 
         password_label = BodyLabel(self.main.i18n.tr("master.password.label"))
@@ -67,7 +70,7 @@ class MasterPasswordSetupDialog(QWidget):
         # Confirm password field
         confirm_row = QWidget()
         confirm_row_layout = QVBoxLayout(confirm_row)
-        confirm_row_layout.setSpacing(8)
+        confirm_row_layout.setSpacing(ROW_SPACING)
         confirm_row_layout.setContentsMargins(0, 0, 0, 0)
 
         confirm_label = BodyLabel(self.main.i18n.tr("master.confirm.label"))
@@ -80,7 +83,7 @@ class MasterPasswordSetupDialog(QWidget):
         center_layout.addWidget(confirm_row)
 
         # Spacer
-        center_layout.addSpacing(16)
+        center_layout.addSpacing(CARD_SPACING)
 
         # Create button
         self.create_button = PrimaryPushButton(self.main.i18n.tr("master.create"))
@@ -150,10 +153,10 @@ class MasterPasswordPromptDialog(QWidget):
 
         # Center container
         center_container = QWidget()
-        center_container.setMaximumWidth(400)
+        center_container.setMaximumWidth(SIZES['center_form_max_width'])
         center_layout = QVBoxLayout(center_container)
-        center_layout.setSpacing(24)
-        center_layout.setContentsMargins(40, 40, 40, 40)
+        center_layout.setSpacing(CARD_SPACING_LARGE)
+        center_layout.setContentsMargins(*CENTER_FORM_MARGINS)
 
         # Title
         title = TitleLabel(self.main.i18n.tr("master.prompt.title"))
@@ -165,12 +168,12 @@ class MasterPasswordPromptDialog(QWidget):
         center_layout.addWidget(subtitle)
 
         # Spacer
-        center_layout.addSpacing(16)
+        center_layout.addSpacing(CARD_SPACING)
 
         # Password field
         password_row = QWidget()
         password_row_layout = QVBoxLayout(password_row)
-        password_row_layout.setSpacing(8)
+        password_row_layout.setSpacing(ROW_SPACING)
         password_row_layout.setContentsMargins(0, 0, 0, 0)
 
         password_label = BodyLabel(self.main.i18n.tr("master.password.label"))
@@ -184,7 +187,7 @@ class MasterPasswordPromptDialog(QWidget):
         center_layout.addWidget(password_row)
 
         # Spacer
-        center_layout.addSpacing(16)
+        center_layout.addSpacing(CARD_SPACING)
 
         # Unlock button
         self.unlock_button = PrimaryPushButton(self.main.i18n.tr("master.unlock"))

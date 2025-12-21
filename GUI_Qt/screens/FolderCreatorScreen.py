@@ -45,7 +45,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-from GUI_Qt.styles.theme_config import COLORS, FONTS
+from GUI_Qt.styles.theme_config import COLORS, FONTS, RADII, PADDINGS, SIZES, rgba_from_hex
+from GUI_Qt.styles.screen_theme import PAGE_MARGINS, PAGE_SPACING, ICON_TEXT_GAP, PANEL_MARGINS, CONTENT_SPACING, ROW_SPACING, CARD_SPACING, CARD_MARGINS
 
 
 @dataclass(frozen=True)
@@ -193,21 +194,55 @@ class FolderCreatorScreen(QWidget):
             }}
         """)
 
+        panel_bg = COLORS['lavender_grey'] if is_dark else COLORS['bg_light']
+        item_divider = rgba_from_hex(COLORS['text_white'], 0.08) if is_dark else rgba_from_hex(COLORS['space_indigo'], 0.10)
+
+        if hasattr(self, 'products_list') and self.products_list is not None:
+            self.products_list.setStyleSheet(f"""
+                QListWidget {{
+                    background-color: {panel_bg};
+                    border-radius: {RADII['sm']}px;
+                    padding: {PADDINGS['combo_item']};
+                }}
+                QListWidget::viewport {{
+                    background-color: {panel_bg};
+                }}
+                QListWidget::item {{
+                    padding: {PADDINGS['combo_item']};
+                    border-bottom: 1px solid {item_divider};
+                }}
+            """)
+
+        if hasattr(self, 'preview_tree') and self.preview_tree is not None:
+            self.preview_tree.setStyleSheet(f"""
+                QTreeWidget {{
+                    background-color: {panel_bg};
+                    border-radius: {RADII['sm']}px;
+                    padding: {PADDINGS['combo_item']};
+                }}
+                QTreeWidget::viewport {{
+                    background-color: {panel_bg};
+                }}
+                QTreeWidget::item {{
+                    padding: {PADDINGS['tree_item']};
+                }}
+            """)
+
     def _init_ui(self):
         self._apply_theme()
         self.setAutoFillBackground(True)
 
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(40, 20, 40, 20)
-        main_layout.setSpacing(16)
+        main_layout.setContentsMargins(*PAGE_MARGINS)
+        main_layout.setSpacing(PAGE_SPACING)
 
         # Header
         header = QHBoxLayout()
         title_container = QHBoxLayout()
-        title_container.setSpacing(12)
+        title_container.setSpacing(ICON_TEXT_GAP)
 
         title_icon = TransparentToolButton(FluentIcon.FOLDER, self)
-        title_icon.setFixedSize(32, 32)
+        title_icon.setFixedSize(SIZES['icon_lg'], SIZES['icon_lg'])
         title_icon.setEnabled(False)
 
         self.title_label = TitleLabel("")
@@ -219,17 +254,17 @@ class FolderCreatorScreen(QWidget):
 
         # Content row
         content_layout = QHBoxLayout()
-        content_layout.setSpacing(16)
+        content_layout.setSpacing(PAGE_SPACING)
 
         # Left: scraped products list
         left_panel = CardWidget()
-        left_panel.setBorderRadius(8)
-        left_panel.setMinimumWidth(320)
+        left_panel.setBorderRadius(RADII['md'])
+        left_panel.setMinimumWidth(SIZES['left_panel_min_width'])
         left_panel.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
 
         left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(16, 16, 16, 16)
-        left_layout.setSpacing(12)
+        left_layout.setContentsMargins(*PANEL_MARGINS)
+        left_layout.setSpacing(CONTENT_SPACING)
 
         list_header = QHBoxLayout()
         self.list_title = BodyLabel("")
@@ -245,17 +280,7 @@ class FolderCreatorScreen(QWidget):
         left_layout.addLayout(list_header)
 
         self.products_list = QListWidget()
-        self.products_list.setStyleSheet(f"""
-            QListWidget {{
-                background-color: {COLORS['lavender_grey'] if isDarkTheme() else COLORS['bg_light']};
-                border-radius: 6px;
-                padding: 8px;
-            }}
-            QListWidget::item {{
-                padding: 10px 8px;
-                border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-            }}
-        """)
+        self._apply_theme()
         left_layout.addWidget(self.products_list, 1)
 
         self.list_hint = CaptionLabel("")
@@ -266,12 +291,12 @@ class FolderCreatorScreen(QWidget):
 
         # Right: actions
         right_panel = CardWidget()
-        right_panel.setBorderRadius(8)
+        right_panel.setBorderRadius(RADII['md'])
         right_panel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
 
         right_layout = QVBoxLayout(right_panel)
-        right_layout.setContentsMargins(24, 24, 24, 24)
-        right_layout.setSpacing(16)
+        right_layout.setContentsMargins(*CARD_MARGINS)
+        right_layout.setSpacing(CARD_SPACING)
 
         self.subtitle_label = BodyLabel("")
         self.subtitle_label.setWordWrap(True)
@@ -289,18 +314,9 @@ class FolderCreatorScreen(QWidget):
         self.preview_tree = QTreeWidget()
         self.preview_tree.setHeaderHidden(True)
         self.preview_tree.setRootIsDecorated(True)
-        self.preview_tree.setIndentation(18)
-        self.preview_tree.setStyleSheet(f"""
-            QTreeWidget {{
-                background-color: {COLORS['lavender_grey'] if isDarkTheme() else COLORS['bg_light']};
-                border-radius: 6px;
-                padding: 8px;
-            }}
-            QTreeWidget::item {{
-                padding: 6px 6px;
-            }}
-        """)
-        self.preview_tree.setMinimumHeight(220)
+        self.preview_tree.setIndentation(SIZES['tree_indent'])
+        self._apply_theme()
+        self.preview_tree.setMinimumHeight(SIZES['tree_min_height'])
         right_layout.addWidget(self.preview_tree, 1)
 
         # Path chooser card-like block
@@ -311,7 +327,7 @@ class FolderCreatorScreen(QWidget):
         right_layout.addWidget(self.path_caption)
 
         path_row = QHBoxLayout()
-        path_row.setSpacing(8)
+        path_row.setSpacing(ROW_SPACING)
         self.path_field = LineEdit()
         self.path_field.setPlaceholderText("")
         path_row.addWidget(self.path_field, 1)
@@ -324,7 +340,7 @@ class FolderCreatorScreen(QWidget):
 
         # Actions
         actions_row = QHBoxLayout()
-        actions_row.setSpacing(12)
+        actions_row.setSpacing(CONTENT_SPACING)
         self.create_btn = PrimaryPushButton("")
         self.create_btn.setIcon(FluentIcon.SEND.icon())
         self.create_btn.clicked.connect(self._handle_create)
@@ -334,7 +350,7 @@ class FolderCreatorScreen(QWidget):
         self.clear_btn.clicked.connect(self._clear_results)
 
         self.progress_ring = IndeterminateProgressRing()
-        self.progress_ring.setFixedSize(28, 28)
+        self.progress_ring.setFixedSize(SIZES['progress_ring'], SIZES['progress_ring'])
         self.progress_ring.setVisible(False)
 
         actions_row.addWidget(self.create_btn)

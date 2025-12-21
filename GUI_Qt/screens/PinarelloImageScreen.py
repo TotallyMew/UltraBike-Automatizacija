@@ -1,17 +1,14 @@
-"""Basso Images Screen
+"""Pinarello Images Screen
 
-Runs the Basso configurator layered-image capture and compositing process.
+Runs the Pinarello product image downloader:
+- Creates per-variant folders
+- Downloads variant images + product gallery images
+- Converts to PNG and resizes oversized images
 """
 
 from __future__ import annotations
 
 import os
-import time
-from dataclasses import dataclass
-from io import BytesIO
-
-import requests
-from PIL import Image
 
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFileDialog, QSizePolicy, QPlainTextEdit
@@ -33,173 +30,90 @@ from qfluentwidgets import (
     qconfig,
 )
 
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from GUI_Qt.styles.screen_theme import PAGE_MARGINS, PAGE_SPACING, CARD_MARGINS, ICON_TEXT_GAP, ROW_SPACING, CONTENT_SPACING
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.service import Service as ChromeService
-from selenium.webdriver.chrome.options import Options as ChromeOptions
-from webdriver_manager.chrome import ChromeDriverManager
-
 from GUI_Qt.styles.theme_config import COLORS, FONTS, RADII, PADDINGS, SIZES
+from GUI_Qt.styles.screen_theme import PAGE_MARGINS, PAGE_SPACING, CARD_MARGINS, ICON_TEXT_GAP, ROW_SPACING, CONTENT_SPACING
 
 
-DEFAULT_BASSO_URL_PLACEHOLDER = "bassobikes.com/..."
+DEFAULT_PINARELLO_URL_PLACEHOLDER = "pinarello.com/..."
 
 
-@dataclass(frozen=True)
-class BassoResult:
-    color_name: str
-    file_path: str
-
-
-class BassoImageWorker(QThread):
+class PinarelloImageWorker(QThread):
     progress = Signal(str)
     finished = Signal(bool, str, object)  # success, message, results
 
-    def __init__(self, url: str, output_dir: str, tr):
+    def __init__(self, driver, url: str, output_dir: str, wait_s: int, tr):
         super().__init__()
+        self.driver = driver
         self.url = url
         self.output_dir = output_dir
+        self.wait_s = wait_s
         self.tr = tr
 
-    @staticmethod
-    def _safe_filename(name: str) -> str:
-        safe = name.strip().replace(" ", "_")
-        for ch in ['<', '>', ':', '"', '/', '\\', '|', '?', '*']:
-            safe = safe.replace(ch, '-')
-        return safe or "image"
-
-    @staticmethod
-    def _get_layered_image_urls(driver) -> list[str]:
-        WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.CSS_SELECTOR, "#view_0 img")))
-        img_elements = driver.find_elements(By.CSS_SELECTOR, "#view_0 img")
-        return [img.get_attribute("src") for img in img_elements if img.get_attribute("src")]
-
-    @staticmethod
-    def _download_images(image_urls: list[str]) -> list[Image.Image]:
-        images: list[Image.Image] = []
-        for url in image_urls:
-            resp = requests.get(url, timeout=30)
-            resp.raise_for_status()
-            img = Image.open(BytesIO(resp.content)).convert("RGBA")
-            images.append(img)
-        return images
-
-    @staticmethod
-    def _merge_images(images: list[Image.Image]) -> Image.Image:
-        if not images:
-            raise ValueError("No images provided for merging")
-        base = images[0]
-        base_size = base.size
-        for overlay in images[1:]:
-            if overlay.size != base_size:
-                overlay = overlay.resize(base_size, Image.LANCZOS)
-            base = Image.alpha_composite(base, overlay)
-        return base
-
     def run(self):
-        driver = None
         try:
+            from pinarello_image_downloader import download_pinarello_variants_in_existing_browser
+
+            if self.driver is None:
+                self.finished.emit(False, self.tr("pinarello.images.no_session"), None)
+                return
+
             if not self.url:
-                self.finished.emit(False, self.tr("basso.images.url.invalid"), [])
+                self.finished.emit(False, self.tr("pinarello.images.url.invalid"), None)
                 return
 
             if not self.output_dir:
-                self.finished.emit(False, self.tr("basso.images.output.invalid"), [])
+                self.finished.emit(False, self.tr("pinarello.images.output.invalid"), [])
                 return
 
             os.makedirs(self.output_dir, exist_ok=True)
 
-            self.progress.emit(self.tr("basso.images.status.starting"))
+            self.progress.emit(self.tr("pinarello.images.status.starting"))
+            self.progress.emit(self.tr("pinarello.images.status.product", url=self.url))
 
-            options = ChromeOptions()
-            options.add_argument("--headless=new")
-            options.add_argument("--no-sandbox")
-            options.add_argument("--disable-dev-shm-usage")
-            options.add_experimental_option('excludeSwitches', ['enable-logging'])
-
-            driver = webdriver.Chrome(
-                service=ChromeService(ChromeDriverManager().install()),
-                options=options,
+            res = download_pinarello_variants_in_existing_browser(
+                driver=self.driver,
+                url=self.url,
+                output_dir=self.output_dir,
+                wait_s=self.wait_s,
+                log=self.progress.emit,
             )
-            driver.get(self.url)
 
-            WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.CSS_SELECTOR, "#view_0")))
-            WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.CSS_SELECTOR, ".ColorRadio")))
-
-            color_labels = driver.find_elements(By.CSS_SELECTOR, ".ColorRadio label")
-            if not color_labels:
-                self.finished.emit(False, self.tr("basso.images.no_colors"), [])
-                return
-
-            results: list[BassoResult] = []
-
-            for i in range(len(color_labels)):
-                color_labels = driver.find_elements(By.CSS_SELECTOR, ".ColorRadio label")
-                option = color_labels[i]
-                color_name = (option.text or "").strip().split("\n")[0].strip() or f"color_{i+1}"
-
-                self.progress.emit(self.tr("basso.images.status.color", current=i + 1, total=len(color_labels), name=color_name))
-
-                driver.execute_script("arguments[0].click();", option)
-                time.sleep(2)
-
-                layered_urls = self._get_layered_image_urls(driver)
-                if not layered_urls:
-                    continue
-
-                images = self._download_images(layered_urls)
-                composite = self._merge_images(images)
-
-                filename = f"{self._safe_filename(color_name)}.png"
-                out_path = os.path.join(self.output_dir, filename)
-                composite.save(out_path)
-                results.append(BassoResult(color_name=color_name, file_path=out_path))
-
-            if not results:
-                self.finished.emit(False, self.tr("basso.images.no_results"), [])
-                return
-
-            self.finished.emit(True, self.tr("basso.images.done", count=len(results)), results)
+            self.finished.emit(True, self.tr("pinarello.images.done"), res)
 
         except Exception as e:
-            self.finished.emit(False, self.tr("basso.images.failed", error=str(e)), [])
-        finally:
-            try:
-                if driver is not None:
-                    driver.quit()
-            except Exception:
-                pass
+            self.finished.emit(False, self.tr("pinarello.images.failed", error=str(e)), [])
 
 
-class BassoImageScreen(QWidget):
+class PinarelloImageScreen(QWidget):
     def __init__(self, main_window, parent=None):
         super().__init__(parent)
         self.main = main_window
-        self.worker: BassoImageWorker | None = None
+        self.worker: PinarelloImageWorker | None = None
         self._init_ui()
         qconfig.themeChangedFinished.connect(self._on_theme_changed)
 
     def _apply_theme(self):
         is_dark = isDarkTheme()
-        bg_color = COLORS['space_indigo'] if is_dark else COLORS['platinum']
-        self.setStyleSheet(f"""
-            BassoImageScreen {{
+        bg_color = COLORS["space_indigo"] if is_dark else COLORS["platinum"]
+        self.setStyleSheet(
+            f"""
+            PinarelloImageScreen {{
                 background-color: {bg_color};
                 font-family: {FONTS['family']};
             }}
-        """)
+            """
+        )
 
         if hasattr(self, 'log') and self.log is not None:
-            self.log.setStyleSheet(f"""
+            self.log.setStyleSheet(
+                f"""
                 QPlainTextEdit {{
                     background-color: {COLORS['lavender_grey'] if is_dark else COLORS['bg_light']};
                     border-radius: {RADII['sm']}px;
                     padding: {PADDINGS['combo_item']};
                 }}
-            """)
+                """
+            )
 
     def _init_ui(self):
         self._apply_theme()
@@ -230,7 +144,7 @@ class BassoImageScreen(QWidget):
         # Left: controls
         left = CardWidget()
         left.setBorderRadius(RADII['md'])
-        left.setMinimumWidth(SIZES['panel_min_width'])
+        left.setMinimumWidth(SIZES['panel_min_width_lg'])
         left.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         ll = QVBoxLayout(left)
         ll.setContentsMargins(*CARD_MARGINS)
@@ -243,11 +157,12 @@ class BassoImageScreen(QWidget):
         self.url_label = BodyLabel("")
         self.url_caption = CaptionLabel("")
         self.url_caption.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self.url_caption.setWordWrap(True)
         ll.addWidget(self.url_label)
         ll.addWidget(self.url_caption)
 
         self.url_field = LineEdit()
-        self.url_field.setPlaceholderText(DEFAULT_BASSO_URL_PLACEHOLDER)
+        self.url_field.setPlaceholderText(DEFAULT_PINARELLO_URL_PLACEHOLDER)
         ll.addWidget(self.url_field)
 
         self.output_label = BodyLabel("")
@@ -280,11 +195,11 @@ class BassoImageScreen(QWidget):
         actions.addStretch(1)
         actions.addWidget(self.progress_ring)
         ll.addLayout(actions)
-        ll.addStretch(1)
 
+        ll.addStretch(1)
         content_layout.addWidget(left, 4)
 
-        # Right: log/output
+        # Right: log
         right = CardWidget()
         right.setBorderRadius(RADII['md'])
         right.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -312,25 +227,25 @@ class BassoImageScreen(QWidget):
 
     def retranslate_ui(self):
         tr = self.main.i18n.tr
-        self.title_label.setText(tr("basso.images.title"))
-        self.subtitle_label.setText(tr("basso.images.subtitle"))
-        self.url_label.setText(tr("basso.images.url.label"))
-        self.url_caption.setText(tr("basso.images.url.caption"))
-        self.url_field.setPlaceholderText(tr("basso.images.url.placeholder"))
-        self.output_label.setText(tr("basso.images.output.label"))
-        self.output_caption.setText(tr("basso.images.output.caption"))
-        self.output_field.setPlaceholderText(tr("basso.images.output.placeholder"))
-        self.browse_btn.setText(tr("basso.images.output.browse"))
-        self.run_btn.setText(tr("basso.images.run"))
-        self.log_title.setText(tr("basso.images.log.title"))
-        self.log_hint.setText(tr("basso.images.log.hint"))
+        self.title_label.setText(tr("pinarello.images.title"))
+        self.subtitle_label.setText(tr("pinarello.images.subtitle"))
+        self.url_label.setText(tr("pinarello.images.url.label"))
+        self.url_caption.setText(tr("pinarello.images.url.caption"))
+        self.url_field.setPlaceholderText(tr("pinarello.images.url.placeholder"))
+        self.output_label.setText(tr("pinarello.images.output.label"))
+        self.output_caption.setText(tr("pinarello.images.output.caption"))
+        self.output_field.setPlaceholderText(tr("pinarello.images.output.placeholder"))
+        self.browse_btn.setText(tr("pinarello.images.output.browse"))
+        self.run_btn.setText(tr("pinarello.images.run"))
+        self.log_title.setText(tr("pinarello.images.log.title"))
+        self.log_hint.setText(tr("pinarello.images.log.hint"))
 
     def _on_theme_changed(self):
         self._apply_theme()
 
     def _browse_output(self):
         tr = self.main.i18n.tr
-        folder = QFileDialog.getExistingDirectory(self, tr("basso.images.output.browse.title"), "")
+        folder = QFileDialog.getExistingDirectory(self, tr("pinarello.images.output.browse.title"), "")
         if folder:
             self.output_field.setText(folder)
 
@@ -346,13 +261,14 @@ class BassoImageScreen(QWidget):
 
     def _run(self):
         tr = self.main.i18n.tr
+
         url = self.url_field.text().strip()
         output_dir = self.output_field.text().strip()
 
         if not url:
             InfoBar.error(
                 title=tr("common.error"),
-                content=tr("basso.images.url.invalid"),
+                content=tr("pinarello.images.url.invalid"),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
@@ -363,7 +279,7 @@ class BassoImageScreen(QWidget):
         if not output_dir:
             InfoBar.error(
                 title=tr("common.error"),
-                content=tr("basso.images.output.invalid"),
+                content=tr("pinarello.images.output.invalid"),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
@@ -373,10 +289,16 @@ class BassoImageScreen(QWidget):
             return
 
         self.log.clear()
-        self._append_log(tr("basso.images.status.starting"))
+        self._append_log(tr("pinarello.images.status.starting"))
         self._set_busy(True)
 
-        self.worker = BassoImageWorker(url=url, output_dir=output_dir, tr=tr)
+        self.worker = PinarelloImageWorker(
+            driver=getattr(self.main, "driver", None),
+            url=url,
+            output_dir=output_dir,
+            wait_s=20,
+            tr=tr,
+        )
         self.worker.progress.connect(self._append_log)
         self.worker.finished.connect(self._on_finished)
         self.worker.start()
@@ -385,15 +307,21 @@ class BassoImageScreen(QWidget):
         tr = self.main.i18n.tr
         self._set_busy(False)
 
+        self._append_log(message)
+
         if success:
-            self._append_log(message)
             try:
-                for r in list(results or []):
-                    # r may be BassoResult or a dict-like; be defensive
-                    fp = getattr(r, 'file_path', None) or (r.get('file_path') if isinstance(r, dict) else None)
-                    name = getattr(r, 'color_name', None) or (r.get('color_name') if isinstance(r, dict) else None)
-                    if fp:
-                        self._append_log(f"- {name or ''} {fp}")
+                r = results if isinstance(results, dict) else None
+                if r:
+                    product_dir = r.get("product_dir")
+                    title = r.get("title")
+                    gallery_count = r.get("gallery_count")
+                    variant_images = r.get("variant_images")
+                    variants = r.get("variants")
+
+                    if product_dir:
+                        self._append_log(f"- {title or ''} => {product_dir}")
+                        self._append_log(f"  gallery={gallery_count or 0} variants={variants or 0} variant_images={variant_images or 0}")
             except Exception:
                 pass
 
@@ -407,7 +335,6 @@ class BassoImageScreen(QWidget):
                 parent=self,
             )
         else:
-            self._append_log(message)
             InfoBar.error(
                 title=tr("common.error"),
                 content=message,

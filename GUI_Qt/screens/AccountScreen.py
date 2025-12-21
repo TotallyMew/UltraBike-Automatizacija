@@ -13,13 +13,15 @@ from qfluentwidgets import (
     LineEdit,
     PasswordLineEdit,
     PrimaryPushButton,
+    TransparentToolButton,
+    FluentIcon,
     InfoBar,
     InfoBarPosition,
 )
 
-from GUI_Qt.styles.theme_config import COLORS, FONTS
+from GUI_Qt.styles.theme_config import COLORS, FONTS, RADII, SIZES
 from qfluentwidgets import isDarkTheme, qconfig
-from GUI_Qt.styles.screen_theme import apply_screen_theme, enforce_transparent_labels
+from GUI_Qt.styles.screen_theme import apply_screen_theme, enforce_transparent_labels, PAGE_MARGINS, PAGE_SPACING, PANEL_MARGINS, MID_SPACING, ICON_TEXT_GAP
 
 
 class AccountScreen(QWidget):
@@ -59,19 +61,61 @@ class AccountScreen(QWidget):
         self.scroll.setWidget(self.content)
 
         layout = QVBoxLayout(self.content)
-        layout.setContentsMargins(24, 24, 24, 24)
-        layout.setSpacing(16)
+        layout.setContentsMargins(*PAGE_MARGINS)
+        layout.setSpacing(PAGE_SPACING)
+
+        header = QHBoxLayout()
+        title_container = QHBoxLayout()
+        title_container.setSpacing(ICON_TEXT_GAP)
+
+        title_icon = TransparentToolButton(FluentIcon.PEOPLE, self)
+        title_icon.setFixedSize(SIZES['icon_lg'], SIZES['icon_lg'])
+        title_icon.setEnabled(False)
 
         self._ui["title"] = TitleLabel("")
-        layout.addWidget(self._ui["title"])
+        title_container.addWidget(title_icon)
+        title_container.addWidget(self._ui["title"])
+        header.addLayout(title_container)
+        header.addStretch()
+
+        layout.addLayout(header)
+
+        # Profile (display name)
+        self.profile_card = CardWidget()
+        self.profile_card.setObjectName("accountCardProfile")
+        self.profile_card.setBorderRadius(RADII['md'])
+        pr_layout = QVBoxLayout(self.profile_card)
+        pr_layout.setContentsMargins(*PANEL_MARGINS)
+        pr_layout.setSpacing(MID_SPACING)
+
+        self._ui["profile_title"] = StrongBodyLabel("")
+        pr_layout.addWidget(self._ui["profile_title"])
+
+        self._ui["profile_caption"] = BodyLabel("")
+        self._ui["profile_caption"].setWordWrap(True)
+        pr_layout.addWidget(self._ui["profile_caption"])
+
+        self._ui["display_name_label"] = BodyLabel("")
+        self.display_name = LineEdit()
+        pr_layout.addWidget(self._ui["display_name_label"])
+        pr_layout.addWidget(self.display_name)
+
+        pr_btn = QHBoxLayout()
+        pr_btn.addStretch(1)
+        self._ui["display_name_save"] = PrimaryPushButton("")
+        self._ui["display_name_save"].clicked.connect(self._save_display_name)
+        pr_btn.addWidget(self._ui["display_name_save"])
+        pr_layout.addLayout(pr_btn)
+
+        layout.addWidget(self.profile_card)
 
         # PrestaShop credentials
         self.prestashop_card = CardWidget()
         self.prestashop_card.setObjectName("accountCardPrestaShop")
-        self.prestashop_card.setBorderRadius(8)
+        self.prestashop_card.setBorderRadius(RADII['md'])
         p_layout = QVBoxLayout(self.prestashop_card)
-        p_layout.setContentsMargins(16, 16, 16, 16)
-        p_layout.setSpacing(10)
+        p_layout.setContentsMargins(*PANEL_MARGINS)
+        p_layout.setSpacing(MID_SPACING)
 
         self._ui["ps_title"] = StrongBodyLabel("")
         p_layout.addWidget(self._ui["ps_title"])
@@ -105,10 +149,10 @@ class AccountScreen(QWidget):
         # External brand credentials
         self.brand_card = CardWidget()
         self.brand_card.setObjectName("accountCardExternal")
-        self.brand_card.setBorderRadius(8)
+        self.brand_card.setBorderRadius(RADII['md'])
         b_layout = QVBoxLayout(self.brand_card)
-        b_layout.setContentsMargins(16, 16, 16, 16)
-        b_layout.setSpacing(14)
+        b_layout.setContentsMargins(*PANEL_MARGINS)
+        b_layout.setSpacing(MID_SPACING)
 
         self._ui["brand_title"] = StrongBodyLabel("")
         b_layout.addWidget(self._ui["brand_title"])
@@ -218,7 +262,43 @@ class AccountScreen(QWidget):
         except Exception:
             pass
 
+    def _save_display_name(self):
+        tr = self.main.i18n.tr
+        name = (self.display_name.text() or "").strip()
+
+        try:
+            self.main.settings.set('display_name', name)
+            try:
+                self.main.refresh_topbar_user()
+            except Exception:
+                pass
+            InfoBar.success(
+                title=tr("account.saved.title"),
+                content=tr("account.saved.content"),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=2000,
+                parent=self,
+            )
+        except Exception as e:
+            InfoBar.error(
+                title=tr("account.error.title"),
+                content=str(e),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=4000,
+                parent=self,
+            )
+
     def _load_saved_values(self):
+        # Display name
+        try:
+            self.display_name.setText(self.main.settings.get('display_name', '') or '')
+        except Exception:
+            self.display_name.setText("")
+
         # PrestaShop email can be read without decrypting password
         try:
             self.ps_email.setText(self.main.credential_manager.get_last_saved_email() or "")
@@ -240,6 +320,12 @@ class AccountScreen(QWidget):
         tr = self.main.i18n.tr
 
         self._ui["title"].setText(tr("account.title"))
+
+        self._ui["profile_title"].setText(tr("account.profile.title"))
+        self._ui["profile_caption"].setText(tr("account.profile.caption"))
+        self._ui["display_name_label"].setText(tr("account.display_name"))
+        self.display_name.setPlaceholderText(tr("account.display_name.placeholder"))
+        self._ui["display_name_save"].setText(tr("account.save"))
 
         self._ui["ps_title"].setText(tr("account.prestashop.title"))
         self._ui["ps_caption"].setText(tr("account.prestashop.caption"))

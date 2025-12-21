@@ -1,14 +1,19 @@
-"""GUI_Qt/screens/BatchDescriptionsScreen.py
+"""GUI_Qt/screens/BatchTitlesScreen.py
 
-Batch Descriptions uploader.
+Batch Lithuanian titles updater.
 
-UX parity with BatchUploadScreen:
+UX parity with BatchUploadScreen / BatchDescriptionsScreen:
 - Manual mode: table rows
 - Excel mode: drag/drop + browse + template download
 - Start enabled only when rows are valid
 - Per-row Status/Error updates while running
 
 Automation reuses the existing logged-in Selenium session from MainWindow.
+
+Excel columns:
+- Brand
+- Code (without UB- prefix; we add it automatically)
+- Title (Lithuanian title / full product name)
 """
 
 from __future__ import annotations
@@ -35,7 +40,6 @@ from qfluentwidgets import (
     BodyLabel,
     CaptionLabel,
     CardWidget,
-    CheckBox,
     ComboBox,
     FluentIcon,
     IconWidget,
@@ -53,10 +57,10 @@ from qfluentwidgets import (
 )
 
 from GUI_Qt.styles.theme_config import COLORS, COMPONENT_COLORS, FONTS, RADII, PADDINGS, SIZES
-from GUI_Qt.styles.screen_theme import PAGE_MARGINS, PAGE_SPACING, ICON_TEXT_GAP, ROW_SPACING, TOOLBAR_MARGINS, CARD_SPACING, CONTENT_SPACING, TABLE_CELL_MARGINS, DETAILS_SPACING, MID_SPACING, SPACING
-from Managers.DescriptionManager import DescriptionManager
+from GUI_Qt.styles.screen_theme import PAGE_MARGINS, PAGE_SPACING, ICON_TEXT_GAP, ROW_SPACING, TOOLBAR_MARGINS, CARD_SPACING, CONTENT_SPACING, TABLE_CELL_MARGINS, SPACING
 from Utilities.ProductNavigationHandler import ProductNavigationHandler
 from Utilities.WebIntercationHandler import WebInteractionHandler
+from Managers.FeatureUploader.languageSwitcher import LanguageSwitcher
 
 
 class DropZoneWidget(QWidget):
@@ -145,7 +149,7 @@ class DropZoneWidget(QWidget):
             """)
 
 
-class BatchDescriptionsWorker(QThread):
+class BatchTitlesWorker(QThread):
     row_update = Signal(int, str, str)  # rowIndex, status, error
     log = Signal(str)
     done = Signal(int, int)  # ok, total
@@ -172,16 +176,74 @@ class BatchDescriptionsWorker(QThread):
         except Exception:
             pass
 
+    def _set_title(self, driver, lang_code: str, title: str) -> None:
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.common.keys import Keys
+        from selenium.webdriver.support import expected_conditions as EC
+        from selenium.webdriver.support.ui import WebDriverWait
+
+        lang_id_map = {"en": "1", "lt": "2", "lv": "3"}
+        if lang_code not in lang_id_map:
+            raise Exception(f"Unsupported language: {lang_code}")
+
+        # Make sure the correct language is active so we don't type into a hidden tab.
+        try:
+            switcher = LanguageSwitcher(driver, logger=getattr(self.main, "logger", None))
+            switcher.switchTo(lang_code)
+            time.sleep(0.4)
+        except Exception:
+            # Best-effort; we'll still try to set by ID below.
+            pass
+
+        el = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.ID, f"form_step1_name_{lang_id_map[lang_code]}"))
+        )
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", el)
+
+        # Try JS first (more reliable with some reactive inputs), then fallback to keystrokes.
+        try:
+            driver.execute_script(
+                """
+                const el = arguments[0];
+                const value = arguments[1];
+                el.focus();
+                el.value = value;
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+                """,
+                el,
+                title,
+            )
+            return
+        except Exception:
+            pass
+
+        try:
+            el.click()
+        except Exception:
+            driver.execute_script("arguments[0].click();", el)
+
+        try:
+            el.send_keys(Keys.CONTROL, "a")
+            el.send_keys(Keys.BACKSPACE)
+            el.send_keys(title)
+        except Exception:
+            # Last resort: clear() + send_keys
+            try:
+                el.clear()
+            except Exception:
+                pass
+            el.send_keys(title)
+
     def run(self):
         tr = self.main.i18n.tr
         driver = getattr(self.main, "driver", None)
         if driver is None:
             for it in self.items:
-                self.row_update.emit(it["row"], tr("batchdesc.status.failed"), tr("batchdesc.no_session"))
+                self.row_update.emit(it["row"], tr("batchtitle.status.failed"), tr("batchtitle.no_session"))
             self.done.emit(0, len(self.items))
             return
 
-        desc_manager = DescriptionManager(self.main.db, logger=self.main.logger)
         nav = ProductNavigationHandler(driver, logger=self.main.logger)
         web = WebInteractionHandler(driver)
 
@@ -192,44 +254,45 @@ class BatchDescriptionsWorker(QThread):
             row = it["row"]
             brand = it["brand"]
             code = it["code"]
-            desc = it["description"]
-            disclaimer = bool(it.get("append_disclaimer"))
+            title_lt = it.get("title_lt") or ""
+            title_en = it.get("title_en") or ""
+            title_lv = it.get("title_lv") or ""
 
-            self.row_update.emit(row, tr("batchdesc.status.running"), "")
-            self.log.emit(tr("batchdesc.progress.open", current=idx, total=total, code=code))
+            self.row_update.emit(row, tr("batchtitle.status.running"), "")
+            self.log.emit(tr("batchtitle.progress.open", current=idx, total=total, code=code))
 
             try:
                 self._ensure_products_page(driver)
                 nav.navigate_to_product(brand, code)
 
-                self.log.emit(tr("batchdesc.progress.upload", current=idx, total=total, code=code))
-                uploaded = desc_manager.upload_to_prestashop(
-                    driver,
-                    product_code=code,
-                    name=desc,
-                    append_disclaimer=disclaimer,
-                )
-                if not uploaded:
-                    self.row_update.emit(row, tr("batchdesc.status.failed"), tr("batchdesc.item.failed_upload"))
-                    continue
+                # Update each provided language title.
+                if title_lt:
+                    self.log.emit(tr("batchtitle.progress.fill", current=idx, total=total, code=code, lang="LT"))
+                    self._set_title(driver, "lt", title_lt)
+                if title_en:
+                    self.log.emit(tr("batchtitle.progress.fill", current=idx, total=total, code=code, lang="EN"))
+                    self._set_title(driver, "en", title_en)
+                if title_lv:
+                    self.log.emit(tr("batchtitle.progress.fill", current=idx, total=total, code=code, lang="LV"))
+                    self._set_title(driver, "lv", title_lv)
 
-                self.log.emit(tr("batchdesc.progress.save", current=idx, total=total, code=code))
+                self.log.emit(tr("batchtitle.progress.save", current=idx, total=total, code=code))
                 web.save_information()
                 time.sleep(0.5)
 
                 ok += 1
-                self.row_update.emit(row, tr("batchdesc.status.ok"), "")
+                self.row_update.emit(row, tr("batchtitle.status.ok"), "")
             except Exception as e:
-                self.row_update.emit(row, tr("batchdesc.status.failed"), str(e))
+                self.row_update.emit(row, tr("batchtitle.status.failed"), str(e))
 
         self.done.emit(ok, total)
 
 
-class BatchDescriptionsScreen(QWidget):
+class BatchTitlesScreen(QWidget):
     def __init__(self, main_window, parent=None):
         super().__init__(parent)
         self.main = main_window
-        self.worker: BatchDescriptionsWorker | None = None
+        self.worker: BatchTitlesWorker | None = None
 
         self.current_mode = "manual"
         self._base_table_rows = 5
@@ -238,9 +301,6 @@ class BatchDescriptionsScreen(QWidget):
             "KROSS", "Pinarello", "Basso", "Factor",
             "TREK", "Rondo", "Octane", "Rascal", "Lee Cougan",
         ]
-
-        desc_manager = DescriptionManager(main_window.db)
-        self.descriptions = [d['name'] for d in desc_manager.list_descriptions()]
 
         self._init_ui()
         qconfig.themeChangedFinished.connect(self._on_theme_changed)
@@ -258,7 +318,7 @@ class BatchDescriptionsScreen(QWidget):
         is_dark = isDarkTheme()
         bg_color = COLORS['space_indigo'] if is_dark else COLORS['platinum']
         self.setStyleSheet(f"""
-            BatchDescriptionsScreen {{
+            BatchTitlesScreen {{
                 background-color: {bg_color};
                 font-family: {FONTS['family']};
             }}
@@ -320,11 +380,6 @@ class BatchDescriptionsScreen(QWidget):
         self.clear_btn.setIcon(FluentIcon.DELETE.icon())
         self.clear_btn.clicked.connect(self._clear_all)
 
-        self.bulk_label = CaptionLabel("")
-        self.bulk_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
-        self.disclaimer_bulk = CheckBox("")
-        self.disclaimer_bulk.stateChanged.connect(self._toggle_all_disclaimers)
-
         self.template_btn = PushButton("")
         self.template_btn.setIcon(FluentIcon.DOWNLOAD.icon())
         self.template_btn.clicked.connect(self._download_template)
@@ -350,9 +405,6 @@ class BatchDescriptionsScreen(QWidget):
 
         toolbar_layout.addWidget(self.add_btn)
         toolbar_layout.addWidget(self.clear_btn)
-        toolbar_layout.addSpacing(ROW_SPACING)
-        toolbar_layout.addWidget(self.bulk_label)
-        toolbar_layout.addWidget(self.disclaimer_bulk)
         toolbar_layout.addStretch(1)
         toolbar_layout.addWidget(self.template_btn)
         toolbar_layout.addWidget(self.browse_btn)
@@ -373,7 +425,7 @@ class BatchDescriptionsScreen(QWidget):
         self.excel_drop.file_dropped.connect(self._handle_file_drop)
 
         self.table = QTableWidget()
-        self.table.setColumnCount(7)
+        self.table.setColumnCount(8)
         self.table.verticalHeader().setVisible(False)
         self.table.setAlternatingRowColors(True)
         self.table.setShowGrid(True)
@@ -389,11 +441,12 @@ class BatchDescriptionsScreen(QWidget):
         # Wider brand column so placeholder doesn't get truncated
         self.table.setColumnWidth(0, SIZES['col_w_200'])
         self.table.setColumnWidth(1, SIZES['col_w_160'])
-        self.table.setColumnWidth(2, SIZES['col_w_260'])
-        self.table.setColumnWidth(3, SIZES['col_w_140'])
-        self.table.setColumnWidth(4, SIZES['col_w_120'])
-        self.table.setColumnWidth(5, SIZES['col_w_280'])
-        self.table.setColumnWidth(6, SIZES['col_w_56'])
+        self.table.setColumnWidth(2, SIZES['col_w_320'])
+        self.table.setColumnWidth(3, SIZES['col_w_320'])
+        self.table.setColumnWidth(4, SIZES['col_w_320'])
+        self.table.setColumnWidth(5, SIZES['col_w_140'])
+        self.table.setColumnWidth(6, SIZES['col_w_320'])
+        self.table.setColumnWidth(7, SIZES['col_w_56'])
 
         self.table.verticalHeader().setDefaultSectionSize(SIZES['table_row_height_lg'])
 
@@ -411,27 +464,25 @@ class BatchDescriptionsScreen(QWidget):
 
     def retranslate_ui(self):
         tr = self.main.i18n.tr
-        self.title_label.setText(tr("batchdesc.title"))
+        self.title_label.setText(tr("batchtitle.title"))
         self.manual_pill.setText(tr("batch.mode.manual"))
         self.excel_pill.setText(tr("batch.mode.excel"))
         self.add_btn.setText(tr("batch.add_row"))
         self.clear_btn.setText(tr("batch.clear_all"))
-        self.bulk_label.setText(tr("batch.bulk_select"))
-        self.disclaimer_bulk.setText(tr("batch.bulk.disclaimer"))
-        self.disclaimer_bulk.setToolTip(tr("batch.bulk.disclaimer.tip"))
         self.template_btn.setText(tr("batch.download_template"))
         self.browse_btn.setText(tr("batch.browse_excel"))
         self.excel_file_label.setText(tr("batch.no_file"))
         self.status_label.setText(tr("batch.status.ready"))
-        self.start_btn.setText(tr("batchdesc.start"))
+        self.start_btn.setText(tr("batchtitle.start"))
 
         self.table.setHorizontalHeaderLabels([
             tr("batch.table.brand"),
             tr("batch.table.code"),
-            tr("batch.table.desc"),
-            tr("batch.table.disclaimer"),
-            tr("batchdesc.table.status"),
-            tr("batchdesc.table.error"),
+            tr("batchtitle.table.title_lt"),
+            tr("batchtitle.table.title_en"),
+            tr("batchtitle.table.title_lv"),
+            tr("batchtitle.table.status"),
+            tr("batchtitle.table.error"),
             "",
         ])
 
@@ -629,6 +680,15 @@ class BatchDescriptionsScreen(QWidget):
         if filename:
             self._load_excel(filename)
 
+    @staticmethod
+    def _normalize_code(raw: str) -> str:
+        code = (raw or "").strip()
+        if not code:
+            return ""
+        if code.upper().startswith("UB-"):
+            return code
+        return f"UB-{code}"
+
     def _load_excel(self, filename: str):
         try:
             wb = openpyxl.load_workbook(filename)
@@ -657,14 +717,11 @@ class BatchDescriptionsScreen(QWidget):
 
             for table_row, excel_row in enumerate(data_rows):
                 brand = str(excel_row[0]).strip() if len(excel_row) > 0 and excel_row[0] else ""
-                code = str(excel_row[1]).strip() if len(excel_row) > 1 and excel_row[1] else ""
-                desc = str(excel_row[2]).strip() if len(excel_row) > 2 and excel_row[2] else ""
-
-                disclaimer_raw = excel_row[3] if len(excel_row) > 3 else False
-                if isinstance(disclaimer_raw, str):
-                    disclaimer = disclaimer_raw.strip().lower() in ("yes", "true", "1")
-                else:
-                    disclaimer = bool(disclaimer_raw)
+                code_raw = str(excel_row[1]).strip() if len(excel_row) > 1 and excel_row[1] else ""
+                code = self._normalize_code(code_raw)
+                title_lt = str(excel_row[2]).strip() if len(excel_row) > 2 and excel_row[2] else ""
+                title_en = str(excel_row[3]).strip() if len(excel_row) > 3 and excel_row[3] else ""
+                title_lv = str(excel_row[4]).strip() if len(excel_row) > 4 and excel_row[4] else ""
 
                 brand_widget = self._get_widget_from_cell(table_row, 0, ComboBox)
                 if brand_widget and brand:
@@ -672,17 +729,21 @@ class BatchDescriptionsScreen(QWidget):
 
                 code_widget = self._get_widget_from_cell(table_row, 1, LineEdit)
                 if code_widget:
-                    code_widget.setText(code)
+                    code_widget.setText(code_raw)
 
-                desc_widget = self._get_widget_from_cell(table_row, 2, ComboBox)
-                if desc_widget and desc:
-                    desc_widget.setCurrentText(desc)
+                lt_widget = self._get_widget_from_cell(table_row, 2, LineEdit)
+                if lt_widget:
+                    lt_widget.setText(title_lt)
 
-                disclaimer_widget = self._get_widget_from_cell(table_row, 3, CheckBox)
-                if disclaimer_widget:
-                    disclaimer_widget.setChecked(disclaimer)
+                en_widget = self._get_widget_from_cell(table_row, 3, LineEdit)
+                if en_widget:
+                    en_widget.setText(title_en)
 
-                if brand and code and desc:
+                lv_widget = self._get_widget_from_cell(table_row, 4, LineEdit)
+                if lv_widget:
+                    lv_widget.setText(title_lv)
+
+                if brand and code and (title_lt or title_en or title_lv):
                     valid_count += 1
                 else:
                     invalid_count += 1
@@ -723,7 +784,7 @@ class BatchDescriptionsScreen(QWidget):
         filename, _ = QFileDialog.getSaveFileName(
             self,
             self.main.i18n.tr("batch.template.save.title"),
-            "batch_descriptions_template.xlsx",
+            "batch_titles_template.xlsx",
             self.main.i18n.tr("batch.template.filter"),
         )
         if not filename:
@@ -732,17 +793,20 @@ class BatchDescriptionsScreen(QWidget):
         try:
             wb = openpyxl.Workbook()
             ws = wb.active
-            ws.title = self.main.i18n.tr("batchdesc.title")
-            ws.append(["Brand", "Product Code", "Description", "Append Disclaimer"])
-            ws.append(["KROSS", "UB-1234", "MyTemplateName", "Yes"])
+            ws.title = self.main.i18n.tr("batchtitle.title")
+            ws.append(["Brand", "Code", "Title (LT)", "Title (EN)", "Title (LV)"])
+            ws.append(["KROSS", "1234", "KROSS Esker 6.0 2025 / ...", "KROSS Esker 6.0 2025 / ...", "KROSS Esker 6.0 2025 / ..."])
 
             for cell in ws[1]:
                 cell.font = Font(bold=True, color="FFFFFF", size=11)
                 cell.fill = PatternFill(start_color="8D99AE", end_color="8D99AE", fill_type="solid")
                 cell.alignment = Alignment(horizontal="center", vertical="center")
 
-            for col in ws.columns:
-                ws.column_dimensions[col[0].column_letter].width = 22
+            ws.column_dimensions['A'].width = 18
+            ws.column_dimensions['B'].width = 16
+            ws.column_dimensions['C'].width = 64
+            ws.column_dimensions['D'].width = 64
+            ws.column_dimensions['E'].width = 64
 
             wb.save(filename)
             wb.close()
@@ -782,13 +846,6 @@ class BatchDescriptionsScreen(QWidget):
             self.excel_drop.setVisible(True)
             self.table.setVisible(False)
         self._validate()
-
-    def _toggle_all_disclaimers(self, state):
-        checked = state == Qt.CheckState.Checked.value
-        for row in range(self.table.rowCount()):
-            cb = self._get_widget_from_cell(row, 3, CheckBox)
-            if cb:
-                cb.setChecked(checked)
 
     def _delete_row(self, row: int):
         if self.table.rowCount() <= 1:
@@ -835,38 +892,38 @@ class BatchDescriptionsScreen(QWidget):
         self.table.setCellWidget(row, 0, wrap(brand))
 
         code = LineEdit()
-        code.setPlaceholderText(self.main.i18n.tr("upload.code.placeholder"))
+        code.setPlaceholderText(self.main.i18n.tr("batchtitle.code.placeholder"))
         code.setMinimumHeight(SIZES['input_height'])
         code.textChanged.connect(lambda _t: self._validate())
         self.table.setCellWidget(row, 1, wrap(code))
 
-        desc = ComboBox()
-        desc.addItems(self.descriptions)
-        desc.setPlaceholderText(self.main.i18n.tr("batch.optional"))
-        desc.setMinimumHeight(SIZES['input_height'])
-        desc.currentTextChanged.connect(self._validate)
-        self.table.setCellWidget(row, 2, wrap(desc))
+        title_lt = LineEdit()
+        title_lt.setPlaceholderText(self.main.i18n.tr("batchtitle.title_lt.placeholder"))
+        title_lt.setMinimumHeight(SIZES['input_height'])
+        title_lt.textChanged.connect(lambda _t: self._validate())
+        self.table.setCellWidget(row, 2, wrap(title_lt))
 
-        disc = CheckBox("")
-        disc.stateChanged.connect(self._validate)
-        disc_container = QWidget()
-        disc_container.setStyleSheet("background: transparent;")
-        disc_container.setProperty("ubTableCell", True)
-        dl = QHBoxLayout(disc_container)
-        dl.setContentsMargins(SPACING['xs'], 0, SPACING['xs'], 0)
-        disc_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        dl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        dl.addWidget(disc)
-        self.table.setCellWidget(row, 3, disc_container)
+        title_en = LineEdit()
+        title_en.setPlaceholderText(self.main.i18n.tr("batchtitle.title_en.placeholder"))
+        title_en.setMinimumHeight(SIZES['input_height'])
+        title_en.textChanged.connect(lambda _t: self._validate())
+        self.table.setCellWidget(row, 3, wrap(title_en))
 
-        status = BodyLabel(self.main.i18n.tr("batchdesc.status.pending"))
+        title_lv = LineEdit()
+        title_lv.setPlaceholderText(self.main.i18n.tr("batchtitle.title_lv.placeholder"))
+        title_lv.setMinimumHeight(SIZES['input_height'])
+        title_lv.textChanged.connect(lambda _t: self._validate())
+        self.table.setCellWidget(row, 4, wrap(title_lv))
+
+        status = BodyLabel(self.main.i18n.tr("batchtitle.status.pending"))
         status.setStyleSheet(f"color: {COLORS['text_secondary']};")
-        self.table.setCellWidget(row, 4, wrap(status))
+        status.setProperty("ub_status", "pending")
+        self.table.setCellWidget(row, 5, wrap(status))
 
         error = LineEdit()
         error.setReadOnly(True)
         error.setMinimumHeight(SIZES['input_height'])
-        self.table.setCellWidget(row, 5, wrap(error))
+        self.table.setCellWidget(row, 6, wrap(error))
 
         delete_btn = TransparentToolButton(FluentIcon.DELETE)
         delete_btn.clicked.connect(lambda _=False, r=row: self._delete_row(r))
@@ -879,7 +936,7 @@ class BatchDescriptionsScreen(QWidget):
         dcl.addStretch(1)
         dcl.addWidget(delete_btn, 0, Qt.AlignmentFlag.AlignVCenter)
         dcl.addStretch(1)
-        self.table.setCellWidget(row, 6, dc)
+        self.table.setCellWidget(row, 7, dc)
 
         self.table.setRowHeight(row, SIZES['table_row_height_lg'])
 
@@ -888,21 +945,35 @@ class BatchDescriptionsScreen(QWidget):
         for row in range(self.table.rowCount()):
             b = self._get_widget_from_cell(row, 0, ComboBox)
             c = self._get_widget_from_cell(row, 1, LineEdit)
-            d = self._get_widget_from_cell(row, 2, ComboBox)
-            disc = self._get_widget_from_cell(row, 3, CheckBox)
+            t_lt = self._get_widget_from_cell(row, 2, LineEdit)
+            t_en = self._get_widget_from_cell(row, 3, LineEdit)
+            t_lv = self._get_widget_from_cell(row, 4, LineEdit)
+            s = self._get_widget_from_cell(row, 5, BodyLabel)
+
+            status_code = None
+            if s is not None:
+                try:
+                    status_code = s.property("ub_status")
+                except Exception:
+                    status_code = None
+            if status_code in ("running", "ok"):
+                continue
 
             brand = b.currentText().strip() if b else ""
-            code = c.text().strip() if c else ""
-            desc = d.currentText().strip() if d else ""
-            disclaimer = disc.isChecked() if disc else False
+            code_raw = c.text().strip() if c else ""
+            code = self._normalize_code(code_raw)
+            title_lt = t_lt.text().strip() if t_lt else ""
+            title_en = t_en.text().strip() if t_en else ""
+            title_lv = t_lv.text().strip() if t_lv else ""
 
-            if brand in self.brands and code and desc:
+            if brand in self.brands and code and (title_lt or title_en or title_lv):
                 items.append({
                     "row": row,
                     "brand": brand,
                     "code": code,
-                    "description": desc,
-                    "append_disclaimer": disclaimer,
+                    "title_lt": title_lt,
+                    "title_en": title_en,
+                    "title_lv": title_lv,
                 })
         return items
 
@@ -938,6 +1009,24 @@ class BatchDescriptionsScreen(QWidget):
         finally:
             combo.blockSignals(False)
 
+    def _set_row_locked(self, row: int, locked: bool) -> None:
+        for col, widget_type in (
+            (0, ComboBox),
+            (1, LineEdit),
+            (2, LineEdit),
+            (3, LineEdit),
+            (4, LineEdit),
+        ):
+            w = self._get_widget_from_cell(row, col, widget_type)
+            if w is not None:
+                w.setEnabled(not locked)
+
+        delete_cell = self.table.cellWidget(row, 7)
+        if delete_cell is not None:
+            btn = delete_cell.findChild(TransparentToolButton)
+            if btn is not None:
+                btn.setEnabled(not locked)
+
     def _validate(self):
         valid = len(self._collect_items())
         self.start_btn.setEnabled(valid > 0 and self.worker is None)
@@ -962,7 +1051,6 @@ class BatchDescriptionsScreen(QWidget):
         self.manual_pill.setEnabled(not busy)
         self.excel_pill.setEnabled(not busy)
         self.table.setEnabled(not busy)
-        self.disclaimer_bulk.setEnabled(not busy)
         self.start_btn.setEnabled(not busy and len(self._collect_items()) > 0)
 
     def _start_batch(self):
@@ -970,7 +1058,7 @@ class BatchDescriptionsScreen(QWidget):
         if getattr(self.main, "driver", None) is None:
             InfoBar.error(
                 title=tr("common.error"),
-                content=tr("batchdesc.no_session"),
+                content=tr("batchtitle.no_session"),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
@@ -984,17 +1072,18 @@ class BatchDescriptionsScreen(QWidget):
             return
 
         for row in range(self.table.rowCount()):
-            s = self._get_widget_from_cell(row, 4, BodyLabel)
+            s = self._get_widget_from_cell(row, 5, BodyLabel)
             if s:
-                s.setText(tr("batchdesc.status.pending"))
+                s.setText(tr("batchtitle.status.pending"))
                 s.setStyleSheet(f"color: {COLORS['text_secondary']};")
-            e = self._get_widget_from_cell(row, 5, LineEdit)
+                s.setProperty("ub_status", "pending")
+            e = self._get_widget_from_cell(row, 6, LineEdit)
             if e:
                 e.setText("")
 
         InfoBar.info(
-            title=tr("batchdesc.run.started.title"),
-            content=tr("batchdesc.run.started.content", count=len(items)),
+            title=tr("batchtitle.run.started.title"),
+            content=tr("batchtitle.run.started.content", count=len(items)),
             orient=Qt.Orientation.Horizontal,
             isClosable=True,
             position=InfoBarPosition.TOP,
@@ -1003,7 +1092,7 @@ class BatchDescriptionsScreen(QWidget):
         )
 
         self._set_busy(True)
-        self.worker = BatchDescriptionsWorker(self.main, items)
+        self.worker = BatchTitlesWorker(self.main, items)
         self.worker.row_update.connect(self._on_row_update)
         self.worker.log.connect(self._on_log)
         self.worker.done.connect(self._on_done)
@@ -1014,17 +1103,24 @@ class BatchDescriptionsScreen(QWidget):
         self.status_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
 
     def _on_row_update(self, row: int, status_text: str, error_text: str):
-        status = self._get_widget_from_cell(row, 4, BodyLabel)
+        status = self._get_widget_from_cell(row, 5, BodyLabel)
         if status:
             status.setText(status_text)
-            if status_text == self.main.i18n.tr("batchdesc.status.ok"):
+            if status_text == self.main.i18n.tr("batchtitle.status.ok"):
                 status.setStyleSheet(f"color: {COLORS['success']}; font-weight: 500;")
-            elif status_text == self.main.i18n.tr("batchdesc.status.failed"):
+                status.setProperty("ub_status", "ok")
+                self._set_row_locked(row, True)
+            elif status_text == self.main.i18n.tr("batchtitle.status.failed"):
                 status.setStyleSheet(f"color: {COLORS['warning']}; font-weight: 500;")
+                status.setProperty("ub_status", "failed")
             else:
                 status.setStyleSheet(f"color: {COLORS['text_secondary']};")
+                if status_text == self.main.i18n.tr("batchtitle.status.running"):
+                    status.setProperty("ub_status", "running")
+                else:
+                    status.setProperty("ub_status", "pending")
 
-        err = self._get_widget_from_cell(row, 5, LineEdit)
+        err = self._get_widget_from_cell(row, 6, LineEdit)
         if err:
             err.setText(error_text or "")
 
@@ -1035,8 +1131,8 @@ class BatchDescriptionsScreen(QWidget):
         self._validate()
 
         InfoBar.success(
-            title=tr("batchdesc.run.complete.title"),
-            content=tr("batchdesc.run.complete.content", ok=ok, total=total),
+            title=tr("batchtitle.run.complete.title"),
+            content=tr("batchtitle.run.complete.content", ok=ok, total=total),
             orient=Qt.Orientation.Horizontal,
             isClosable=True,
             position=InfoBarPosition.TOP,

@@ -16,8 +16,34 @@ from qfluentwidgets import (
 from datetime import datetime, timedelta
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
-from GUI_Qt.styles.theme_config import COLORS, FONTS
-from GUI_Qt.styles.screen_theme import apply_screen_theme, enforce_transparent_labels
+from GUI_Qt.styles.theme_config import (
+    COLORS,
+    FONTS,
+    RADII,
+    SPACING,
+    SIZES,
+    get_details_card_bg,
+    rgba_from_hex,
+)
+from GUI_Qt.styles.screen_theme import (
+    apply_screen_theme,
+    enforce_transparent_labels,
+    PAGE_MARGINS,
+    PAGE_SPACING,
+    CARD_MARGINS,
+    ICON_TEXT_GAP,
+    CARD_SPACING,
+    CARD_SPACING_LARGE,
+    FOOTER_MARGINS,
+    ROW_SPACING,
+    CONTENT_SPACING,
+    DETAILS_MARGINS,
+    DETAILS_SPACING,
+    MICRO_SPACING,
+    TIGHT_SPACING,
+    MID_SPACING,
+    PILL_MARGINS,
+)
 from PySide6.QtWidgets import QSizePolicy
 
 
@@ -56,21 +82,21 @@ class StatCard(CardWidget):
 
     def __init__(self, label, value, icon, parent=None):
         super().__init__(parent)
-        self.setBorderRadius(8)
-        self.setFixedHeight(110)
+        self.setBorderRadius(RADII['md'])
+        self.setFixedHeight(SIZES['stat_card_height'])
 
         layout = QHBoxLayout(self)
-        layout.setSpacing(16)
-        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(CARD_SPACING)
+        layout.setContentsMargins(SPACING['lg'], SPACING['lg'], SPACING['lg'], SPACING['lg'])
 
         # Icon on the left
         icon_widget = IconWidget(icon)
-        icon_widget.setFixedSize(40, 40)
+        icon_widget.setFixedSize(SIZES['icon_xl'], SIZES['icon_xl'])
         layout.addWidget(icon_widget)
 
         # Value and label on the right
         text_layout = QVBoxLayout()
-        text_layout.setSpacing(4)
+        text_layout.setSpacing(TIGHT_SPACING)
 
         self.value_label = TitleLabel(value)
         self.value_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
@@ -96,8 +122,8 @@ class HistoryItemCard(CardWidget):
         super().__init__(parent)
         self.tr = tr
         self._expanded = False
-        self.setBorderRadius(8)
-        self.setMinimumHeight(160)  # Increased to prevent clipping
+        self.setBorderRadius(RADII['md'])
+        self.setMinimumHeight(SIZES['history_card_min_height'])  # Increased to prevent clipping
 
         self._details_json = None
         try:
@@ -108,12 +134,12 @@ class HistoryItemCard(CardWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
 
         main_layout = QVBoxLayout(self)
-        main_layout.setSpacing(12)
-        main_layout.setContentsMargins(32, 24, 32, 24)
+        main_layout.setSpacing(CONTENT_SPACING)
+        main_layout.setContentsMargins(SPACING['xxl'], SPACING['xl'], SPACING['xxl'], SPACING['xl'])
 
         # --- TOP ROW ---
         top_row = QHBoxLayout()
-        top_row.setSpacing(24)
+        top_row.setSpacing(CARD_SPACING_LARGE)
 
         # STATUS ICON
         is_success = row['status'] == 'success'
@@ -121,36 +147,38 @@ class HistoryItemCard(CardWidget):
         status_color = COLORS['success'] if is_success else COLORS['error']
 
         icon_widget = IconWidget(status_icon)
-        icon_widget.setFixedSize(32, 32)
+        icon_widget.setFixedSize(SIZES['icon_lg'], SIZES['icon_lg'])
         icon_widget.setStyleSheet(f"color: {status_color}; background: transparent;")
         top_row.addWidget(icon_widget, 0, Qt.AlignmentFlag.AlignVCenter)
 
         # LEFT: Brand / Product Code
         pill_bg = (
-            "rgba(255, 255, 255, 0.06)" if isDarkTheme() else "rgba(43, 45, 66, 0.05)"
+            rgba_from_hex(COLORS['text_white'], 0.06)
+            if isDarkTheme()
+            else rgba_from_hex(COLORS['space_indigo'], 0.05)
         )
 
         left_pill = QWidget()
         left_pill.setObjectName("ub_history_left_pill")
         left_pill.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         left_pill.setStyleSheet(
-            f"QWidget#ub_history_left_pill {{ background-color: {pill_bg}; border-radius: 8px; }}"
+            f"QWidget#ub_history_left_pill {{ background-color: {pill_bg}; border-radius: {RADII['md']}px; }}"
         )
         left_pill.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
 
         left_section = QVBoxLayout(left_pill)
-        left_section.setSpacing(2)
-        left_section.setContentsMargins(10, 8, 10, 8)
+        left_section.setSpacing(MICRO_SPACING)
+        left_section.setContentsMargins(*PILL_MARGINS)
 
         title = StrongBodyLabel(row['brand'])
         title.setStyleSheet(
-            f"font-size: 15px; font-weight: 600; color: {COLORS['text_primary_dark'] if isDarkTheme() else COLORS['text_primary_light']};"
+            f"font-size: {FONTS['size_body_lg']}; font-weight: 600; color: {COLORS['text_primary_dark'] if isDarkTheme() else COLORS['text_primary_light']};"
             "background: transparent; border: none;"
         )
 
         product_code = BodyLabel(row['product_code'])
         product_code.setStyleSheet(
-            f"font-size: 12px; color: {COLORS['text_primary_dark'] if isDarkTheme() else COLORS['space_indigo']};"
+            f"font-size: {FONTS['size_caption']}; color: {COLORS['text_primary_dark'] if isDarkTheme() else COLORS['space_indigo']};"
             "background: transparent; border: none;"
         )
 
@@ -161,7 +189,7 @@ class HistoryItemCard(CardWidget):
 
         # VERTICAL SEPARATOR
         sep1 = QWidget()
-        sep1.setFixedWidth(1)
+        sep1.setFixedWidth(SIZES['divider_thickness'])
         sep1.setStyleSheet(f"background-color: {COLORS['border_dark'] if isDarkTheme() else COLORS['border_light']};")
         top_row.addWidget(sep1)
 
@@ -170,13 +198,13 @@ class HistoryItemCard(CardWidget):
         metrics_pill.setObjectName("ub_history_metrics_pill")
         metrics_pill.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         metrics_pill.setStyleSheet(
-            f"QWidget#ub_history_metrics_pill {{ background-color: {pill_bg}; border-radius: 8px; }}"
+            f"QWidget#ub_history_metrics_pill {{ background-color: {pill_bg}; border-radius: {RADII['md']}px; }}"
         )
         metrics_pill.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         metrics_layout = QHBoxLayout(metrics_pill)
-        metrics_layout.setSpacing(24)
-        metrics_layout.setContentsMargins(18, 10, 18, 10)
+        metrics_layout.setSpacing(CARD_SPACING_LARGE)
+        metrics_layout.setContentsMargins(SPACING['base'] + 2, MID_SPACING, SPACING['base'] + 2, MID_SPACING)
 
         for label_text, value in [
             (self.tr("history.metric.duration"), f"{row['duration_seconds']:.1f}s" if row['duration_seconds'] else self.tr("common.na")),
@@ -184,13 +212,13 @@ class HistoryItemCard(CardWidget):
             (self.tr("history.metric.images"), str(row['images_uploaded']) if 'images_uploaded' in row.keys() and row['images_uploaded'] else "0"),
         ]:
             v_layout = QVBoxLayout()
-            v_layout.setSpacing(2)
+            v_layout.setSpacing(MICRO_SPACING)
             v_layout.setContentsMargins(0, 0, 0, 0)
 
             label = CaptionLabel(label_text)
-            label.setStyleSheet(f"font-size: 10px; text-transform: uppercase; color: {COLORS['text_tertiary']};")
+            label.setStyleSheet(f"font-size: {FONTS['size_caption_2']}; text-transform: uppercase; color: {COLORS['text_tertiary']};")
             value_label = StrongBodyLabel(value)
-            value_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {COLORS['text_primary_dark'] if isDarkTheme() else COLORS['text_primary_light']};")
+            value_label.setStyleSheet(f"font-size: {FONTS['size_body']}; font-weight: 600; color: {COLORS['text_primary_dark'] if isDarkTheme() else COLORS['text_primary_light']};")
             value_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
 
             v_layout.addWidget(label, 0, Qt.AlignmentFlag.AlignHCenter)
@@ -206,13 +234,13 @@ class HistoryItemCard(CardWidget):
 
         # VERTICAL SEPARATOR
         sep2 = QWidget()
-        sep2.setFixedWidth(1)
+        sep2.setFixedWidth(SIZES['divider_thickness'])
         sep2.setStyleSheet(f"background-color: {COLORS['border_dark'] if isDarkTheme() else COLORS['border_light']};")
         top_row.addWidget(sep2)
 
         # RIGHT: Timestamp + expand toggle in a single pill
         right_layout = QVBoxLayout()
-        right_layout.setSpacing(6)
+        right_layout.setSpacing(DETAILS_SPACING)
         right_layout.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         right_layout.setContentsMargins(0, 0, 0, 0)
 
@@ -220,14 +248,14 @@ class HistoryItemCard(CardWidget):
         header_pill.setObjectName("ub_history_header_pill")
         header_pill.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         header_pill.setStyleSheet(
-            f"QWidget#ub_history_header_pill {{ background-color: {pill_bg}; border-radius: 8px; }}"
+            f"QWidget#ub_history_header_pill {{ background-color: {pill_bg}; border-radius: {RADII['md']}px; }}"
         )
         header_pill.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
 
         header_pill_layout = QHBoxLayout(header_pill)
         # Match the vertical padding of the brand/code pill
-        header_pill_layout.setContentsMargins(10, 8, 10, 8)
-        header_pill_layout.setSpacing(8)
+        header_pill_layout.setContentsMargins(*PILL_MARGINS)
+        header_pill_layout.setSpacing(ROW_SPACING)
 
         # Format timestamp as:
         #   YYYY-MM-DD
@@ -269,7 +297,7 @@ class HistoryItemCard(CardWidget):
         except Exception:
             pass
         date_label.setStyleSheet(
-            f"font-size: 11px; color: {COLORS['text_tertiary']}; background: transparent; background-color: transparent; border: none;"
+            f"font-size: {FONTS['size_caption_sm']}; color: {COLORS['text_tertiary']}; background: transparent; background-color: transparent; border: none;"
         )
 
         time_label = QLabel(time_text)
@@ -280,7 +308,7 @@ class HistoryItemCard(CardWidget):
         except Exception:
             pass
         time_label.setStyleSheet(
-            f"font-size: 11px; color: {COLORS['text_tertiary']}; background: transparent; background-color: transparent; border: none;"
+            f"font-size: {FONTS['size_caption_sm']}; color: {COLORS['text_tertiary']}; background: transparent; background-color: transparent; border: none;"
         )
 
         ts_text_layout.addWidget(date_label)
@@ -301,7 +329,7 @@ class HistoryItemCard(CardWidget):
 
         if not is_success and 'failed_stage' in row.keys() and row['failed_stage']:
             failed_label = CaptionLabel(self.tr("history.failed_prefix", stage=row['failed_stage']))
-            failed_label.setStyleSheet(f"font-size: 11px; color: {COLORS['error']}; font-weight: 500;")
+            failed_label.setStyleSheet(f"font-size: {FONTS['size_caption_sm']}; color: {COLORS['error']}; font-weight: 500;")
             failed_label.setAlignment(Qt.AlignmentFlag.AlignRight)
             right_layout.addWidget(failed_label)
 
@@ -309,7 +337,7 @@ class HistoryItemCard(CardWidget):
         self._details_btn = None
         try:
             self._details_btn = TransparentToolButton(FluentIcon.DOWN, self)
-            self._details_btn.setFixedSize(26, 26)
+            self._details_btn.setFixedSize(SIZES['icon_md'] + 2, SIZES['icon_md'] + 2)
             self._details_btn.setToolTip(self.tr("history.details"))
             self._details_btn.clicked.connect(self._toggle_details)
             # Hard-disable any hover/pressed fill
@@ -331,7 +359,7 @@ class HistoryItemCard(CardWidget):
         # intermediate QWidget from painting a background (the "double bg").
         top_right_row = QHBoxLayout()
         top_right_row.setContentsMargins(0, 0, 0, 0)
-        top_right_row.setSpacing(4)
+        top_right_row.setSpacing(TIGHT_SPACING)
         top_right_row.addWidget(header_pill, 0, Qt.AlignmentFlag.AlignVCenter)
         if self._details_btn is not None:
             top_right_row.addWidget(self._details_btn, 0, Qt.AlignmentFlag.AlignVCenter)
@@ -366,17 +394,17 @@ class HistoryItemCard(CardWidget):
         self._details_card = CardWidget()
         self._details_card.setVisible(False)
         self._details_card.setStyleSheet(
-            f"background-color: {'rgba(141,153,174,0.10)' if isDarkTheme() else 'rgba(43,45,66,0.04)'};"
+            f"background-color: {get_details_card_bg(isDarkTheme())};"
             f"border: 1px solid {COLORS['border_dark'] if isDarkTheme() else COLORS['border_light']};"
         )
         details_layout = QVBoxLayout(self._details_card)
-        details_layout.setContentsMargins(12, 10, 12, 10)
-        details_layout.setSpacing(6)
+        details_layout.setContentsMargins(*DETAILS_MARGINS)
+        details_layout.setSpacing(DETAILS_SPACING)
 
         self._details_label = BodyLabel("")
         self._details_label.setWordWrap(True)
         self._details_label.setStyleSheet(
-            f"font-size: 11px; color: {COLORS['text_primary_dark'] if isDarkTheme() else COLORS['text_primary_light']};"
+            f"font-size: {FONTS['size_caption_sm']}; color: {COLORS['text_primary_dark'] if isDarkTheme() else COLORS['text_primary_light']};"
         )
         details_layout.addWidget(self._details_label)
         main_layout.addWidget(self._details_card)
@@ -384,26 +412,26 @@ class HistoryItemCard(CardWidget):
         # --- BOTTOM ROW: URL/Code ---
         url_or_code = row['url_or_code'] if 'url_or_code' in row.keys() else None
         if url_or_code:
-            main_layout.addSpacing(12)
+            main_layout.addSpacing(CONTENT_SPACING)
             divider = QWidget()
-            divider.setFixedHeight(1)
+            divider.setFixedHeight(SIZES['divider_thickness'])
             divider.setStyleSheet(f"background-color: {COLORS['border_dark'] if isDarkTheme() else COLORS['border_light']};")
             main_layout.addWidget(divider)
-            main_layout.addSpacing(12)
+            main_layout.addSpacing(CONTENT_SPACING)
 
             url_pill = QWidget()
             url_pill.setObjectName("ub_history_url_pill")
             url_pill.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
             url_pill.setStyleSheet(
-                f"QWidget#ub_history_url_pill {{ background-color: {pill_bg}; border-radius: 8px; }}"
+                f"QWidget#ub_history_url_pill {{ background-color: {pill_bg}; border-radius: {RADII['md']}px; }}"
             )
 
             url_layout = QHBoxLayout(url_pill)
-            url_layout.setSpacing(10)
-            url_layout.setContentsMargins(10, 8, 10, 8)
+            url_layout.setSpacing(MID_SPACING)
+            url_layout.setContentsMargins(*PILL_MARGINS)
 
             url_icon = IconWidget(FluentIcon.LINK)
-            url_icon.setFixedSize(16, 16)
+            url_icon.setFixedSize(SIZES['icon_xs'], SIZES['icon_xs'])
             url_icon.setStyleSheet(f"color: {COLORS['lavender_grey']}; background: transparent;")
 
             display_text = str(url_or_code)
@@ -412,7 +440,7 @@ class HistoryItemCard(CardWidget):
 
             url_label = ClickableLabel(display_text, str(url_or_code))
             url_label.setStyleSheet(
-                f"font-size: 12px; color: {COLORS['lavender_grey']}; font-family: {FONTS['family_mono']};"
+                f"font-size: {FONTS['size_caption']}; color: {COLORS['lavender_grey']}; font-family: {FONTS['family_mono']};"
                 " background: transparent; border: none;"
             )
 
@@ -428,16 +456,19 @@ class HistoryItemCard(CardWidget):
         # --- Error message ---
         if not is_success and 'error_message' in row.keys() and row['error_message']:
             error_card = CardWidget()
-            error_card.setStyleSheet(f"background-color: {'rgba(200,29,37,0.08)' if isDarkTheme() else 'rgba(200,29,37,0.05)'}; border: 1px solid {COLORS['error']};")
+            error_card.setStyleSheet(
+                f"background-color: {rgba_from_hex(COLORS['error'], 0.08 if isDarkTheme() else 0.05)}; "
+                f"border: 1px solid {COLORS['error']};"
+            )
             error_layout = QHBoxLayout(error_card)
-            error_layout.setContentsMargins(12, 8, 12, 8)
+            error_layout.setContentsMargins(SPACING['md'], SPACING['sm'], SPACING['md'], SPACING['sm'])
 
             error_icon = IconWidget(FluentIcon.INFO)
-            error_icon.setFixedSize(16, 16)
+            error_icon.setFixedSize(SIZES['icon_xs'], SIZES['icon_xs'])
             error_icon.setStyleSheet(f"color: {COLORS['error']};")
 
             error_label = BodyLabel(self.tr("history.error_prefix", error=row['error_message']))
-            error_label.setStyleSheet(f"font-size: 11px; color: {COLORS['error']};")
+            error_label.setStyleSheet(f"font-size: {FONTS['size_caption_sm']}; color: {COLORS['error']};")
             error_label.setWordWrap(True)
 
             error_layout.addWidget(error_icon)
@@ -513,19 +544,30 @@ class HistoryScreen(QWidget):
 
         # Main layout
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(40, 20, 40, 20)  # Fluent standard: 40px sides
-        layout.setSpacing(20)
+        layout.setContentsMargins(*PAGE_MARGINS)
+        layout.setSpacing(PAGE_SPACING)
 
         # === HEADER SECTION ===
         header = QHBoxLayout()
+
+        title_container = QHBoxLayout()
+        title_container.setSpacing(ICON_TEXT_GAP)
+
+        title_icon = TransparentToolButton(FluentIcon.HISTORY, self)
+        title_icon.setFixedSize(SIZES['icon_lg'], SIZES['icon_lg'])
+        title_icon.setEnabled(False)
+
         self.title_label = TitleLabel("")
-        header.addWidget(self.title_label)
+        title_container.addWidget(title_icon)
+        title_container.addWidget(self.title_label)
+
+        header.addLayout(title_container)
         header.addStretch()
         layout.addLayout(header)
 
         # === STATISTICS CARDS ===
         stats_container = QHBoxLayout()
-        stats_container.setSpacing(16)
+        stats_container.setSpacing(CARD_SPACING)
 
         # Using FluentIcons for stats
         self.total_stat = StatCard("", "0", FluentIcon.FOLDER)
@@ -542,17 +584,17 @@ class HistoryScreen(QWidget):
 
         # === TOOLBAR SECTION ===
         toolbar_card = CardWidget()
-        toolbar_card.setBorderRadius(8)
+        toolbar_card.setBorderRadius(RADII['md'])
         toolbar_layout = QHBoxLayout(toolbar_card)
-        toolbar_layout.setContentsMargins(24, 20, 24, 20)  # Fluent standard card padding
-        toolbar_layout.setSpacing(16)  # Fluent 4px increment
+        toolbar_layout.setContentsMargins(*CARD_MARGINS)
+        toolbar_layout.setSpacing(CARD_SPACING)
 
         # Brand filter
         self.brand_label = BodyLabel("")
         brand_label = self.brand_label
         brand_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
         self.brand_filter = ComboBox()
-        self.brand_filter.setMinimumWidth(140)
+        self.brand_filter.setMinimumWidth(SIZES['filter_min_width'])
         self.brand_filter.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.brand_filter.currentTextChanged.connect(self.refresh_history)
 
@@ -561,7 +603,7 @@ class HistoryScreen(QWidget):
         status_label = self.status_label
         status_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
         self.status_filter = ComboBox()
-        self.status_filter.setMinimumWidth(120)
+        self.status_filter.setMinimumWidth(SIZES['field_min_width_sm'])
         self.status_filter.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.status_filter.currentTextChanged.connect(self.refresh_history)
 
@@ -570,7 +612,7 @@ class HistoryScreen(QWidget):
         date_label = self.period_label
         date_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
         self.date_filter = ComboBox()
-        self.date_filter.setMinimumWidth(140)
+        self.date_filter.setMinimumWidth(SIZES['filter_min_width'])
         self.date_filter.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.date_filter.currentTextChanged.connect(self.refresh_history)
 
@@ -618,15 +660,15 @@ class HistoryScreen(QWidget):
         self.history_container = QWidget()
         self.history_container.setStyleSheet("background: transparent;")
         self.history_layout = QVBoxLayout(self.history_container)
-        self.history_layout.setSpacing(16)  # Spacing between cards
-        self.history_layout.setContentsMargins(5, 15, 5, 15)  # Generous margins to prevent any clipping
+        self.history_layout.setSpacing(CARD_SPACING)  # Spacing between cards
+        self.history_layout.setContentsMargins(SPACING['xs'] + 1, SPACING['base'] - 1, SPACING['xs'] + 1, SPACING['base'] - 1)  # Generous margins to prevent any clipping
         self.history_layout.addStretch()
 
         # No centering wrapper - let history items expand naturally
         self.scroll.setWidget(self.history_container)
 
         # Add spacing between toolbar and scroll area
-        layout.addSpacing(16)
+        layout.addSpacing(CARD_SPACING)
         layout.addWidget(self.scroll, 1)
 
         # Re-apply once scroll + content exist
@@ -637,13 +679,13 @@ class HistoryScreen(QWidget):
 
         # === PAGINATION CONTROLS ===
         pagination_card = CardWidget()
-        pagination_card.setBorderRadius(8)
+        pagination_card.setBorderRadius(RADII['md'])
         pagination_layout = QHBoxLayout(pagination_card)
-        pagination_layout.setContentsMargins(20, 12, 20, 12)
-        pagination_layout.setSpacing(16)
+        pagination_layout.setContentsMargins(*FOOTER_MARGINS)
+        pagination_layout.setSpacing(CARD_SPACING)
 
         self.prev_btn = TransparentToolButton(FluentIcon.LEFT_ARROW, self)
-        self.prev_btn.setFixedSize(32, 32)
+        self.prev_btn.setFixedSize(SIZES['icon_lg'], SIZES['icon_lg'])
         self.prev_btn.clicked.connect(self._prev_page)
         self.prev_btn.setEnabled(False)
 
@@ -651,14 +693,14 @@ class HistoryScreen(QWidget):
         self.page_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-weight: 500;")
 
         self.next_btn = TransparentToolButton(FluentIcon.RIGHT_ARROW, self)
-        self.next_btn.setFixedSize(32, 32)
+        self.next_btn.setFixedSize(SIZES['icon_lg'], SIZES['icon_lg'])
         self.next_btn.clicked.connect(self._next_page)
         self.next_btn.setEnabled(False)
 
         self.items_per_page_combo = ComboBox()
         self.items_per_page_combo.addItems(["10", "20", "50", "100"])
         self.items_per_page_combo.setCurrentText("10")
-        self.items_per_page_combo.setFixedWidth(80)
+        self.items_per_page_combo.setFixedWidth(SIZES['items_per_page_width'])
         self.items_per_page_combo.currentTextChanged.connect(self._on_items_per_page_changed)
 
         self.items_label = CaptionLabel("")
@@ -828,7 +870,9 @@ class HistoryScreen(QWidget):
                 self.history_layout.insertWidget(self.history_layout.count() - 1, card)
         else:
             no_data = BodyLabel(self.main.i18n.tr("history.no_records"))
-            no_data.setStyleSheet(f"color: {COLORS['text_tertiary']}; padding: 40px 20px;")
+            no_data.setStyleSheet(
+                f"color: {COLORS['text_tertiary']}; padding: {SPACING['xxxl']}px {SPACING['lg']}px;"
+            )
             no_data.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.history_layout.insertWidget(0, no_data)
 

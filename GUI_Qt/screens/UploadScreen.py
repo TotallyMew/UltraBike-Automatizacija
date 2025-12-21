@@ -5,7 +5,7 @@ Single product upload with Space Indigo/Lavender Grey color scheme
 
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QSizePolicy
 from PySide6.QtCore import Qt, QThread, Signal, QEvent, QTimer
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QStandardItemModel
 from qfluentwidgets import (
     LineEdit, ComboBox, CheckBox, PrimaryPushButton, PushButton,
     IndeterminateProgressRing, BodyLabel, TitleLabel, CaptionLabel,
@@ -14,7 +14,18 @@ from qfluentwidgets import (
 )
 from uploaderFactory import getUploaderClass
 from Managers.DescriptionManager import DescriptionManager
-from GUI_Qt.styles.theme_config import COLORS, FONTS
+from GUI_Qt.styles.theme_config import COLORS, FONTS, RADII, SIZES, SPACING, rgba_from_hex
+from GUI_Qt.styles.screen_theme import (
+    PAGE_MARGINS,
+    PAGE_SPACING,
+    ICON_TEXT_GAP,
+    CARD_MARGINS_LARGE,
+    CARD_SPACING_LARGE,
+    ROW_SPACING,
+    CONTENT_SPACING,
+    TOOLBAR_MARGINS,
+    TIGHT_SPACING,
+)
 
 
 class UploadWorker(QThread):
@@ -104,18 +115,18 @@ class UploadScreen(QWidget):
 
         # Main layout
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(40, 20, 40, 20)  # Fluent standard: 40px sides
-        main_layout.setSpacing(20)
+        main_layout.setContentsMargins(*PAGE_MARGINS)
+        main_layout.setSpacing(PAGE_SPACING)
 
         # === HEADER SECTION ===
         header = QHBoxLayout()
 
         # Title with icon
         title_container = QHBoxLayout()
-        title_container.setSpacing(12)
+        title_container.setSpacing(ICON_TEXT_GAP)
 
         title_icon = TransparentToolButton(FluentIcon.UP, self)
-        title_icon.setFixedSize(32, 32)
+        title_icon.setFixedSize(SIZES['icon_lg'], SIZES['icon_lg'])
         title_icon.setEnabled(False)
 
         self.title_label = TitleLabel("")
@@ -131,20 +142,20 @@ class UploadScreen(QWidget):
 
         # === FORM CARD ===
         self.form_card = CardWidget()
-        self.form_card.setBorderRadius(8)
+        self.form_card.setBorderRadius(RADII['md'])
         self.form_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         # Keep the form readable on very wide windows (1920+)
-        self.form_card.setMaximumWidth(1600)
+        self.form_card.setMaximumWidth(SIZES['form_card_max_width'])
 
         card_layout = QVBoxLayout(self.form_card)
-        card_layout.setContentsMargins(32, 32, 32, 32)
-        card_layout.setSpacing(24)
+        card_layout.setContentsMargins(*CARD_MARGINS_LARGE)
+        card_layout.setSpacing(CARD_SPACING_LARGE)
 
         # Form grid (responsive: 1 column on small widths, 2 columns on wide widths)
         self._form_grid = QGridLayout()
         form_grid = self._form_grid
-        form_grid.setSpacing(20)  # Horizontal spacing - Fluent standard
-        form_grid.setVerticalSpacing(20)
+        form_grid.setSpacing(PAGE_SPACING)
+        form_grid.setVerticalSpacing(PAGE_SPACING)
         form_grid.setColumnStretch(0, 0)
         form_grid.setColumnStretch(1, 1)
         form_grid.setColumnStretch(2, 0)
@@ -154,7 +165,7 @@ class UploadScreen(QWidget):
             block = QWidget()
             v = QVBoxLayout(block)
             v.setContentsMargins(0, 0, 0, 0)
-            v.setSpacing(4)
+            v.setSpacing(TIGHT_SPACING)
             v.addWidget(label_widget)
             v.addWidget(caption_widget)
             return block
@@ -167,7 +178,7 @@ class UploadScreen(QWidget):
         self._brand_block = _label_block(brand_label, brand_caption)
 
         self.brand_combo = ComboBox()
-        self.brand_combo.addItems(self.brands)
+        self._ensure_brand_placeholder(self.brand_combo)
         self.brand_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.brand_combo.currentTextChanged.connect(self._on_brand_change)
 
@@ -199,7 +210,7 @@ class UploadScreen(QWidget):
         desc_label = self.desc_label
 
         self.refresh_desc_button = TransparentToolButton(FluentIcon.SYNC, self)
-        self.refresh_desc_button.setFixedSize(24, 24)
+        self.refresh_desc_button.setFixedSize(SIZES['icon_md'], SIZES['icon_md'])
         self.refresh_desc_button.clicked.connect(self._load_descriptions)
 
         desc_label_row.addWidget(desc_label)
@@ -216,7 +227,7 @@ class UploadScreen(QWidget):
         desc_label_widget = QWidget()
         desc_label_layout = QVBoxLayout(desc_label_widget)
         desc_label_layout.setContentsMargins(0, 0, 0, 0)
-        desc_label_layout.setSpacing(4)
+        desc_label_layout.setSpacing(TIGHT_SPACING)
         desc_label_layout.addLayout(desc_label_row)
         desc_label_layout.addWidget(desc_caption)
 
@@ -234,20 +245,15 @@ class UploadScreen(QWidget):
         # === OPTIONS SECTION ===
         self.options_card = CardWidget()
         options_card = self.options_card
-        options_card.setBorderRadius(6)
+        options_card.setBorderRadius(RADII['sm'])
         options_card.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Preferred)
         # Keep options compact on wide (2-column) layouts
-        options_card.setMaximumWidth(760)
-        options_card.setStyleSheet(f"""
-            CardWidget {{
-                background-color: {'rgba(255, 255, 255, 0.03)' if is_dark else 'rgba(43, 45, 66, 0.03)'};
-                border: 1px solid {COLORS['border_dark'] if is_dark else COLORS['border_light']};
-            }}
-        """)
+        options_card.setMaximumWidth(SIZES['options_card_max_width'])
+        self._apply_options_card_theme()
 
         options_layout = QVBoxLayout(options_card)
-        options_layout.setContentsMargins(20, 16, 20, 16)
-        options_layout.setSpacing(12)
+        options_layout.setContentsMargins(*TOOLBAR_MARGINS)
+        options_layout.setSpacing(CONTENT_SPACING)
 
         self.options_title = StrongBodyLabel("")
         options_title = self.options_title
@@ -255,12 +261,12 @@ class UploadScreen(QWidget):
 
         # Disclaimer checkbox
         disclaimer_row = QHBoxLayout()
-        disclaimer_row.setSpacing(8)
+        disclaimer_row.setSpacing(ROW_SPACING)
 
         self.disclaimer_checkbox = CheckBox("")
         disclaimer_info = TransparentToolButton(FluentIcon.INFO, self)
         self.disclaimer_info_btn = disclaimer_info
-        disclaimer_info.setFixedSize(20, 20)
+        disclaimer_info.setFixedSize(SIZES['icon_sm'], SIZES['icon_sm'])
         disclaimer_info.clicked.connect(self._show_disclaimer_info)
 
         disclaimer_row.addWidget(self.disclaimer_checkbox)
@@ -273,12 +279,12 @@ class UploadScreen(QWidget):
         self.frameset_row = QWidget()
         frameset_layout = QHBoxLayout(self.frameset_row)
         frameset_layout.setContentsMargins(0, 0, 0, 0)
-        frameset_layout.setSpacing(8)
+        frameset_layout.setSpacing(ROW_SPACING)
 
         self.frameset_checkbox = CheckBox("")
         frameset_info = TransparentToolButton(FluentIcon.INFO, self)
         self.frameset_info_btn = frameset_info
-        frameset_info.setFixedSize(20, 20)
+        frameset_info.setFixedSize(SIZES['icon_sm'], SIZES['icon_sm'])
 
         frameset_layout.addWidget(self.frameset_checkbox)
         frameset_layout.addWidget(frameset_info)
@@ -294,21 +300,21 @@ class UploadScreen(QWidget):
 
         # === ACTION BUTTONS ===
         action_row = QHBoxLayout()
-        action_row.setSpacing(12)
+        action_row.setSpacing(CONTENT_SPACING)
 
         self.upload_button = PrimaryPushButton("")
         self.upload_button.setIcon(FluentIcon.UP)
         self.upload_button.setEnabled(False)
-        self.upload_button.setFixedHeight(40)
+        self.upload_button.setFixedHeight(SIZES['button_height'])
         self.upload_button.clicked.connect(self._handle_upload)
 
         self.clear_button = PushButton("")
         self.clear_button.setIcon(FluentIcon.DELETE)
-        self.clear_button.setFixedHeight(40)
+        self.clear_button.setFixedHeight(SIZES['button_height'])
         self.clear_button.clicked.connect(self._clear_form)
 
         self.progress_ring = IndeterminateProgressRing()
-        self.progress_ring.setFixedSize(32, 32)
+        self.progress_ring.setFixedSize(SIZES['progress_ring_lg'], SIZES['progress_ring_lg'])
         self.progress_ring.setVisible(False)
 
         self.status_label = BodyLabel("")
@@ -393,6 +399,7 @@ class UploadScreen(QWidget):
 
         self.brand_label.setText(tr("upload.brand.label"))
         self.brand_caption.setText(tr("upload.brand.caption"))
+        self._ensure_brand_placeholder(self.brand_combo)
 
         self.code_label.setText(tr("upload.code.label"))
         self.code_caption.setText(tr("upload.code.caption"))
@@ -415,6 +422,31 @@ class UploadScreen(QWidget):
         self.upload_button.setText(tr("upload.button"))
         self.clear_button.setText(tr("upload.clear"))
         self.clear_button.setToolTip(tr("upload.clear.tip"))
+
+    def _ensure_brand_placeholder(self, combo: ComboBox) -> None:
+        placeholder = self.main.i18n.tr("batch.select_brand")
+
+        combo.blockSignals(True)
+        try:
+            combo.clear()
+            combo.addItem(placeholder)
+            combo.addItems(self.brands)
+
+            # Disable the placeholder item so it can't be selected from the dropdown.
+            try:
+                model = combo.model()
+                if isinstance(model, QStandardItemModel):
+                    item = model.item(0)
+                    if item is not None:
+                        item.setEnabled(False)
+            except Exception:
+                pass
+
+            # Show placeholder by default if no valid brand is selected.
+            if combo.currentText() not in self.brands:
+                combo.setCurrentIndex(0)
+        finally:
+            combo.blockSignals(False)
 
     def _load_descriptions(self):
         """Load descriptions from database"""
@@ -457,12 +489,13 @@ class UploadScreen(QWidget):
 
     def _check_form_valid(self):
         """Check if form is valid and enable/disable upload button"""
+        brand = self.brand_combo.currentText().strip()
         code = self.code_field.text().strip()
         url = self.url_field.text().strip()
         description = self.description_combo.currentText()
 
-        # Description is optional - only check code and URL
-        is_valid = bool(code and url)
+        # Description is optional - require brand + code + url
+        is_valid = bool(brand in self.brands and code and url)
 
         # Debug logging
         # Debug: Validation check and button state
@@ -593,16 +626,14 @@ class UploadScreen(QWidget):
             pass
         input_widget = QLineEdit()
         input_widget.setPlaceholderText(self.main.i18n.tr("upload.retry.placeholder"))
-        input_widget.setMinimumWidth(420)
+        input_widget.setMinimumWidth(SIZES['panel_min_width'])
         input_text = COLORS['space_indigo'] if isDarkTheme() else COLORS['text_primary_light']
         input_widget.setStyleSheet(f"""
             background-color: {COLORS['lavender_grey']};
             color: {input_text};
-            padding: 10px 12px;
-            border-radius: 8px;
-            font-size: 15px;
+            font-size: {FONTS['size_body_lg']};
             font-family: {FONTS['family']};
-            margin-top: 8px;
+            margin-top: {SPACING['sm']}px;
         """)
         dialog.textLayout.addWidget(input_widget)
         dialog.yesButton.setText(self.main.i18n.tr("upload.retry.yes"))
@@ -682,7 +713,19 @@ class UploadScreen(QWidget):
             }}
         """)
 
+        self._apply_options_card_theme()
         self._apply_text_theme()
+
+    def _apply_options_card_theme(self) -> None:
+        if not hasattr(self, 'options_card') or self.options_card is None:
+            return
+        is_dark = isDarkTheme()
+        self.options_card.setStyleSheet(f"""
+            CardWidget {{
+                background-color: {rgba_from_hex(COLORS['text_white'], 0.03) if is_dark else rgba_from_hex(COLORS['space_indigo'], 0.03)};
+                border: 1px solid {COLORS['border_dark'] if is_dark else COLORS['border_light']};
+            }}
+        """)
 
     def _apply_text_theme(self):
         is_dark = isDarkTheme()

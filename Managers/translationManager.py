@@ -8,8 +8,10 @@ class TranslationManager:
     def __init__(self, brandName, db_manager=None, logger=None):
         self.brandName = brandName
         self.logger = logger
-        self.ltPath = f"pabaigta{brandName}LT.txt"
-        self.enPath = f"pabaigta{brandName}ENG.txt"
+        from Utilities.AppPaths import get_data_dir
+        base = get_data_dir()
+        self.ltPath = str(base / f"pabaigta{brandName}LT.txt")
+        self.enPath = str(base / f"pabaigta{brandName}ENG.txt")
         self.translation_handler = TranslationHandler(db_manager)
         self.file_handler = FileHandler()
         self.db = db_manager
