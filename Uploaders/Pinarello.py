@@ -1,6 +1,6 @@
 ﻿# uploaders/Pinarello.py
 
-from Uploaders.baseUploader import ProductUploader
+from Uploaders.BaseUploader import ProductUploader
 from Scrapers.PinarelloScraper import scrapeAndTranslateToFilePinarello
 
 class Pinarello(ProductUploader):

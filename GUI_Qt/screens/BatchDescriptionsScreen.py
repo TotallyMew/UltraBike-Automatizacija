@@ -15,12 +15,14 @@ from __future__ import annotations
 
 import os
 import time
+import json
+from datetime import datetime
 
 import openpyxl
 from openpyxl.styles import Alignment, Font, PatternFill
 
 from PySide6.QtCore import QEvent, QThread, QTimer, Qt, Signal
-from PySide6.QtGui import QDragEnterEvent, QDropEvent, QStandardItemModel
+from PySide6.QtGui import QColor, QDragEnterEvent, QDropEvent, QStandardItemModel, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
@@ -28,6 +30,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QSizePolicy,
     QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -44,17 +47,24 @@ from qfluentwidgets import (
     InfoBar,
     InfoBarPosition,
     LineEdit,
+    MessageBox,
     PillPushButton,
     PrimaryPushButton,
     PushButton,
+    ScrollArea,
     TitleLabel,
     TransparentToolButton,
     isDarkTheme,
     qconfig,
 )
 
+from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
 from GUI_Qt.styles.theme_config import COLORS, COMPONENT_COLORS, FONTS, RADII, PADDINGS, SIZES
-from GUI_Qt.styles.screen_theme import PAGE_MARGINS, PAGE_SPACING, ICON_TEXT_GAP, ROW_SPACING, TOOLBAR_MARGINS, CARD_SPACING, CONTENT_SPACING, TABLE_CELL_MARGINS, DETAILS_SPACING, MID_SPACING, SPACING
+from GUI_Qt.styles.screen_theme import (
+    PAGE_MARGINS, PAGE_SPACING, ICON_TEXT_GAP, ROW_SPACING, TOOLBAR_MARGINS,
+    CARD_SPACING, CONTENT_SPACING, TABLE_CELL_MARGINS, DETAILS_SPACING, MID_SPACING, SPACING,
+    apply_screen_theme, get_responsive_margins, get_responsive_spacing
+)
 from Managers.DescriptionManager import DescriptionManager
 from Utilities.ProductNavigationHandler import ProductNavigationHandler
 from Utilities.WebIntercationHandler import WebInteractionHandler
@@ -150,11 +160,75 @@ class BatchDescriptionsWorker(QThread):
     row_update = Signal(int, str, str)  # rowIndex, status, error
     log = Signal(str)
     done = Signal(int, int)  # ok, total
+    progress_update = Signal(int, int, float, float)  # current, total, speed (items/sec), eta_seconds
 
     def __init__(self, main_window, items: list[dict]):
         super().__init__()
         self.main = main_window
         self.items = items
+        self._processed_times = []  # Track duration of each processed item
+
+        self._prestashop_api_base_url = (self.main.settings.get('prestashop_url', '') or '').strip()
+        self._prestashop_api_key = (self.main.settings.get('prestashop_api_key', '') or '').strip()
+        self._prestashop_api_enabled = bool(self.main.settings.get('prestashop_api_enabled', False))
+
+    def _update_description_via_api(self, code: str, description_name: str, append_disclaimer: bool) -> bool:
+        try:
+            if not self._prestashop_api_enabled:
+                return False
+            if not (self._prestashop_api_base_url and self._prestashop_api_key):
+                return False
+            if not description_name:
+                return False
+
+            from Managers.PrestaShopAPI import PrestaShopAPI
+            from Managers.DescriptionManager import DescriptionManager
+
+            api = PrestaShopAPI(self._prestashop_api_base_url, self._prestashop_api_key, logger=getattr(self.main, 'logger', None))
+            desc_manager = DescriptionManager(self.main.db, logger=getattr(self.main, 'logger', None))
+            desc = desc_manager.load_description(description_name)
+            if not desc:
+                self.log.emit(f"API: description template not found: {description_name}")
+                return False
+
+            lt_html = desc.get('description_lt', '') or ''
+            en_html = desc.get('description_en', '') or ''
+            lv_html = desc.get('description_lv', '') or ''
+            if append_disclaimer:
+                lt_html, en_html, lv_html = desc_manager.append_disclaimer_if_missing(lt_html, en_html, lv_html)
+
+            lang_map = api.get_language_id_map() or {}
+            en_id = str(lang_map.get('en') or '1')
+            lt_id = str(lang_map.get('lt') or '2')
+            lv_id = str(lang_map.get('lv') or '3')
+
+            payload = {}
+            if lt_html and lt_id:
+                payload[lt_id] = lt_html
+            if en_html and en_id:
+                payload[en_id] = en_html
+            if lv_html and lv_id:
+                payload[lv_id] = lv_html
+            if not payload:
+                return False
+
+            product_id = api.search_product_by_reference(code)
+            if not product_id:
+                extra = (api.last_error_summary() or '').strip()
+                self.log.emit(f"API: product not found for {code}" + (f" ({extra})" if extra else ""))
+                return False
+
+            ok = api.update_product_description(int(product_id), payload)
+            if not ok:
+                extra = (api.last_error_summary() or '').strip()
+                self.log.emit(f"API: description update failed for {code}" + (f" ({extra})" if extra else ""))
+                return False
+
+            self.log.emit(f"API: updated description for {code}")
+            return True
+        except Exception as e:
+            self.log.emit(f"API: description update crashed for {code}: {e}")
+            return False
 
     def _ensure_products_page(self, driver) -> None:
         try:
@@ -176,18 +250,26 @@ class BatchDescriptionsWorker(QThread):
     def run(self):
         tr = self.main.i18n.tr
         driver = getattr(self.main, "driver", None)
-        if driver is None:
+        if driver is None and not (self._prestashop_api_enabled and self._prestashop_api_base_url and self._prestashop_api_key):
             for it in self.items:
                 self.row_update.emit(it["row"], tr("batchdesc.status.failed"), tr("batchdesc.no_session"))
             self.done.emit(0, len(self.items))
             return
 
         desc_manager = DescriptionManager(self.main.db, logger=self.main.logger)
-        nav = ProductNavigationHandler(driver, logger=self.main.logger)
-        web = WebInteractionHandler(driver)
+        nav = None
+        web = None
+        if driver is not None:
+            nav = ProductNavigationHandler(driver, logger=self.main.logger)
+            web = WebInteractionHandler(driver)
 
         ok = 0
         total = len(self.items)
+
+        batch_id = f"batchdesc_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+
+        import time as _time
 
         for idx, it in enumerate(self.items, start=1):
             row = it["row"]
@@ -200,46 +282,136 @@ class BatchDescriptionsWorker(QThread):
             self.row_update.emit(row, tr("batchdesc.status.running"), "")
             self.log.emit(tr("batchdesc.progress.open", current=idx, total=total, code=code))
 
-
+            timings = {}
+            t0 = _time.perf_counter()
             try:
+                # Try API first (full description). If order note is not requested, we can skip Selenium entirely.
+                api_uploaded = False
+                if desc:
+                    api_uploaded = self._update_description_via_api(code, desc, disclaimer)
+                    if api_uploaded and not order_note:
+                        timings["api_update_description"] = _time.perf_counter() - t0
+                        ok += 1
+                        self.row_update.emit(row, tr("batchdesc.status.ok"), "")
+
+                        try:
+                            details = {
+                                "workflow": "batch_descriptions",
+                                "batch_id": batch_id,
+                                "append_disclaimer": disclaimer,
+                                "append_order_note": order_note,
+                                "description_template": desc or None,
+                                "timings": timings,
+                                "mode": "api",
+                            }
+                            self.main.db.conn.execute(
+                                """
+                                INSERT INTO processing_history
+                                (brand, product_code, url_or_code, status, duration_seconds,
+                                 failed_stage, batch_id, details_json, processed_at)
+                                VALUES (?, ?, ?, 'success', ?, ?, ?, ?, ?)
+                                """,
+                                (
+                                    brand,
+                                    code,
+                                    None,
+                                    float(_time.perf_counter() - t0),
+                                    None,
+                                    batch_id,
+                                    json.dumps(details, ensure_ascii=False),
+                                    datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                                ),
+                            )
+                            self.main.db.conn.commit()
+                        except Exception:
+                            pass
+                        continue
+
+                if driver is None or nav is None or web is None:
+                    self.row_update.emit(row, tr("batchdesc.status.failed"), tr("batchdesc.no_session"))
+                    continue
+
+                t_start = _time.perf_counter()
                 self._ensure_products_page(driver)
+                timings["ensure_products_page"] = _time.perf_counter() - t_start
+
+                t_start = _time.perf_counter()
                 nav.navigate_to_product(brand, code)
+                timings["navigate_to_product"] = _time.perf_counter() - t_start
 
                 did_upload = False
                 if desc:
                     self.log.emit(tr("batchdesc.progress.upload", current=idx, total=total, code=code))
-                    uploaded = desc_manager.upload_to_prestashop(
-                        driver,
-                        product_code=code,
-                        name=desc,
-                        append_disclaimer=disclaimer,
-                    )
+                    t_start = _time.perf_counter()
+                    if api_uploaded:
+                        uploaded = True
+                    else:
+                        uploaded = desc_manager.upload_to_prestashop(
+                            driver,
+                            product_code=code,
+                            name=desc,
+                            append_disclaimer=disclaimer,
+                        )
+                    timings["upload_to_prestashop"] = _time.perf_counter() - t_start
                     if not uploaded:
                         self.row_update.emit(row, tr("batchdesc.status.failed"), tr("batchdesc.item.failed_upload"))
+
+                        # Record failure
+                        try:
+                            details = {
+                                "workflow": "batch_descriptions",
+                                "batch_id": batch_id,
+                                "append_disclaimer": disclaimer,
+                                "append_order_note": order_note,
+                                "description_template": desc or None,
+                            }
+                            self.main.db.conn.execute(
+                                """
+                                INSERT INTO processing_history
+                                (brand, product_code, url_or_code, status, error_message, duration_seconds,
+                                 failed_stage, batch_id, details_json, processed_at)
+                                VALUES (?, ?, ?, 'failed', ?, ?, ?, ?, ?, ?)
+                                """,
+                                (
+                                    brand,
+                                    code,
+                                    None,
+                                    tr("batchdesc.item.failed_upload"),
+                                    float(_time.perf_counter() - t0),
+                                    "upload_description",
+                                    batch_id,
+                                    json.dumps(details, ensure_ascii=False),
+                                ),
+                            )
+                            self.main.db.conn.commit()
+                        except Exception:
+                            pass
                         continue
                     did_upload = True
 
                 # If no description, but disclaimer or order note is checked, still try to append
                 if (not desc) and (disclaimer or order_note):
-                    # Only disclaimer: append_disclaimer_if_missing (not implemented for short desc), so only order note is supported here
                     if order_note:
+                        t_start = _time.perf_counter()
                         try:
                             desc_manager.append_order_note_to_short_description(driver, product_code=code)
                         except Exception:
                             pass
+                        timings["append_order_note"] = _time.perf_counter() - t_start
                 elif order_note:
+                    t_start = _time.perf_counter()
                     try:
                         desc_manager.append_order_note_to_short_description(driver, product_code=code)
                     except Exception:
                         pass
+                    timings["append_order_note"] = _time.perf_counter() - t_start
 
                 # Scroll to and click the product title field for the last language edited before saving
+                t_start = _time.perf_counter()
                 try:
-                    # Use the last language from DescriptionManager (lv is last in the loop)
                     from selenium.webdriver.support.ui import WebDriverWait
                     from selenium.webdriver.support import expected_conditions as EC
                     from selenium.webdriver.common.by import By
-                    # lang_id_map: lt=2, en=1, lv=3
                     last_lang_id = "3"  # Latvian
                     title_field_id = f"form_step1_name_{last_lang_id}"
                     title_field = WebDriverWait(driver, 3).until(
@@ -252,25 +424,465 @@ class BatchDescriptionsWorker(QThread):
                         driver.execute_script("arguments[0].click();", title_field)
                 except Exception:
                     pass
+                timings["focus_title_field"] = _time.perf_counter() - t_start
+
+                t_start = _time.perf_counter()
                 self.log.emit(tr("batchdesc.progress.save", current=idx, total=total, code=code))
                 web.save_information()
-                time.sleep(0.5)
+                timings["save_information"] = _time.perf_counter() - t_start
+
+                t_start = _time.perf_counter()
+                _time.sleep(0.5)
+                timings["sleep"] = _time.perf_counter() - t_start
+
+                timings["total"] = _time.perf_counter() - t0
+
+                # Log timings for this row
+                timing_report = ", ".join(f"{k}: {v:.3f}s" for k, v in timings.items())
+                self.log.emit(f"Timing for {code}: {timing_report}")
 
                 ok += 1
                 self.row_update.emit(row, tr("batchdesc.status.ok"), "")
+
+                # Record success
+                try:
+                    details = {
+                        "workflow": "batch_descriptions",
+                        "batch_id": batch_id,
+                        "append_disclaimer": disclaimer,
+                        "append_order_note": order_note,
+                        "description_template": desc or None,
+                        "timings": timings,
+                    }
+                    self.main.db.conn.execute(
+                        """
+                        INSERT INTO processing_history
+                        (brand, product_code, url_or_code, status, duration_seconds,
+                         failed_stage, batch_id, details_json, processed_at)
+                        VALUES (?, ?, ?, 'success', ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            brand,
+                            code,
+                            None,
+                            float(_time.perf_counter() - t0),
+                            None,
+                            batch_id,
+                            json.dumps(details, ensure_ascii=False),
+                            datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        ),
+                    )
+                    self.main.db.conn.commit()
+                except Exception:
+                    pass
             except Exception as e:
                 self.row_update.emit(row, tr("batchdesc.status.failed"), str(e))
+
+                # Record failure
+                try:
+                    details = {
+                        "workflow": "batch_descriptions",
+                        "batch_id": batch_id,
+                        "append_disclaimer": disclaimer,
+                        "append_order_note": order_note,
+                        "description_template": desc or None,
+                    }
+                    self.main.db.conn.execute(
+                        """
+                        INSERT INTO processing_history
+                        (brand, product_code, url_or_code, status, error_message, duration_seconds,
+                         failed_stage, batch_id, details_json, processed_at)
+                        VALUES (?, ?, ?, 'failed', ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            brand,
+                            code,
+                            None,
+                            str(e),
+                            float(_time.perf_counter() - t0),
+                            "batch_descriptions",
+                            batch_id,
+                            json.dumps(details, ensure_ascii=False),
+                            datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        ),
+                    )
+                    self.main.db.conn.commit()
+                except Exception:
+                    pass
+
+            # Track timing and emit progress update
+            item_duration = _time.perf_counter() - t0
+            self._processed_times.append(item_duration)
+
+            # Calculate ETA (skip first 2 items for more accurate average)
+            if len(self._processed_times) >= 2:
+                recent_times = self._processed_times[1:]  # Skip first item (often slower)
+                avg_time_per_item = sum(recent_times) / len(recent_times)
+                remaining_items = total - idx
+                eta_seconds = avg_time_per_item * remaining_items
+                speed = 1.0 / avg_time_per_item if avg_time_per_item > 0 else 0
+
+                self.progress_update.emit(idx, total, speed, eta_seconds)
 
         self.done.emit(ok, total)
 
 
-class BatchDescriptionsScreen(QWidget):
+class ParallelBatchDescriptionsWorker(QThread):
+    """Parallel batch descriptions update using browser session pool"""
+    row_update = Signal(int, str, str)  # rowIndex, status, error
+    log = Signal(str)
+    done = Signal(int, int)  # ok, total
+    session_status = Signal(dict)  # session pool statistics
+
+    def __init__(self, main_window, session_manager, items: list[dict]):
+        super().__init__()
+        self.main = main_window
+        self.session_manager = session_manager
+        self.items = items
+        self._stop = False
+        self._lock = __import__('threading').Lock()
+        self._ok_count = 0
+        self._work_index = 0
+
+        self._batch_id = f"batchdesc_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+        self._prestashop_api_base_url = (self.main.settings.get('prestashop_url', '') or '').strip()
+        self._prestashop_api_key = (self.main.settings.get('prestashop_api_key', '') or '').strip()
+        self._prestashop_api_enabled = bool(self.main.settings.get('prestashop_api_enabled', False))
+
+    def stop(self):
+        self._stop = True
+
+    def _update_description_via_api(self, code: str, description_name: str, append_disclaimer: bool) -> bool:
+        try:
+            if not self._prestashop_api_enabled:
+                return False
+            if not (self._prestashop_api_base_url and self._prestashop_api_key):
+                return False
+            if not description_name:
+                return False
+
+            from Managers.PrestaShopAPI import PrestaShopAPI
+            from Managers.DescriptionManager import DescriptionManager
+
+            api = PrestaShopAPI(self._prestashop_api_base_url, self._prestashop_api_key, logger=getattr(self.main, 'logger', None))
+            desc_manager = DescriptionManager(self.main.db, logger=getattr(self.main, 'logger', None))
+            desc = desc_manager.load_description(description_name)
+            if not desc:
+                return False
+
+            lt_html = desc.get('description_lt', '') or ''
+            en_html = desc.get('description_en', '') or ''
+            lv_html = desc.get('description_lv', '') or ''
+            if append_disclaimer:
+                lt_html, en_html, lv_html = desc_manager.append_disclaimer_if_missing(lt_html, en_html, lv_html)
+
+            lang_map = api.get_language_id_map() or {}
+            en_id = str(lang_map.get('en') or '1')
+            lt_id = str(lang_map.get('lt') or '2')
+            lv_id = str(lang_map.get('lv') or '3')
+
+            payload = {}
+            if lt_html and lt_id:
+                payload[lt_id] = lt_html
+            if en_html and en_id:
+                payload[en_id] = en_html
+            if lv_html and lv_id:
+                payload[lv_id] = lv_html
+            if not payload:
+                return False
+
+            product_id = api.search_product_by_reference(code)
+            if not product_id:
+                return False
+
+            return bool(api.update_product_description(int(product_id), payload))
+        except Exception:
+            return False
+
+    def _ensure_products_page(self, driver) -> None:
+        try:
+            from selenium.webdriver.common.by import By
+            from selenium.webdriver.support import expected_conditions as EC
+            from selenium.webdriver.support.ui import WebDriverWait
+
+            products_link = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.ID, "subtab-AdminProducts"))
+            )
+            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", products_link)
+            products_link.click()
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "table.table"))
+            )
+        except Exception:
+            pass
+
+    def run(self):
+        """Execute parallel batch descriptions update using session pool"""
+        import threading
+
+        if not self.session_manager or not self.session_manager.is_ready():
+            tr = self.main.i18n.tr
+            for it in self.items:
+                self.row_update.emit(it["row"], tr("batchdesc.status.failed"), "Session pool not available")
+            self.done.emit(0, len(self.items))
+            return
+
+        total = len(self.items)
+        pool_size = self.session_manager.pool_size
+
+        self.log.emit(f"Starting parallel processing with {pool_size} browsers")
+
+        # Create worker threads
+        threads = []
+        for worker_id in range(pool_size):
+            thread = threading.Thread(target=self._worker_thread, args=(worker_id,))
+            thread.daemon = True
+            threads.append(thread)
+            thread.start()
+
+        # Wait for all threads to complete
+        for thread in threads:
+            thread.join()
+
+        self.log.emit(f"Completed. Success: {self._ok_count}/{total}")
+        self.done.emit(self._ok_count, total)
+
+    def _worker_thread(self, worker_id: int):
+        """Worker thread that processes items from the queue"""
+        tr = self.main.i18n.tr
+        import time as _time
+
+        while not self._stop:
+            # Get next work item
+            with self._lock:
+                if self._work_index >= len(self.items):
+                    break  # No more work
+                idx = self._work_index
+                self._work_index += 1
+
+            it = self.items[idx]
+            row = it["row"]
+            brand = it["brand"]
+            code = it["code"]
+            desc = it["description"]
+            disclaimer = bool(it.get("append_disclaimer"))
+            order_note = bool(it.get("append_order_note"))
+
+            t0 = _time.perf_counter()
+
+            # Try API for full description first. If order note isn't requested, we can skip Selenium entirely.
+            api_uploaded = False
+            if desc:
+                api_uploaded = self._update_description_via_api(code, desc, disclaimer)
+                if api_uploaded and not order_note:
+                    self.row_update.emit(row, tr("batchdesc.status.ok"), "")
+                    with self._lock:
+                        self._ok_count += 1
+                    try:
+                        details = {
+                            "workflow": "batch_descriptions",
+                            "batch_id": self._batch_id,
+                            "append_disclaimer": disclaimer,
+                            "append_order_note": order_note,
+                            "description_template": desc or None,
+                            "mode": "api",
+                        }
+                        self.main.db.conn.execute(
+                            """
+                            INSERT INTO processing_history
+                            (brand, product_code, url_or_code, status, duration_seconds,
+                             failed_stage, batch_id, details_json, processed_at)
+                            VALUES (?, ?, ?, 'success', ?, ?, ?, ?, ?)
+                            """,
+                            (
+                                brand,
+                                code,
+                                None,
+                                float(_time.perf_counter() - t0),
+                                None,
+                                self._batch_id,
+                                json.dumps(details, ensure_ascii=False),
+                            ),
+                        )
+                        self.main.db.conn.commit()
+                    except Exception:
+                        pass
+                    continue
+
+            # Acquire a browser session
+            session = self.session_manager.acquire_session(timeout=60.0)
+            if session is None:
+                self.row_update.emit(row, tr("batchdesc.status.failed"), "Could not acquire browser session")
+                continue
+
+            try:
+                # Update status
+                self.row_update.emit(row, tr("batchdesc.status.running"), "")
+                self.log.emit(tr("batchdesc.progress.open", current=idx+1, total=len(self.items), code=code))
+
+                # Emit session status
+                stats = self.session_manager.get_session_stats()
+                self.session_status.emit(stats)
+
+                # Process description via Selenium
+                desc_manager = DescriptionManager(self.main.db, logger=self.main.logger)
+                nav = ProductNavigationHandler(session.driver, logger=self.main.logger)
+                web = WebInteractionHandler(session.driver)
+
+                self._ensure_products_page(session.driver)
+                nav.navigate_to_product(brand, code)
+
+                did_upload = False
+                if desc:
+                    self.log.emit(tr("batchdesc.progress.upload", current=idx+1, total=len(self.items), code=code))
+                    if api_uploaded:
+                        uploaded = True
+                    else:
+                        uploaded = desc_manager.upload_to_prestashop(
+                            session.driver,
+                            product_code=code,
+                            name=desc,
+                            append_disclaimer=disclaimer,
+                        )
+                    if not uploaded:
+                        self.row_update.emit(row, tr("batchdesc.status.failed"), tr("batchdesc.item.failed_upload"))
+                        continue
+                    did_upload = True
+
+                # Handle order note
+                if (not desc) and (disclaimer or order_note):
+                    if order_note:
+                        try:
+                            desc_manager.append_order_note_to_short_description(session.driver, product_code=code)
+                        except Exception:
+                            pass
+                    elif order_note:
+                        try:
+                            desc_manager.append_order_note_to_short_description(session.driver, product_code=code)
+                        except Exception:
+                            pass
+
+                    # Focus title field before saving
+                    try:
+                        from selenium.webdriver.support.ui import WebDriverWait
+                        from selenium.webdriver.support import expected_conditions as EC
+                        from selenium.webdriver.common.by import By
+                        last_lang_id = "3"  # Latvian
+                        title_field_id = f"form_step1_name_{last_lang_id}"
+                        title_field = WebDriverWait(session.driver, 3).until(
+                            EC.presence_of_element_located((By.ID, title_field_id))
+                        )
+                        session.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", title_field)
+                        try:
+                            title_field.click()
+                        except Exception:
+                            session.driver.execute_script("arguments[0].click();", title_field)
+                    except Exception:
+                        pass
+
+                    self.log.emit(tr("batchdesc.progress.save", current=idx+1, total=len(self.items), code=code))
+                    web.save_information()
+                    _time.sleep(0.5)
+
+                self.row_update.emit(row, tr("batchdesc.status.ok"), "")
+                with self._lock:
+                    self._ok_count += 1
+
+                # Record success
+                try:
+                    details = {
+                        "workflow": "batch_descriptions",
+                        "batch_id": self._batch_id,
+                        "append_disclaimer": disclaimer,
+                        "append_order_note": order_note,
+                        "description_template": desc or None,
+                        "mode": "parallel",
+                    }
+                    with self._lock:
+                        self.main.db.conn.execute(
+                            """
+                            INSERT INTO processing_history
+                            (brand, product_code, url_or_code, status, duration_seconds,
+                             failed_stage, batch_id, details_json, processed_at)
+                            VALUES (?, ?, ?, 'success', ?, ?, ?, ?, ?)
+                            """,
+                            (
+                                brand,
+                                code,
+                                None,
+                                float(_time.perf_counter() - t0),
+                                None,
+                                self._batch_id,
+                                json.dumps(details, ensure_ascii=False),
+                            ),
+                        )
+                        self.main.db.conn.commit()
+                except Exception:
+                    pass
+
+            except Exception as e:
+                error_msg = str(e)
+                self.row_update.emit(row, tr("batchdesc.status.failed"), error_msg)
+                session.error_count += 1
+
+                # Record failure
+                try:
+                    details = {
+                        "workflow": "batch_descriptions",
+                        "batch_id": self._batch_id,
+                        "append_disclaimer": disclaimer,
+                        "append_order_note": order_note,
+                        "description_template": desc or None,
+                        "mode": "parallel",
+                    }
+                    with self._lock:
+                        self.main.db.conn.execute(
+                            """
+                            INSERT INTO processing_history
+                            (brand, product_code, url_or_code, status, error_message, duration_seconds,
+                             failed_stage, batch_id, details_json, processed_at)
+                            VALUES (?, ?, ?, 'failed', ?, ?, ?, ?, ?, ?)
+                            """,
+                            (
+                                brand,
+                                code,
+                                None,
+                                error_msg,
+                                float(_time.perf_counter() - t0),
+                                "batch_descriptions",
+                                self._batch_id,
+                                json.dumps(details, ensure_ascii=False),
+                            ),
+                        )
+                        self.main.db.conn.commit()
+                except Exception:
+                    pass
+
+                # Reset session if too many errors
+                if session.error_count >= 3:
+                    self.log.emit(f"Resetting session {session.session_id} due to errors")
+                    self.session_manager.reset_session(session)
+
+            finally:
+                # Always release the session
+                self.session_manager.release_session(session)
+
+                # Update session status
+                stats = self.session_manager.get_session_stats()
+                self.session_status.emit(stats)
+
+
+class BatchDescriptionsScreen(ResponsiveWidget):
 
         # ...existing code...
     def __init__(self, main_window, parent=None):
         super().__init__(parent)
         self.main = main_window
         self.worker: BatchDescriptionsWorker | None = None
+
+        # Multi-session browser pool
+        self.session_manager = None
 
         self.current_mode = "manual"
         self._base_table_rows = 5
@@ -283,12 +895,30 @@ class BatchDescriptionsScreen(QWidget):
         desc_manager = DescriptionManager(main_window.db)
         self.descriptions = [d['name'] for d in desc_manager.list_descriptions()]
 
+        # Store references for responsive UI
+        self.scroll = None
+        self.content_widget = None
+
         self._init_ui()
+        self._setup_shortcuts()
         qconfig.themeChangedFinished.connect(self._on_theme_changed)
 
     def showEvent(self, event):
         super().showEvent(event)
         QTimer.singleShot(0, self._ensure_table_fills_viewport)
+
+    def hideEvent(self, event):
+        """Cleanup session manager when screen is hidden"""
+        super().hideEvent(event)
+
+        # Shutdown session manager if it exists
+        if self.session_manager is not None:
+            try:
+                self.session_manager.shutdown_all()
+                self.session_manager = None
+            except Exception as e:
+                if hasattr(self.main, 'logger'):
+                    self.main.logger.log("BatchDescriptionsScreen", f"Error shutting down session manager: {str(e)}")
 
     def eventFilter(self, obj, event):
         if obj is self.table.viewport() and event.type() == QEvent.Type.Resize:
@@ -306,18 +936,38 @@ class BatchDescriptionsScreen(QWidget):
         """)
 
     def _init_ui(self):
-        self._apply_theme()
-        self.setAutoFillBackground(True)
+        # Root layout (for ScrollArea container)
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
 
-        root = QVBoxLayout(self)
+        # Create ScrollArea
+        self.scroll = ScrollArea(self)
+        self.scroll.setWidgetResizable(True)
+        root_layout.addWidget(self.scroll)
+
+        # Content widget (inside ScrollArea)
+        self.content_widget = QWidget()
+        self.scroll.setWidget(self.content_widget)
+
+        # Main layout (on content widget)
+        root = QVBoxLayout(self.content_widget)
         root.setContentsMargins(*PAGE_MARGINS)
         root.setSpacing(PAGE_SPACING)
+
+        # Apply theme
+        apply_screen_theme(
+            self,
+            "BatchDescriptionsScreen",
+            scroll=self.scroll,
+            content=self.content_widget
+        )
 
         header = QHBoxLayout()
         title_container = QHBoxLayout()
         title_container.setSpacing(ICON_TEXT_GAP)
 
-        title_icon = TransparentToolButton(FluentIcon.EDIT, self)
+        title_icon = TransparentToolButton(FluentIcon.TAG, self)
         title_icon.setFixedSize(SIZES['icon_lg'], SIZES['icon_lg'])
         title_icon.setEnabled(False)
 
@@ -379,6 +1029,11 @@ class BatchDescriptionsScreen(QWidget):
         self.browse_btn.setIcon(FluentIcon.FOLDER_ADD.icon())
         self.browse_btn.clicked.connect(self._browse_excel)
 
+        self.refresh_btn = PushButton("")
+        self.refresh_btn.setIcon(FluentIcon.SYNC.icon())
+        self.refresh_btn.clicked.connect(self._refresh_descriptions)
+        self.refresh_btn.setToolTip(self.main.i18n.tr("batch.refresh_descriptions"))
+
         self.excel_file_label = CaptionLabel("")
         self.excel_file_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
 
@@ -420,6 +1075,7 @@ class BatchDescriptionsScreen(QWidget):
         toolbar_layout.addWidget(self.order_note_bulk)
         toolbar_layout.addWidget(self.template_btn)
         toolbar_layout.addWidget(self.browse_btn)
+        toolbar_layout.addWidget(self.refresh_btn)
         toolbar_layout.addWidget(self.excel_file_label)
         toolbar_layout.addWidget(self._excel_status_sep)
         toolbar_layout.addWidget(self._toolbar_spacer)
@@ -450,6 +1106,10 @@ class BatchDescriptionsScreen(QWidget):
         # Smooth scrolling (avoid row/column snapping).
         self.table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.table.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+
+        # Enable horizontal scrolling for responsive design
+        self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+
         try:
             self.table.verticalScrollBar().setSingleStep(12)
             self.table.horizontalScrollBar().setSingleStep(12)
@@ -491,20 +1151,25 @@ class BatchDescriptionsScreen(QWidget):
         self.manual_pill.setText(tr("batch.mode.manual"))
         self.excel_pill.setText(tr("batch.mode.excel"))
         self.add_btn.setText(tr("batch.add_row"))
+        self.add_btn.setToolTip(tr("batch.add_row.tip"))
         self.clear_btn.setText(tr("batch.clear_all"))
+        self.clear_btn.setToolTip(tr("batch.clear_all.tip"))
         self.bulk_label.setText(tr("batch.bulk_select"))
         self.disclaimer_bulk.setText(tr("batch.bulk.disclaimer"))
         self.disclaimer_bulk.setToolTip(tr("batch.bulk.disclaimer.tip"))
         self.order_note_bulk.setText(tr("batch.bulk.order_note"))
         self.order_note_bulk.setToolTip(tr("batch.bulk.order_note.tip"))
         self.template_btn.setText(tr("batch.download_template"))
+        self.template_btn.setToolTip(tr("batch.download_template.tip"))
         self.browse_btn.setText(tr("batch.browse_excel"))
+        self.browse_btn.setToolTip(tr("batch.browse_excel.tip"))
         self.excel_file_label.setText(tr("batch.no_file"))
         # Keep the Start button area clean; don't show the "Ready" hint.
         self.status_label.setText("")
         self.status_label.setVisible(False)
         self.status_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
-        self.start_btn.setText(tr("batchdesc.start"))
+        self.start_btn.setText(f"{tr('batchdesc.start')} (Ctrl+Enter)")
+        self.start_btn.setToolTip(tr("batchdesc.start.tip"))
 
         self.table.setHorizontalHeaderLabels([
             tr("batch.table.brand"),
@@ -528,8 +1193,21 @@ class BatchDescriptionsScreen(QWidget):
             if brand_combo:
                 self._ensure_combo_placeholder_item(brand_combo, tr("batch.select_brand"), self.brands)
 
+    def _on_breakpoint_changed(self, breakpoint: str):
+        """Respond to breakpoint changes - adjust margins and spacing."""
+        margins = get_responsive_margins(breakpoint)
+        spacing = get_responsive_spacing(breakpoint)
+        if hasattr(self, 'content_widget') and self.content_widget and self.content_widget.layout():
+            self.content_widget.layout().setContentsMargins(*margins)
+            self.content_widget.layout().setSpacing(spacing)
+
     def _on_theme_changed(self):
-        self._apply_theme()
+        apply_screen_theme(
+            self,
+            "BatchDescriptionsScreen",
+            scroll=self.scroll,
+            content=self.content_widget
+        )
         self._update_table_theme()
 
     def _update_table_theme(self):
@@ -786,7 +1464,12 @@ class BatchDescriptionsScreen(QWidget):
                 if order_widget:
                     order_widget.setChecked(order_note)
 
-                if brand and code and desc:
+                # Row is valid if it has brand + code + (description OR disclaimer OR order_note)
+                desc_selected = bool(desc) and desc != self.main.i18n.tr("batch.optional")
+                disclaimer_checked = disclaimer_widget and disclaimer_widget.isChecked()
+                order_note_checked = order_widget and order_widget.isChecked()
+
+                if brand and code and (desc_selected or disclaimer_checked or order_note_checked):
                     valid_count += 1
                 else:
                     invalid_count += 1
@@ -873,6 +1556,55 @@ class BatchDescriptionsScreen(QWidget):
                 parent=self,
             )
 
+    def _refresh_descriptions(self):
+        """Reload description list from database and update all ComboBoxes in the table."""
+        try:
+            # Reload descriptions from database
+            desc_manager = DescriptionManager(self.main.db)
+            self.descriptions = [d['name'] for d in desc_manager.list_descriptions()]
+
+            # Update all description ComboBoxes in the table
+            for row in range(self.table.rowCount()):
+                desc_widget = self._get_widget_from_cell(row, 2, ComboBox)
+                if desc_widget:
+                    # Save current selection
+                    current_selection = desc_widget.currentText()
+
+                    # Rebuild combo items
+                    desc_widget.blockSignals(True)
+                    desc_widget.clear()
+                    desc_widget.addItem(self.main.i18n.tr("batch.optional"))
+                    for d in self.descriptions:
+                        desc_widget.addItem(d)
+
+                    # Restore selection if still valid
+                    if current_selection in self.descriptions:
+                        desc_widget.setCurrentText(current_selection)
+                    else:
+                        desc_widget.setCurrentIndex(0)  # Reset to placeholder
+
+                    desc_widget.blockSignals(False)
+
+            InfoBar.success(
+                title=self.main.i18n.tr("common.success"),
+                content=self.main.i18n.tr("batch.descriptions_refreshed"),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=2000,
+                parent=self,
+            )
+        except Exception as ex:
+            InfoBar.error(
+                title=self.main.i18n.tr("common.error"),
+                content=f"Failed to refresh descriptions: {str(ex)}",
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=4000,
+                parent=self,
+            )
+
     def _add_row(self):
         r = self.table.rowCount()
         self.table.setRowCount(r + 1)
@@ -880,14 +1612,22 @@ class BatchDescriptionsScreen(QWidget):
         self._validate()
 
     def _clear_all(self):
-        self.table.setRowCount(self._base_table_rows)
-        for r in range(self.table.rowCount()):
-            self._setup_table_row(r)
-        self.excel_file_label.setText(self.main.i18n.tr("batch.no_file"))
-        if self.current_mode == "excel":
-            self.excel_drop.setVisible(True)
-            self.table.setVisible(False)
-        self._validate()
+        """Clear all rows with confirmation dialog"""
+        # Show confirmation dialog
+        w = MessageBox(
+            title=self.main.i18n.tr("common.confirm"),
+            content=self.main.i18n.tr("batch.clear.confirm"),
+            parent=self
+        )
+        if w.exec():
+            self.table.setRowCount(self._base_table_rows)
+            for r in range(self.table.rowCount()):
+                self._setup_table_row(r)
+            self.excel_file_label.setText(self.main.i18n.tr("batch.no_file"))
+            if self.current_mode == "excel":
+                self.excel_drop.setVisible(True)
+                self.table.setVisible(False)
+            self._validate()
 
     def _toggle_all_disclaimers(self, state):
         checked = state == Qt.CheckState.Checked.value
@@ -912,6 +1652,41 @@ class BatchDescriptionsScreen(QWidget):
     def _get_widget_from_cell(self, row: int, col: int, widget_type):
         cell = self.table.cellWidget(row, col)
         return cell.findChild(widget_type) if cell else None
+
+    def _setup_shortcuts(self):
+        """Setup keyboard shortcuts for batch descriptions screen"""
+        # Ctrl+Enter to start upload
+        start_shortcut = QShortcut(QKeySequence("Ctrl+Return"), self)
+        start_shortcut.activated.connect(self._handle_start_shortcut)
+
+        # Escape to cancel/stop upload
+        cancel_shortcut = QShortcut(QKeySequence("Escape"), self)
+        cancel_shortcut.activated.connect(self._handle_cancel_shortcut)
+
+        # Ctrl+R to retry failed items
+        retry_shortcut = QShortcut(QKeySequence("Ctrl+R"), self)
+        retry_shortcut.activated.connect(self._handle_retry_shortcut)
+
+    def _handle_start_shortcut(self):
+        """Handle Ctrl+Enter shortcut to start upload"""
+        if self.start_btn.isEnabled():
+            self._start_upload()
+
+    def _handle_cancel_shortcut(self):
+        """Handle Escape shortcut to cancel/stop upload"""
+        if self.worker is not None and self.worker.isRunning():
+            self.worker.stop()
+            InfoBar.warning(
+                title=self.main.i18n.tr("batch.cancel.title"),
+                content=self.main.i18n.tr("batch.cancel.content"),
+                parent=self,
+                position=InfoBarPosition.TOP
+            )
+
+    def _handle_retry_shortcut(self):
+        """Handle Ctrl+R shortcut to retry failed items"""
+        if self.retry_btn.isVisible() and self.retry_btn.isEnabled():
+            self._retry_failed()
 
     def _setup_table_row(self, row: int):
         def wrap(widget: QWidget):
@@ -1095,10 +1870,13 @@ class BatchDescriptionsScreen(QWidget):
         self.clear_btn.setEnabled(not busy)
         self.template_btn.setEnabled(not busy)
         self.browse_btn.setEnabled(not busy)
+        self.refresh_btn.setEnabled(not busy)
         self.manual_pill.setEnabled(not busy)
         self.excel_pill.setEnabled(not busy)
-        self.table.setEnabled(not busy)
+        # Keep table enabled so user can see status updates and scroll
+        # self.table.setEnabled(not busy)  # Commented out - table stays interactive
         self.disclaimer_bulk.setEnabled(not busy)
+        self.order_note_bulk.setEnabled(not busy)
         self.start_btn.setEnabled(not busy and len(self._collect_items()) > 0)
 
     def _start_batch(self):
@@ -1119,14 +1897,68 @@ class BatchDescriptionsScreen(QWidget):
         if not items:
             return
 
+        # Initialize tracking variable for row highlighting
+        self._current_processing_row = None
+
         for row in range(self.table.rowCount()):
-            s = self._get_widget_from_cell(row, 4, BodyLabel)
+            # Clear any previous row highlighting
+            for col in range(self.table.columnCount()):
+                item = self.table.item(row, col)
+                if item:
+                    item.setBackground(Qt.GlobalColor.transparent)
+
+            # Reset status (column 5)
+            s = self._get_widget_from_cell(row, 5, BodyLabel)
             if s:
                 s.setText(tr("batchdesc.status.pending"))
                 s.setStyleSheet(f"color: {COLORS['text_secondary']};")
-            e = self._get_widget_from_cell(row, 5, LineEdit)
+            # Reset error (column 6)
+            e = self._get_widget_from_cell(row, 6, LineEdit)
             if e:
                 e.setText("")
+                e.setStyleSheet("")
+
+        # Check if multi-session is enabled
+        multi_session_enabled = self.main.settings.get('multi_session_enabled', False)
+        browser_count = self.main.settings.get('browser_count', 2)
+
+        # Initialize session manager if multi-session enabled
+        if multi_session_enabled:
+            if self.session_manager is None or not self.session_manager.is_ready():
+                from Managers.BrowserSessionManager import BrowserSessionManager
+
+                # Get browser type from settings
+                browser_type = self.main.settings.get('browser_choice', 'Chrome')
+
+                InfoBar.info(
+                    title=tr("common.info"),
+                    content=f"Initializing {browser_count} browser instances...",
+                    orient=Qt.Orientation.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP,
+                    duration=3000,
+                    parent=self
+                )
+
+                # Create and initialize session pool
+                self.session_manager = BrowserSessionManager(
+                    browser_type=browser_type,
+                    pool_size=browser_count,
+                    logger=self.main.logger
+                )
+
+                if not self.session_manager.initialize_pool():
+                    InfoBar.error(
+                        title=tr("common.error"),
+                        content="Failed to initialize browser pool. Falling back to single-session mode.",
+                        orient=Qt.Orientation.Horizontal,
+                        isClosable=True,
+                        position=InfoBarPosition.TOP,
+                        duration=5000,
+                        parent=self
+                    )
+                    self.session_manager = None
+                    multi_session_enabled = False
 
         InfoBar.info(
             title=tr("batchdesc.run.started.title"),
@@ -1139,31 +1971,116 @@ class BatchDescriptionsScreen(QWidget):
         )
 
         self._set_busy(True)
-        self.worker = BatchDescriptionsWorker(self.main, items)
-        self.worker.row_update.connect(self._on_row_update)
-        self.worker.log.connect(self._on_log)
-        self.worker.done.connect(self._on_done)
-        self.worker.start()
+
+        # Choose worker based on multi-session setting
+        if multi_session_enabled and self.session_manager and self.session_manager.is_ready():
+            # Use parallel worker with session pool
+            self.worker = ParallelBatchDescriptionsWorker(self.main, self.session_manager, items)
+            self.worker.row_update.connect(self._on_row_update)
+            self.worker.log.connect(self._on_log)
+            self.worker.done.connect(self._on_done)
+            self.worker.session_status.connect(self._on_session_status_update)
+            self.worker.start()
+        else:
+            # Use single-session worker
+            self.worker = BatchDescriptionsWorker(self.main, items)
+            self.worker.row_update.connect(self._on_row_update)
+            self.worker.log.connect(self._on_log)
+            self.worker.progress_update.connect(self._on_progress_update)
+            self.worker.done.connect(self._on_done)
+            self.worker.start()
+
+    def _on_progress_update(self, current: int, total: int, speed: float, eta_seconds: float):
+        """Handle progress updates with ETA from worker thread."""
+        percentage = (current / total * 100) if total > 0 else 0
+
+        # Format ETA
+        if eta_seconds < 60:
+            eta_text = f"{int(eta_seconds)}s"
+        elif eta_seconds < 3600:
+            minutes = int(eta_seconds / 60)
+            seconds = int(eta_seconds % 60)
+            eta_text = f"{minutes}m {seconds}s"
+        else:
+            hours = int(eta_seconds / 3600)
+            minutes = int((eta_seconds % 3600) / 60)
+            eta_text = f"{hours}h {minutes}m"
+
+        # Format speed (items per minute)
+        items_per_min = speed * 60
+
+        # Update status label with progress information
+        message = f"Processing ({current}/{total}) {percentage:.0f}% - ETA: {eta_text} | {items_per_min:.1f} items/min"
+        self.status_label.setText(message)
+        self.status_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self.status_label.setVisible(True)
 
     def _on_log(self, message: str):
         self.status_label.setText(message)
         self.status_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
         self.status_label.setVisible(bool((message or "").strip()))
 
+    def _on_session_status_update(self, stats: dict):
+        """Handle session status updates from parallel worker (optional)"""
+        # BatchDescriptionsScreen doesn't have a session status label yet
+        # This is just for future extensibility
+        pass
+
     def _on_row_update(self, row: int, status_text: str, error_text: str):
-        status = self._get_widget_from_cell(row, 4, BodyLabel)
+        """Update row status and highlight currently processing row."""
+        # Clear previous row highlighting
+        if hasattr(self, '_current_processing_row') and self._current_processing_row is not None:
+            for col in range(self.table.columnCount()):
+                item = self.table.item(self._current_processing_row, col)
+                if item:
+                    item.setBackground(Qt.GlobalColor.transparent)
+
+        # Update status
+        status = self._get_widget_from_cell(row, 5, BodyLabel)
         if status:
             status.setText(status_text)
-            if status_text == self.main.i18n.tr("batchdesc.status.ok"):
-                status.setStyleSheet(f"color: {COLORS['success']}; font-weight: 500;")
-            elif status_text == self.main.i18n.tr("batchdesc.status.failed"):
-                status.setStyleSheet(f"color: {COLORS['warning']}; font-weight: 500;")
+            tr = self.main.i18n.tr
+
+            # Highlight current row if running
+            if status_text == tr("batchdesc.status.running"):
+                status.setStyleSheet(f"color: {COLORS['blush_rose']}; font-weight: 600;")
+                # Highlight the entire row
+                for col in range(self.table.columnCount()):
+                    item = self.table.item(row, col)
+                    if not item:
+                        item = QTableWidgetItem()
+                        self.table.setItem(row, col, item)
+                    item.setBackground(QColor(COLORS['blush_rose']).lighter(180) if isDarkTheme() else QColor(COLORS['blush_rose']).lighter(195))
+                self._current_processing_row = row
+                # Scroll to current row
+                self.table.scrollToItem(self.table.item(row, 0), QTableWidget.ScrollHint.PositionAtCenter)
+            elif status_text == tr("batchdesc.status.ok"):
+                status.setStyleSheet(f"color: {COLORS['success']}; font-weight: 600;")
+                # Light green background for success
+                for col in range(self.table.columnCount()):
+                    item = self.table.item(row, col)
+                    if not item:
+                        item = QTableWidgetItem()
+                        self.table.setItem(row, col, item)
+                    item.setBackground(QColor(COLORS['success']).lighter(190) if isDarkTheme() else QColor(COLORS['success']).lighter(195))
+            elif status_text == tr("batchdesc.status.failed"):
+                status.setStyleSheet(f"color: {COLORS['flag_red']}; font-weight: 600;")
+                # Light red background for failure
+                for col in range(self.table.columnCount()):
+                    item = self.table.item(row, col)
+                    if not item:
+                        item = QTableWidgetItem()
+                        self.table.setItem(row, col, item)
+                    item.setBackground(QColor(COLORS['flag_red']).lighter(190) if isDarkTheme() else QColor(COLORS['flag_red']).lighter(195))
             else:
                 status.setStyleSheet(f"color: {COLORS['text_secondary']};")
 
-        err = self._get_widget_from_cell(row, 5, LineEdit)
+        # Update error message
+        err = self._get_widget_from_cell(row, 6, LineEdit)
         if err:
             err.setText(error_text or "")
+            if error_text:
+                err.setStyleSheet(f"color: {COLORS['flag_red']}; font-weight: 500;")
 
     def _on_done(self, ok: int, total: int):
         tr = self.main.i18n.tr
@@ -1171,15 +2088,76 @@ class BatchDescriptionsScreen(QWidget):
         self._set_busy(False)
         self._validate()
 
-        InfoBar.success(
-            title=tr("batchdesc.run.complete.title"),
-            content=tr("batchdesc.run.complete.content", ok=ok, total=total),
-            orient=Qt.Orientation.Horizontal,
-            isClosable=True,
-            position=InfoBarPosition.TOP,
-            duration=6000,
-            parent=self,
-        )
+        # Clear the last processing row highlight
+        if hasattr(self, '_current_processing_row') and self._current_processing_row is not None:
+            # Don't clear it - keep the final status color
+            self._current_processing_row = None
+
+        failed = total - ok
+        if failed > 0:
+            # Show warning if some failed
+            InfoBar.warning(
+                title=tr("batchdesc.run.complete.title"),
+                content=tr("batchdesc.run.complete.partial", ok=ok, failed=failed, total=total),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=8000,
+                parent=self,
+            )
+        else:
+            # Show success if all succeeded
+            InfoBar.success(
+                title=tr("batchdesc.run.complete.title"),
+                content=tr("batchdesc.run.complete.content", ok=ok, total=total),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=6000,
+                parent=self,
+            )
+
+        # Windows notification
+        self._show_windows_notification(ok, total)
+
+    def _show_windows_notification(self, ok: int, total: int):
+        """Show Windows desktop notification for batch completion."""
+        # NOTE: win10toast relies on pywin32 WNDPROC callbacks that are known to
+        # break on newer Python versions (e.g. 3.12+), causing hard crashes like:
+        # "WNDPROC return value cannot be converted to LRESULT".
+        try:
+            import sys
+            if sys.version_info >= (3, 12):
+                return
+        except Exception:
+            return
+
+        try:
+            from win10toast import ToastNotifier
+            toaster = ToastNotifier()
+
+            failed = total - ok
+            if failed > 0:
+                title = "Batch Descriptions Update Completed with Errors"
+                message = f"Success: {ok}/{total}\nFailed: {failed}"
+            else:
+                title = "Batch Descriptions Update Completed Successfully"
+                message = f"All {total} descriptions updated successfully"
+
+            # Show notification (non-blocking, 10 second duration)
+            toaster.show_toast(
+                title=title,
+                msg=message,
+                duration=10,
+                threaded=True,
+                icon_path=None  # Uses default Windows icon
+            )
+        except ImportError:
+            # win10toast not installed, silently skip
+            pass
+        except Exception:
+            # Any other error, silently skip
+            pass
 
     def _ensure_table_fills_viewport(self):
         if not self.table.isVisible() or self.excel_drop.isVisible():

@@ -13,7 +13,8 @@ class FileHandler:
         try:
             with open(file_path, "r", encoding="utf-8") as file:  # FIXED: Added encoding
                 for line in file:
-                    if line.strip() == "":
+                    # Safe check: line is always str from file iteration, never None
+                    if not line.strip():
                         if table_data:
                             tables.append(table_data)
                             table_data = {}

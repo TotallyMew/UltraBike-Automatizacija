@@ -10,7 +10,7 @@ from qfluentwidgets import (
     PrimaryPushButton, InfoBar, InfoBarPosition
 )
 
-from GUI_Qt.styles.theme_config import SIZES
+from GUI_Qt.styles.theme_config import SIZES, SPACING
 from GUI_Qt.styles.screen_theme import CARD_SPACING, CARD_SPACING_LARGE, CENTER_FORM_MARGINS, ROW_SPACING
 
 
@@ -27,9 +27,9 @@ class MasterPasswordSetupDialog(QWidget):
     def _init_ui(self):
         """Initialize UI components"""
 
-        # Main layout
+        # Main layout with outer margins to prevent edge clipping
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setContentsMargins(SPACING['xl'], SPACING['xl'], SPACING['xl'], SPACING['xl'])
         main_layout.addStretch(1)
 
         # Center container
@@ -146,9 +146,9 @@ class MasterPasswordPromptDialog(QWidget):
     def _init_ui(self):
         """Initialize UI components"""
 
-        # Main layout
+        # Main layout with outer margins to prevent edge clipping
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setContentsMargins(SPACING['xl'], SPACING['xl'], SPACING['xl'], SPACING['xl'])
         main_layout.addStretch(1)
 
         # Center container

@@ -1,5 +1,8 @@
 import os
+import threading
+import traceback
 from datetime import datetime
+from pathlib import Path
 
 class Logger:
     def __init__(self, log_dir=None):
@@ -7,12 +10,13 @@ class Logger:
             from Utilities.AppPaths import get_default_logs_dir
             log_dir = str(get_default_logs_dir())
 
-        self.log_dir = log_dir
-        os.makedirs(log_dir, exist_ok=True)
+        self.log_dir = str(Path(log_dir))
+        os.makedirs(self.log_dir, exist_ok=True)
+        self._lock = threading.Lock()
         
         # Create new log file for this session
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        self.log_file = os.path.join(log_dir, f"ultrabike_{timestamp}.log")
+        self.log_file = os.path.join(self.log_dir, f"ultrabike_{timestamp}.log")
         
         # Write session start
         self._write_separator()
@@ -20,12 +24,14 @@ class Logger:
         self._write_separator()
     
     def _write_separator(self):
-        with open(self.log_file, 'a', encoding='utf-8') as f:
-            f.write("=" * 80 + "\n")
+        with self._lock:
+            with open(self.log_file, 'a', encoding='utf-8') as f:
+                f.write("=" * 80 + "\n")
     
     def _write(self, message):
-        with open(self.log_file, 'a', encoding='utf-8') as f:
-            f.write(message + "\n")
+        with self._lock:
+            with open(self.log_file, 'a', encoding='utf-8') as f:
+                f.write(message + "\n")
     
     def _format_timestamp(self):
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
@@ -36,7 +42,7 @@ class Logger:
         log_entry = f"[{timestamp}] [{module}] {message}"
         
         if context:
-            log_entry += "\n    Context: " + ", ".join(f"{k}={v}" for k, v in context.items())
+            log_entry += "\n    Context: " + ", ".join(f"{k}={v!r}" for k, v in context.items())
         
         self._write(log_entry)
     
@@ -47,9 +53,14 @@ class Logger:
         
         if exception:
             log_entry += f"\n    Exception: {type(exception).__name__}: {str(exception)}"
+            try:
+                tb = "".join(traceback.format_exception(type(exception), exception, exception.__traceback__))
+                log_entry += "\n    Traceback:\n" + tb.rstrip("\n")
+            except Exception:
+                pass
         
         if context:
-            log_entry += "\n    Context: " + ", ".join(f"{k}={v}" for k, v in context.items())
+            log_entry += "\n    Context: " + ", ".join(f"{k}={v!r}" for k, v in context.items())
         
         self._write(log_entry)
     

@@ -18,8 +18,13 @@ class SettingsManager:
             "https://raw.githubusercontent.com/TotallyMew/UltraBike_Automatizacija_Release/main/latest.json"
         )
 
-        desktop = str(Path.home() / "Desktop")
-        default_kross = str(Path.home() / "Desktop" / "KROSS")
+        desktop_candidates = [
+            Path.home() / "Desktop",
+            Path.home() / "OneDrive" / "Desktop",
+        ]
+        desktop_path = next((p for p in desktop_candidates if p.exists()), desktop_candidates[0])
+        desktop = str(desktop_path)
+        default_kross = str(desktop_path / "KROSS")
         defaults = [
             # Paths
             ('download_images', 'false', 'bool', 'paths', 
@@ -44,6 +49,13 @@ class SettingsManager:
             # Browser
             ('browser_choice', 'Chrome', 'string', 'browser',
              'Preferred browser (Chrome/Firefox/Edge)', 'Chrome'),
+
+            # Multi-session
+            ('multi_session_enabled', 'false', 'bool', 'browser',
+             'Process batches using multiple browser instances', 'false'),
+
+            ('browser_count', '2', 'int', 'browser',
+             'Number of browsers to use for multi-session', '2'),
             
             ('last_brand', '', 'string', 'processing', 
              'Last used brand', ''),
@@ -60,6 +72,16 @@ class SettingsManager:
 
             ('language', 'English', 'string', 'ui',
              'Application language (English/Lithuanian)', 'English'),
+
+            # APIs (optional)
+            ('prestashop_api_enabled', 'false', 'bool', 'api',
+             'Enable PrestaShop Webservice API for faster batch updates', 'false'),
+
+            ('prestashop_url', '', 'string', 'api',
+             'PrestaShop base URL (shop root, e.g. http://localhost:8000)', ''),
+
+            ('prestashop_api_key', '', 'string', 'api',
+             'PrestaShop Webservice API key', ''),
 
               ('display_name', '', 'string', 'ui',
                'Display name shown in the top bar', ''),
@@ -145,12 +167,37 @@ class SettingsManager:
         else:
             value_str = str(value)
         
-        cursor.execute("""
+        now = datetime.now()
+        cursor.execute(
+            """
             UPDATE settings 
             SET value = ?, updated_at = ?
             WHERE key = ?
-        """, (value_str, datetime.now(), key))
-        
+            """,
+            (value_str, now, key),
+        )
+
+        # If the key doesn't exist (older DB / missing defaults), insert it.
+        if cursor.rowcount == 0:
+            if isinstance(value, bool):
+                value_type = 'bool'
+                default_value = 'true' if value else 'false'
+            elif isinstance(value, int):
+                value_type = 'int'
+                default_value = str(value)
+            else:
+                value_type = 'string'
+                default_value = ''
+
+            cursor.execute(
+                """
+                INSERT OR REPLACE INTO settings
+                (key, value, value_type, category, description, default_value, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (key, value_str, value_type, 'misc', '', default_value, now),
+            )
+
         self.db.conn.commit()
     
     def get_all_by_category(self, category: str) -> dict:

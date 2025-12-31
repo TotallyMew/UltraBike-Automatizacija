@@ -1,5 +1,5 @@
-from Managers.FeatureUploader.languageSwitcher import LanguageSwitcher
-from Managers.FeatureUploader.fieldWriter import FeatureFieldWriter
+from Managers.FeatureUploader.LanguageSwitcher import LanguageSwitcher
+from Managers.FeatureUploader.FieldWriter import FeatureFieldWriter
 
 class FeatureUploader:
     def __init__(self, driver, logger=None):

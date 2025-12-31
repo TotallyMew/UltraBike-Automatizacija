@@ -5,22 +5,51 @@ HTML description editor with list selection and tabbed editing
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
-    QTextEdit, QTabWidget, QPushButton, QInputDialog, QMessageBox as QMsgBox
+    QTextEdit, QTabWidget, QPushButton, QInputDialog
 )
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QThread
 from PySide6.QtGui import QKeySequence, QShortcut, QPalette, QColor
 from qfluentwidgets import (
     CardWidget, TransparentToolButton, FluentIcon,
     TitleLabel, BodyLabel, CaptionLabel, InfoBar, InfoBarPosition,
-    isDarkTheme, PrimaryPushButton, LineEdit, PushButton, qconfig
+    isDarkTheme, PrimaryPushButton, LineEdit, PushButton, qconfig, MessageBox,
+    IndeterminateProgressRing, ScrollArea
 )
 from Managers.DescriptionManager import DescriptionManager
+from Managers.DeepLTranslator import DeepLTranslator
+from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
 from GUI_Qt.styles.theme_config import COLORS, FONTS, RADII, PADDINGS, rgba_from_hex
 from GUI_Qt.styles.theme_config import SIZES
-from GUI_Qt.styles.screen_theme import PAGE_MARGINS, PAGE_SPACING, ICON_TEXT_GAP, PANEL_MARGINS, CONTENT_SPACING, ROW_SPACING
+from GUI_Qt.styles.screen_theme import (
+    PAGE_MARGINS, PAGE_SPACING, ICON_TEXT_GAP, PANEL_MARGINS, CONTENT_SPACING, ROW_SPACING,
+    apply_screen_theme, get_responsive_margins, get_responsive_spacing
+)
 
 
-class DescriptionsScreen(QWidget):
+class TranslationWorker(QThread):
+    """Background worker for DeepL translation."""
+    finished = Signal(dict)  # translations result
+    error = Signal(str)  # error message
+
+    def __init__(self, translator, text, source_lang):
+        super().__init__()
+        self.translator = translator
+        self.text = text
+        self.source_lang = source_lang
+
+    def run(self):
+        """Execute translation in background."""
+        try:
+            translations = self.translator.translate_description_all_languages(
+                self.text,
+                source_lang=self.source_lang
+            )
+            self.finished.emit(translations)
+        except Exception as e:
+            self.error.emit(str(e))
+
+
+class DescriptionsScreen(ResponsiveWidget):
     """Descriptions management screen with list + tabs layout"""
 
     def __init__(self, main_window, parent=None):
@@ -31,6 +60,8 @@ class DescriptionsScreen(QWidget):
         self.has_unsaved_changes = False
 
         self._editor_containers = []
+        self.scroll = None
+        self.content_widget = None
 
         self._init_ui()
         self._load_description_list()
@@ -67,13 +98,32 @@ class DescriptionsScreen(QWidget):
 
     def _init_ui(self):
         """Initialize UI with side-by-side layout"""
-        self._apply_theme()
-        self.setAutoFillBackground(True)
+        # Root layout (for ScrollArea container)
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
 
-        # Main layout
-        main_layout = QVBoxLayout(self)
+        # Create ScrollArea
+        self.scroll = ScrollArea(self)
+        self.scroll.setWidgetResizable(True)
+        root_layout.addWidget(self.scroll)
+
+        # Content widget (inside ScrollArea)
+        self.content_widget = QWidget()
+        self.scroll.setWidget(self.content_widget)
+
+        # Main layout (on content widget)
+        main_layout = QVBoxLayout(self.content_widget)
         main_layout.setContentsMargins(*PAGE_MARGINS)
         main_layout.setSpacing(PAGE_SPACING)
+
+        # Apply theme
+        apply_screen_theme(
+            self,
+            "DescriptionsScreen",
+            scroll=self.scroll,
+            content=self.content_widget
+        )
 
         # === HEADER ===
         header = QHBoxLayout()
@@ -197,13 +247,26 @@ class DescriptionsScreen(QWidget):
         action_layout = QHBoxLayout()
         action_layout.setSpacing(CONTENT_SPACING)
 
+        # Progress ring for translation (hidden initially)
+        self.progress_ring = IndeterminateProgressRing(self)
+        self.progress_ring.setFixedSize(24, 24)
+        self.progress_ring.hide()
+
+        self.translate_btn = PushButton("")
+        self.translate_btn.setIcon(FluentIcon.GLOBE.icon())
+        self.translate_btn.setFixedHeight(SIZES['button_height_sm'])
+        self.translate_btn.setEnabled(False)
+        self.translate_btn.clicked.connect(self._auto_translate_description)
+
         self.save_btn = PrimaryPushButton("")
         self.save_btn.setIcon(FluentIcon.SAVE.icon())
         self.save_btn.setFixedHeight(SIZES['button_height_sm'])
         self.save_btn.setEnabled(False)
         self.save_btn.clicked.connect(self._handle_save)
 
+        action_layout.addWidget(self.progress_ring)
         action_layout.addStretch()
+        action_layout.addWidget(self.translate_btn)
         action_layout.addWidget(self.save_btn)
 
         right_layout.addLayout(action_layout)
@@ -268,8 +331,13 @@ class DescriptionsScreen(QWidget):
         self.list_title.setText(tr("descriptions.saved"))
         self.refresh_btn.setToolTip(tr("descriptions.refresh"))
         self.new_btn.setText(tr("descriptions.new"))
+        self.new_btn.setToolTip(tr("descriptions.new.tip"))
         self.delete_btn.setText(tr("descriptions.delete"))
+        self.delete_btn.setToolTip(tr("descriptions.delete.tip"))
+        self.translate_btn.setText(tr("descriptions.translate"))
+        self.translate_btn.setToolTip(tr("descriptions.translate.tip"))
         self.save_btn.setText(tr("descriptions.save"))
+        self.save_btn.setToolTip(tr("descriptions.save.tip"))
 
         for container in getattr(self, '_editor_containers', []):
             warning_label = getattr(container, '_warning_label', None)
@@ -403,6 +471,7 @@ class DescriptionsScreen(QWidget):
                 lv_editor.textChanged.connect(self._on_content_changed)
 
                 self.save_btn.setEnabled(True)
+                self.translate_btn.setEnabled(True)
                 self.delete_btn.setEnabled(True)
 
                 InfoBar.success(
@@ -425,6 +494,7 @@ class DescriptionsScreen(QWidget):
         """Handle content change in editors"""
         self.has_unsaved_changes = True
         self.save_btn.setEnabled(True)
+        self.translate_btn.setEnabled(True)
         self._update_title_indicator()
 
     def _update_title_indicator(self):
@@ -461,6 +531,7 @@ class DescriptionsScreen(QWidget):
         lv_editor.clear()
 
         self.save_btn.setEnabled(True)
+        self.translate_btn.setEnabled(True)
         self.delete_btn.setEnabled(False)
         self.description_list.clearSelection()
 
@@ -485,17 +556,29 @@ class DescriptionsScreen(QWidget):
 
         # If new, ask for name
         if not self.current_description_name:
-            name, ok = QInputDialog.getText(
-                self,
+            dialog = MessageBox(
                 self.main.i18n.tr("descriptions.save_dialog.title"),
                 self.main.i18n.tr("descriptions.save_dialog.prompt"),
-                text=""
+                self
             )
 
-            if not ok or not name.strip():
+            # Add input field to dialog
+            input_field = LineEdit(dialog)
+            input_field.setPlaceholderText(self.main.i18n.tr("descriptions.name.placeholder"))
+            dialog.textLayout.addWidget(input_field)
+
+            # Update button text
+            dialog.yesButton.setText(self.main.i18n.tr("common.save"))
+            dialog.cancelButton.setText(self.main.i18n.tr("common.cancel"))
+
+            if not dialog.exec():
                 return
 
-            self.current_description_name = name.strip()
+            name = input_field.text().strip()
+            if not name:
+                return
+
+            self.current_description_name = name
 
         # Save to database
         try:
@@ -536,14 +619,15 @@ class DescriptionsScreen(QWidget):
             return
 
         # Confirm deletion
-        reply = QMsgBox.question(
-            self,
+        dialog = MessageBox(
             self.main.i18n.tr("descriptions.delete_confirm.title"),
             self.main.i18n.tr("descriptions.delete_confirm.content", name=self.current_description_name),
-            QMsgBox.StandardButton.Yes | QMsgBox.StandardButton.No
+            self
         )
+        dialog.yesButton.setText(self.main.i18n.tr("common.delete"))
+        dialog.cancelButton.setText(self.main.i18n.tr("common.cancel"))
 
-        if reply == QMsgBox.StandardButton.Yes:
+        if dialog.exec():
             try:
                 success = self.desc_manager.delete_description(self.current_description_name)
 
@@ -623,6 +707,158 @@ class DescriptionsScreen(QWidget):
         except Exception:
             pass
 
+    def _auto_translate_description(self):
+        """Auto-translate current description using DeepL."""
+        # Get API key from settings
+        api_key = self.main.settings.get('deepl_api_key', '')
+
+        if not api_key or api_key == "TEMPLATE_API_KEY_REPLACE_ME":
+            InfoBar.warning(
+                title=self.main.i18n.tr("common.warning"),
+                content="Please configure DeepL API key in Settings first",
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=4000,
+                parent=self
+            )
+            return
+
+        # Determine which tab is active and get that content
+        current_tab_index = self.tabs.currentIndex()
+        tab_lang_map = {0: ("lt", "Lithuanian"), 1: ("en", "English"), 2: ("lv", "Latvian")}
+
+        if current_tab_index not in tab_lang_map:
+            return
+
+        source_code, source_display = tab_lang_map[current_tab_index]
+
+        # Get editor from current tab
+        if current_tab_index == 0:
+            source_editor = self.lt_editor.findChild(QTextEdit)
+        elif current_tab_index == 1:
+            source_editor = self.en_editor.findChild(QTextEdit)
+        else:
+            source_editor = self.lv_editor.findChild(QTextEdit)
+
+        source_html = source_editor.toPlainText().strip()
+
+        if not source_html or len(source_html) < 10:
+            InfoBar.warning(
+                title=self.main.i18n.tr("common.warning"),
+                content=f"Please enter {source_display} description first",
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=3000,
+                parent=self
+            )
+            return
+
+        # Translate in background
+        try:
+            translator = DeepLTranslator(api_key)
+
+            # Show progress
+            self.progress_ring.start()
+            self.progress_ring.show()
+            self.translate_btn.setEnabled(False)
+
+            # Create worker
+            self.translation_worker = TranslationWorker(translator, source_html, source_code.upper())
+            self.translation_worker.finished.connect(self._on_translation_finished)
+            self.translation_worker.error.connect(self._on_translation_error)
+            self.translation_worker.start()
+
+        except Exception as e:
+            self.progress_ring.stop()
+            self.progress_ring.hide()
+            self.translate_btn.setEnabled(True)
+
+            InfoBar.error(
+                title=self.main.i18n.tr("common.error"),
+                content=str(e),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=4000,
+                parent=self
+            )
+
+    def _on_translation_finished(self, translations: dict):
+        """Handle successful translation."""
+        # Hide progress
+        self.progress_ring.stop()
+        self.progress_ring.hide()
+        self.translate_btn.setEnabled(True)
+
+        # Get editors
+        lt_editor = self.lt_editor.findChild(QTextEdit)
+        en_editor = self.en_editor.findChild(QTextEdit)
+        lv_editor = self.lv_editor.findChild(QTextEdit)
+
+        # Temporarily disconnect signals
+        lt_editor.textChanged.disconnect(self._on_content_changed)
+        en_editor.textChanged.disconnect(self._on_content_changed)
+        lv_editor.textChanged.disconnect(self._on_content_changed)
+
+        # Update editors with translations
+        if "lt" in translations:
+            lt_editor.setPlainText(translations["lt"])
+        if "en" in translations:
+            en_editor.setPlainText(translations["en"])
+        if "lv" in translations:
+            lv_editor.setPlainText(translations["lv"])
+
+        # Reconnect signals
+        lt_editor.textChanged.connect(self._on_content_changed)
+        en_editor.textChanged.connect(self._on_content_changed)
+        lv_editor.textChanged.connect(self._on_content_changed)
+
+        # Mark as changed
+        self.has_unsaved_changes = True
+        self._update_title_indicator()
+
+        InfoBar.success(
+            title=self.main.i18n.tr("common.success"),
+            content="Descriptions translated to all languages successfully",
+            orient=Qt.Orientation.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.TOP,
+            duration=3000,
+            parent=self
+        )
+
+    def _on_translation_error(self, error: str):
+        """Handle translation error."""
+        self.progress_ring.stop()
+        self.progress_ring.hide()
+        self.translate_btn.setEnabled(True)
+
+        InfoBar.error(
+            title=self.main.i18n.tr("common.error"),
+            content=f"Translation failed: {error}",
+            orient=Qt.Orientation.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.TOP,
+            duration=5000,
+            parent=self
+        )
+
+    def _on_breakpoint_changed(self, breakpoint: str):
+        """Respond to breakpoint changes - adjust margins and spacing."""
+        margins = get_responsive_margins(breakpoint)
+        spacing = get_responsive_spacing(breakpoint)
+        if hasattr(self, 'content_widget') and self.content_widget and self.content_widget.layout():
+            self.content_widget.layout().setContentsMargins(*margins)
+            self.content_widget.layout().setSpacing(spacing)
+
     def _on_theme_changed(self):
         """Handle theme change event"""
+        apply_screen_theme(
+            self,
+            "DescriptionsScreen",
+            scroll=self.scroll,
+            content=self.content_widget
+        )
         self._apply_theme()

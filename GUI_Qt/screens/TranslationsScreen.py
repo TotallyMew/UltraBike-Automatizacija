@@ -3,6 +3,10 @@ Translations Screen - Fluent Design System
 Product name translation management with Space Indigo/Lavender Grey color scheme
 """
 
+# Standard library
+from datetime import datetime
+
+# Third-party packages
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
     QHeaderView, QAbstractItemView
@@ -13,8 +17,9 @@ from qfluentwidgets import (
     CardWidget, PushButton, LineEdit, ComboBox, TransparentToolButton,
     FluentIcon, TitleLabel, StrongBodyLabel, BodyLabel, CaptionLabel,
     InfoBar, InfoBarPosition, isDarkTheme, SearchLineEdit,
-    PrimaryPushButton, MessageBox, Dialog, IconWidget, qconfig
+    PrimaryPushButton, MessageBox, Dialog, IconWidget, qconfig, ScrollArea
 )
+from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
 from GUI_Qt.styles.theme_config import COLORS, FONTS, RADII, PADDINGS, SIZES, rgba_from_hex
 from GUI_Qt.styles.screen_theme import (
     PAGE_MARGINS,
@@ -26,6 +31,9 @@ from GUI_Qt.styles.screen_theme import (
     CONTENT_SPACING,
     ROW_SPACING,
     MICRO_SPACING,
+    get_responsive_margins,
+    get_responsive_spacing,
+    apply_screen_theme,
 )
 
 
@@ -158,7 +166,7 @@ class AddTranslationDialog(MessageBox):
         )
 
 
-class TranslationsScreen(QWidget):
+class TranslationsScreen(ResponsiveWidget):
     """Translations management screen with Fluent Design"""
 
     def __init__(self, main_window, parent=None):
@@ -194,8 +202,21 @@ class TranslationsScreen(QWidget):
         """)
         self.setAutoFillBackground(True)
 
-        # Main layout
-        layout = QVBoxLayout(self)
+        # Root layout (for ScrollArea container)
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Create ScrollArea
+        self.scroll = ScrollArea(self)
+        self.scroll.setWidgetResizable(True)
+        root_layout.addWidget(self.scroll)
+
+        # Content widget (inside ScrollArea)
+        self.content_widget = QWidget()
+        self.scroll.setWidget(self.content_widget)
+
+        # Main layout (on content widget)
+        layout = QVBoxLayout(self.content_widget)
         layout.setContentsMargins(*PAGE_MARGINS)
         layout.setSpacing(PAGE_SPACING)
 
@@ -285,6 +306,8 @@ class TranslationsScreen(QWidget):
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
+        self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.table.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
 
         # Apply table styling
         self._update_table_theme()
@@ -294,6 +317,17 @@ class TranslationsScreen(QWidget):
         table_container.setStyleSheet("background: transparent;")
         table_container_layout = QVBoxLayout(table_container)
         table_container_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Empty state message (hidden by default)
+        self.empty_state_label = BodyLabel(self.main.i18n.tr("translations.empty_state"))
+        self.empty_state_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.empty_state_label.setStyleSheet(f"""
+            color: {COLORS['text_secondary']};
+            padding: 60px 20px;
+        """)
+        self.empty_state_label.setVisible(False)
+
+        table_container_layout.addWidget(self.empty_state_label)
         table_container_layout.addWidget(self.table, 1)
 
         # Center table container
@@ -326,6 +360,14 @@ class TranslationsScreen(QWidget):
         pagination_layout.addWidget(self.next_btn)
 
         layout.addWidget(pagination_card)
+
+        # Apply theme
+        apply_screen_theme(
+            self,
+            "TranslationsScreen",
+            scroll=self.scroll,
+            content=self.content_widget
+        )
 
         self.retranslate_ui()
 
@@ -374,6 +416,14 @@ class TranslationsScreen(QWidget):
 
         self._populate_brand_filter()
         self._render_page()
+
+    def _on_breakpoint_changed(self, breakpoint: str):
+        """Respond to breakpoint changes - adjust margins and spacing."""
+        margins = get_responsive_margins(breakpoint)
+        spacing = get_responsive_spacing(breakpoint)
+        if hasattr(self, 'content_widget') and self.content_widget.layout():
+            self.content_widget.layout().setContentsMargins(*margins)
+            self.content_widget.layout().setSpacing(spacing)
 
     def _update_table_theme(self):
         """Update table styling based on current theme"""
@@ -497,6 +547,20 @@ class TranslationsScreen(QWidget):
         # Clear table
         self.table.setRowCount(0)
 
+        # Check if we have any translations
+        has_translations = len(self.filtered_translations) > 0
+
+        # Show/hide empty state
+        self.empty_state_label.setVisible(not has_translations)
+        self.table.setVisible(has_translations)
+
+        if not has_translations:
+            # Hide pagination when empty
+            self.page_info.setText(self.main.i18n.tr("translations.page", current=0, total=0, results=0))
+            self.prev_btn.setEnabled(False)
+            self.next_btn.setEnabled(False)
+            return
+
         # Calculate pagination
         total_pages = max(1, (len(self.filtered_translations) + self.page_size - 1) // self.page_size)
         start_idx = self.current_page * self.page_size
@@ -611,8 +675,8 @@ class TranslationsScreen(QWidget):
             # Insert new translation
             cursor.execute(
                 """INSERT INTO translations (source_lang, target_lang, source_term, target_term, category, created_at)
-                   VALUES ('EN', 'LT', ?, ?, ?, datetime('now'))""",
-                (original, translation, category)
+                   VALUES ('EN', 'LT', ?, ?, ?, ?)""",
+                (original, translation, category, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
             )
             self.main.db.conn.commit()
 

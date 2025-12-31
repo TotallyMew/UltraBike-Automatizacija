@@ -17,7 +17,7 @@ from PySide6.QtWidgets import QLabel, QWidget
 
 from qfluentwidgets import ScrollArea, isDarkTheme
 
-from GUI_Qt.styles.theme_config import COLORS, FONTS, SPACING
+from GUI_Qt.styles.theme_config import COLORS, FONTS, SPACING, SIZES
 
 
 # =====================
@@ -149,6 +149,58 @@ def enforce_transparent_labels(root: QWidget) -> None:
 
 def get_screen_background() -> str:
     return COLORS["space_indigo"] if isDarkTheme() else COLORS["platinum"]
+
+
+def get_responsive_margins(breakpoint: str) -> tuple:
+    """Return appropriate margins for breakpoint.
+
+    Args:
+        breakpoint: Current breakpoint ('xs', 'sm', 'md', 'lg', 'xl', 'xxl')
+
+    Returns:
+        Tuple of (left, top, right, bottom) margins in pixels
+    """
+    if breakpoint == 'xs':
+        return (SPACING['lg'], SPACING['md'], SPACING['lg'], SPACING['md'])  # 20, 12, 20, 12
+    elif breakpoint == 'sm':
+        return (SPACING['xl'], SPACING['lg'], SPACING['xl'], SPACING['lg'])  # 24, 20, 24, 20
+    else:
+        return PAGE_MARGINS  # 40, 20, 40, 20
+
+
+def get_responsive_spacing(breakpoint: str) -> int:
+    """Return layout spacing for breakpoint.
+
+    Args:
+        breakpoint: Current breakpoint ('xs', 'sm', 'md', 'lg', 'xl', 'xxl')
+
+    Returns:
+        Spacing value in pixels
+    """
+    if breakpoint == 'xs':
+        return SPACING['md']  # 12 - Compact
+    else:
+        return PAGE_SPACING  # 20 - Normal
+
+
+def get_responsive_card_max_width(breakpoint: str, card_type: str = 'form') -> int | None:
+    """Return max card width for breakpoint, or None for full-width.
+
+    Args:
+        breakpoint: Current breakpoint ('xs', 'sm', 'md', 'lg', 'xl', 'xxl')
+        card_type: Type of card ('form', 'options', or other)
+
+    Returns:
+        Maximum width in pixels, or None for full width
+    """
+    if breakpoint in ('xs', 'sm'):
+        return None  # Full width on narrow screens
+    elif card_type == 'form':
+        return SIZES['form_card_max_width']  # 1600
+    elif card_type == 'options':
+        return SIZES['options_card_max_width']  # 760
+    else:
+        return SIZES['form_card_max_width']
 
 
 def apply_screen_theme(

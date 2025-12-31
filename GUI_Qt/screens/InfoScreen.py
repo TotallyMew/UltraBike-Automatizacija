@@ -19,6 +19,7 @@ from qfluentwidgets import (
     qconfig,
 )
 
+from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
 from GUI_Qt.styles.theme_config import COLORS, FONTS, RADII, SIZES, get_details_card_bg
 from GUI_Qt.styles.screen_theme import (
     PAGE_MARGINS,
@@ -28,6 +29,9 @@ from GUI_Qt.styles.screen_theme import (
     ROW_SPACING,
     CONTENT_SPACING,
     DETAILS_MARGINS,
+    apply_screen_theme,
+    get_responsive_margins,
+    get_responsive_spacing,
     DETAILS_SPACING,
 )
 
@@ -53,7 +57,7 @@ class _TransparentLabelEventFilter(QObject):
         return super().eventFilter(watched, event)
 
 
-class InfoScreen(QWidget):
+class InfoScreen(ResponsiveWidget):
     """Informational screen: purpose and usage."""
 
     def __init__(self, main_window, parent=None):
@@ -63,6 +67,7 @@ class InfoScreen(QWidget):
         self._expanded: dict[str, bool] = {}
         self.scroll: ScrollArea | None = None
         self.content: QWidget | None = None
+        self.content_widget = None  # Alias for consistency
         self._transparent_label_filter = _TransparentLabelEventFilter(self)
         self._init_ui()
         qconfig.themeChangedFinished.connect(self._on_theme_changed)
@@ -432,6 +437,14 @@ class InfoScreen(QWidget):
         self.extra_title.setText(tr("info.extra.title"))
         self.extra_text.setText(tr("info.extra.text"))
         self.extra_toggle_btn.setToolTip(tr("info.extra.tooltip"))
+
+    def _on_breakpoint_changed(self, breakpoint: str):
+        """Respond to breakpoint changes - adjust margins and spacing."""
+        margins = get_responsive_margins(breakpoint)
+        spacing = get_responsive_spacing(breakpoint)
+        if hasattr(self, 'content') and self.content and self.content.layout():
+            self.content.layout().setContentsMargins(*margins)
+            self.content.layout().setSpacing(spacing)
 
     def _on_theme_changed(self):
         self._apply_theme()

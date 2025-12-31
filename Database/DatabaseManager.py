@@ -16,8 +16,20 @@ class DatabaseManager:
     
     def _connect(self):
         """Connect to SQLite database"""
-        self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        # Use a timeout to reduce transient "database is locked" errors.
+        self.conn = sqlite3.connect(self.db_path, check_same_thread=False, timeout=30.0)
         self.conn.execute("PRAGMA foreign_keys = ON")
+        # Better concurrent behavior for background workers (best-effort).
+        try:
+            self.conn.execute("PRAGMA busy_timeout = 5000")
+        except Exception:
+            pass
+        try:
+            # WAL is safe for file-backed DBs; ignore if unsupported.
+            self.conn.execute("PRAGMA journal_mode = WAL")
+            self.conn.execute("PRAGMA synchronous = NORMAL")
+        except Exception:
+            pass
         self.conn.row_factory = sqlite3.Row
     
     def _initialize_schema(self):
@@ -153,13 +165,84 @@ class DatabaseManager:
             self.conn.close()
             self.conn = None
 
+    def _validate_identifier(self, identifier: str, identifier_type: str = "identifier") -> None:
+        """Validate SQL identifier to prevent SQL injection.
+
+        This method ensures identifiers (table/column names) are safe to use in SQL queries.
+        Only allows alphanumeric characters and underscores.
+
+        Args:
+            identifier: The table or column name to validate
+            identifier_type: Type of identifier for error messages (e.g., "table", "column")
+
+        Raises:
+            ValueError: If identifier contains unsafe characters
+        """
+        # Whitelist of allowed tables for extra safety
+        ALLOWED_TABLES = {
+            'credentials', 'external_credentials', 'processing_history',
+            'recent_products', 'translations', 'settings', 'descriptions'
+        }
+
+        # Check for empty identifier
+        if not identifier or not identifier.strip():
+            raise ValueError(f"Invalid {identifier_type} name: cannot be empty")
+
+        # Check for SQL injection patterns (only allow alphanumeric and underscore)
+        if not all(c.isalnum() or c == '_' for c in identifier):
+            raise ValueError(
+                f"Invalid {identifier_type} name '{identifier}': "
+                f"only alphanumeric characters and underscores are allowed"
+            )
+
+        # Additional safety: if it's a table name, check against whitelist
+        if identifier_type == "table" and identifier not in ALLOWED_TABLES:
+            raise ValueError(
+                f"Invalid table name '{identifier}': not in allowed tables list. "
+                f"Allowed tables: {', '.join(sorted(ALLOWED_TABLES))}"
+            )
+
+        # Check for SQL keywords that could be dangerous
+        SQL_KEYWORDS = {
+            'select', 'insert', 'update', 'delete', 'drop', 'create',
+            'alter', 'table', 'from', 'where', 'union', 'exec', 'execute'
+        }
+        if identifier.lower() in SQL_KEYWORDS:
+            raise ValueError(
+                f"Invalid {identifier_type} name '{identifier}': cannot use SQL keywords"
+            )
+
     def _ensure_column(self, table_name: str, column_name: str, column_type: str) -> None:
         """Add a missing column if needed.
 
         SQLite doesn't support IF NOT EXISTS for ALTER TABLE ADD COLUMN, so we
         check pragma_table_info first.
+
+        Security: This method validates all identifiers to prevent SQL injection.
+        Only accepts hardcoded table names from the allowed whitelist.
+
+        Args:
+            table_name: Name of the table (must be in ALLOWED_TABLES whitelist)
+            column_name: Name of the column to add (must be alphanumeric + underscore)
+            column_type: SQL type for the column (must be alphanumeric + underscore + spaces)
+
+        Raises:
+            ValueError: If any identifier contains unsafe characters
         """
+        # Validate all identifiers to prevent SQL injection
+        self._validate_identifier(table_name, "table")
+        self._validate_identifier(column_name, "column")
+
+        # Validate column_type (allows spaces for types like "TEXT DEFAULT ''" or "INTEGER NOT NULL")
+        # More permissive than identifiers but still safe
+        if not all(c.isalnum() or c in ('_', ' ', "'", '"') for c in column_type):
+            raise ValueError(
+                f"Invalid column type '{column_type}': "
+                f"only alphanumeric characters, underscores, spaces, and quotes are allowed"
+            )
+
         cur = self.conn.cursor()
+        # Safe to use f-strings now that we've validated the identifiers
         cols = cur.execute(f"PRAGMA table_info({table_name})").fetchall()
         existing = {c[1] for c in cols}  # name is index 1
         if column_name in existing:

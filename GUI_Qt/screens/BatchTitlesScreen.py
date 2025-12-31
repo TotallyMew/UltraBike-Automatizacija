@@ -20,12 +20,14 @@ from __future__ import annotations
 
 import os
 import time
+import json
+from datetime import datetime
 
 import openpyxl
 from openpyxl.styles import Alignment, Font, PatternFill
 
 from PySide6.QtCore import QEvent, QThread, QTimer, Qt, Signal
-from PySide6.QtGui import QDragEnterEvent, QDropEvent, QStandardItemModel
+from PySide6.QtGui import QDragEnterEvent, QDropEvent, QStandardItemModel, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
@@ -48,20 +50,27 @@ from qfluentwidgets import (
     InfoBar,
     InfoBarPosition,
     LineEdit,
+    MessageBox,
     PillPushButton,
     PrimaryPushButton,
     PushButton,
+    ScrollArea,
     TitleLabel,
     TransparentToolButton,
     isDarkTheme,
     qconfig,
 )
 
+from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
 from GUI_Qt.styles.theme_config import COLORS, COMPONENT_COLORS, FONTS, RADII, PADDINGS, SIZES
-from GUI_Qt.styles.screen_theme import PAGE_MARGINS, PAGE_SPACING, ICON_TEXT_GAP, ROW_SPACING, TOOLBAR_MARGINS, CARD_SPACING, CONTENT_SPACING, TABLE_CELL_MARGINS, SPACING
+from GUI_Qt.styles.screen_theme import (
+    PAGE_MARGINS, PAGE_SPACING, ICON_TEXT_GAP, ROW_SPACING, TOOLBAR_MARGINS,
+    CARD_SPACING, CONTENT_SPACING, TABLE_CELL_MARGINS, SPACING,
+    apply_screen_theme, get_responsive_margins, get_responsive_spacing
+)
 from Utilities.ProductNavigationHandler import ProductNavigationHandler
 from Utilities.WebIntercationHandler import WebInteractionHandler
-from Managers.FeatureUploader.languageSwitcher import LanguageSwitcher
+from Managers.FeatureUploader.LanguageSwitcher import LanguageSwitcher
 
 
 class DropZoneWidget(QWidget):
@@ -154,11 +163,60 @@ class BatchTitlesWorker(QThread):
     row_update = Signal(int, str, str)  # rowIndex, status, error
     log = Signal(str)
     done = Signal(int, int)  # ok, total
+    progress_update = Signal(int, int, float, float)  # current, total, speed (items/sec), eta_seconds
 
     def __init__(self, main_window, items: list[dict]):
         super().__init__()
         self.main = main_window
         self.items = items
+        self._processed_times = []  # Track duration of each processed item
+
+        self._prestashop_api_base_url = (self.main.settings.get('prestashop_url', '') or '').strip()
+        self._prestashop_api_key = (self.main.settings.get('prestashop_api_key', '') or '').strip()
+        self._prestashop_api_enabled = bool(self.main.settings.get('prestashop_api_enabled', False))
+
+    def _update_title_via_api(self, code: str, title_lt: str, title_en: str, title_lv: str) -> bool:
+        try:
+            if not self._prestashop_api_enabled:
+                return False
+            if not (self._prestashop_api_base_url and self._prestashop_api_key):
+                return False
+
+            from Managers.PrestaShopAPI import PrestaShopAPI
+
+            api = PrestaShopAPI(self._prestashop_api_base_url, self._prestashop_api_key, logger=getattr(self.main, 'logger', None))
+            lang_map = api.get_language_id_map() or {}
+            en_id = str(lang_map.get('en') or '1')
+            lt_id = str(lang_map.get('lt') or '2')
+            lv_id = str(lang_map.get('lv') or '3')
+
+            payload = {}
+            if title_en and en_id:
+                payload[en_id] = title_en
+            if title_lt and lt_id:
+                payload[lt_id] = title_lt
+            if title_lv and lv_id:
+                payload[lv_id] = title_lv
+            if not payload:
+                return False
+
+            product_id = api.search_product_by_reference(code)
+            if not product_id:
+                extra = (api.last_error_summary() or '').strip()
+                self.log.emit(f"API: product not found for {code}" + (f" ({extra})" if extra else ""))
+                return False
+
+            ok = api.update_product_name(int(product_id), payload)
+            if not ok:
+                extra = (api.last_error_summary() or '').strip()
+                self.log.emit(f"API: title update failed for {code}" + (f" ({extra})" if extra else ""))
+                return False
+
+            self.log.emit(f"API: updated title for {code}")
+            return True
+        except Exception as e:
+            self.log.emit(f"API: title update crashed for {code}: {e}")
+            return False
 
     def _ensure_products_page(self, driver) -> None:
         try:
@@ -183,8 +241,10 @@ class BatchTitlesWorker(QThread):
         from selenium.webdriver.support import expected_conditions as EC
         from selenium.webdriver.support.ui import WebDriverWait
 
-        lang_id_map = {"en": "1", "lt": "2", "lv": "3"}
-        if lang_code not in lang_id_map:
+        from Config.LanguageConfig import LANG_CODE_TO_PRESTASHOP_ID, SUPPORTED_LANGUAGES
+
+        lang_id_map = LANG_CODE_TO_PRESTASHOP_ID
+        if lang_code not in SUPPORTED_LANGUAGES:
             raise Exception(f"Unsupported language: {lang_code}")
 
         # Make sure the correct language is active so we don't type into a hidden tab.
@@ -239,17 +299,22 @@ class BatchTitlesWorker(QThread):
     def run(self):
         tr = self.main.i18n.tr
         driver = getattr(self.main, "driver", None)
-        if driver is None:
+        if driver is None and not (self._prestashop_api_enabled and self._prestashop_api_base_url and self._prestashop_api_key):
             for it in self.items:
                 self.row_update.emit(it["row"], tr("batchtitle.status.failed"), tr("batchtitle.no_session"))
             self.done.emit(0, len(self.items))
             return
 
-        nav = ProductNavigationHandler(driver, logger=self.main.logger)
-        web = WebInteractionHandler(driver)
+        nav = None
+        web = None
+        if driver is not None:
+            nav = ProductNavigationHandler(driver, logger=self.main.logger)
+            web = WebInteractionHandler(driver)
 
         ok = 0
         total = len(self.items)
+
+        batch_id = f"batchtitle_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
         for idx, it in enumerate(self.items, start=1):
             row = it["row"]
@@ -262,7 +327,49 @@ class BatchTitlesWorker(QThread):
             self.row_update.emit(row, tr("batchtitle.status.running"), "")
             self.log.emit(tr("batchtitle.progress.open", current=idx, total=total, code=code))
 
+            t0 = time.perf_counter()
+
             try:
+                # Try API first if enabled.
+                if self._update_title_via_api(code, title_lt, title_en, title_lv):
+                    ok += 1
+                    self.row_update.emit(row, tr("batchtitle.status.ok"), "")
+                    try:
+                        details = {
+                            "workflow": "batch_titles",
+                            "batch_id": batch_id,
+                            "set_lt": bool(title_lt),
+                            "set_en": bool(title_en),
+                            "set_lv": bool(title_lv),
+                            "mode": "api",
+                        }
+                        self.main.db.conn.execute(
+                            """
+                            INSERT INTO processing_history
+                            (brand, product_code, url_or_code, status, duration_seconds,
+                             failed_stage, batch_id, details_json, processed_at)
+                            VALUES (?, ?, ?, 'success', ?, ?, ?, ?, ?)
+                            """,
+                            (
+                                brand,
+                                code,
+                                None,
+                                float(time.perf_counter() - t0),
+                                None,
+                                batch_id,
+                                json.dumps(details, ensure_ascii=False),
+                                datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                            ),
+                        )
+                        self.main.db.conn.commit()
+                    except Exception:
+                        pass
+                    continue
+
+                # Fall back to browser automation.
+                if driver is None or nav is None or web is None:
+                    self.row_update.emit(row, tr("batchtitle.status.failed"), tr("batchtitle.no_session"))
+                    continue
                 self._ensure_products_page(driver)
                 nav.navigate_to_product(brand, code)
 
@@ -283,17 +390,444 @@ class BatchTitlesWorker(QThread):
 
                 ok += 1
                 self.row_update.emit(row, tr("batchtitle.status.ok"), "")
+
+                try:
+                    details = {
+                        "workflow": "batch_titles",
+                        "batch_id": batch_id,
+                        "set_lt": bool(title_lt),
+                        "set_en": bool(title_en),
+                        "set_lv": bool(title_lv),
+                        "mode": "sequential",
+                    }
+                    self.main.db.conn.execute(
+                        """
+                        INSERT INTO processing_history
+                        (brand, product_code, url_or_code, status, duration_seconds,
+                         failed_stage, batch_id, details_json, processed_at)
+                        VALUES (?, ?, ?, 'success', ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            brand,
+                            code,
+                            None,
+                            float(time.perf_counter() - t0),
+                            None,
+                            batch_id,
+                            json.dumps(details, ensure_ascii=False),
+                            datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        ),
+                    )
+                    self.main.db.conn.commit()
+                except Exception:
+                    pass
             except Exception as e:
                 self.row_update.emit(row, tr("batchtitle.status.failed"), str(e))
+
+                try:
+                    details = {
+                        "workflow": "batch_titles",
+                        "batch_id": batch_id,
+                        "set_lt": bool(title_lt),
+                        "set_en": bool(title_en),
+                        "set_lv": bool(title_lv),
+                        "mode": "sequential",
+                    }
+                    self.main.db.conn.execute(
+                        """
+                        INSERT INTO processing_history
+                        (brand, product_code, url_or_code, status, error_message, duration_seconds,
+                         failed_stage, batch_id, details_json, processed_at)
+                        VALUES (?, ?, ?, 'failed', ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            brand,
+                            code,
+                            None,
+                            str(e),
+                            float(time.perf_counter() - t0),
+                            "batch_titles",
+                            batch_id,
+                            json.dumps(details, ensure_ascii=False),
+                            datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        ),
+                    )
+                    self.main.db.conn.commit()
+                except Exception:
+                    pass
+
+            # Track timing and emit progress update
+            item_duration = time.perf_counter() - t0
+            self._processed_times.append(item_duration)
+
+            # Calculate ETA (skip first 2 items for more accurate average)
+            if len(self._processed_times) >= 2:
+                recent_times = self._processed_times[1:]  # Skip first item (often slower)
+                avg_time_per_item = sum(recent_times) / len(recent_times)
+                remaining_items = total - idx
+                eta_seconds = avg_time_per_item * remaining_items
+                speed = 1.0 / avg_time_per_item if avg_time_per_item > 0 else 0
+
+                self.progress_update.emit(idx, total, speed, eta_seconds)
 
         self.done.emit(ok, total)
 
 
-class BatchTitlesScreen(QWidget):
+class ParallelBatchTitlesWorker(QThread):
+    """Parallel batch titles update using browser session pool"""
+    row_update = Signal(int, str, str)  # rowIndex, status, error
+    log = Signal(str)
+    done = Signal(int, int)  # ok, total
+    session_status = Signal(dict)  # session pool statistics
+
+    def __init__(self, main_window, session_manager, items: list[dict]):
+        super().__init__()
+        self.main = main_window
+        self.session_manager = session_manager
+        self.items = items
+        self._stop = False
+        self._lock = __import__('threading').Lock()
+        self._ok_count = 0
+        self._work_index = 0
+
+        self._batch_id = f"batchtitle_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+        self._prestashop_api_base_url = (self.main.settings.get('prestashop_url', '') or '').strip()
+        self._prestashop_api_key = (self.main.settings.get('prestashop_api_key', '') or '').strip()
+        self._prestashop_api_enabled = bool(self.main.settings.get('prestashop_api_enabled', False))
+
+    def stop(self):
+        self._stop = True
+
+    def _update_title_via_api(self, code: str, title_lt: str, title_en: str, title_lv: str) -> bool:
+        try:
+            if not self._prestashop_api_enabled:
+                return False
+            if not (self._prestashop_api_base_url and self._prestashop_api_key):
+                return False
+
+            from Managers.PrestaShopAPI import PrestaShopAPI
+
+            api = PrestaShopAPI(self._prestashop_api_base_url, self._prestashop_api_key, logger=getattr(self.main, 'logger', None))
+            lang_map = api.get_language_id_map() or {}
+            en_id = str(lang_map.get('en') or '1')
+            lt_id = str(lang_map.get('lt') or '2')
+            lv_id = str(lang_map.get('lv') or '3')
+
+            payload = {}
+            if title_en and en_id:
+                payload[en_id] = title_en
+            if title_lt and lt_id:
+                payload[lt_id] = title_lt
+            if title_lv and lv_id:
+                payload[lv_id] = title_lv
+            if not payload:
+                return False
+
+            product_id = api.search_product_by_reference(code)
+            if not product_id:
+                return False
+
+            return bool(api.update_product_name(int(product_id), payload))
+        except Exception:
+            return False
+
+    def _ensure_products_page(self, driver) -> None:
+        try:
+            from selenium.webdriver.common.by import By
+            from selenium.webdriver.support import expected_conditions as EC
+            from selenium.webdriver.support.ui import WebDriverWait
+
+            products_link = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.ID, "subtab-AdminProducts"))
+            )
+            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", products_link)
+            products_link.click()
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "table.table"))
+            )
+        except Exception:
+            pass
+
+    def _set_title(self, driver, lang_code: str, title: str) -> None:
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.common.keys import Keys
+        from selenium.webdriver.support import expected_conditions as EC
+        from selenium.webdriver.support.ui import WebDriverWait
+
+        from Config.LanguageConfig import LANG_CODE_TO_PRESTASHOP_ID, SUPPORTED_LANGUAGES
+
+        lang_id_map = LANG_CODE_TO_PRESTASHOP_ID
+        if lang_code not in SUPPORTED_LANGUAGES:
+            raise Exception(f"Unsupported language: {lang_code}")
+
+        try:
+            switcher = LanguageSwitcher(driver, logger=getattr(self.main, "logger", None))
+            switcher.switchTo(lang_code)
+            time.sleep(0.4)
+        except Exception:
+            pass
+
+        el = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.ID, f"form_step1_name_{lang_id_map[lang_code]}"))
+        )
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", el)
+
+        try:
+            driver.execute_script(
+                """
+                const el = arguments[0];
+                const value = arguments[1];
+                el.focus();
+                el.value = value;
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+                """,
+                el,
+                title,
+            )
+            return
+        except Exception:
+            pass
+
+        try:
+            el.click()
+        except Exception:
+            driver.execute_script("arguments[0].click();", el)
+
+        try:
+            el.send_keys(Keys.CONTROL, "a")
+            el.send_keys(Keys.BACKSPACE)
+            el.send_keys(title)
+        except Exception:
+            try:
+                el.clear()
+            except Exception:
+                pass
+            el.send_keys(title)
+
+    def run(self):
+        """Execute parallel batch titles update using session pool"""
+        import threading
+
+        if not self.session_manager or not self.session_manager.is_ready():
+            tr = self.main.i18n.tr
+            for it in self.items:
+                self.row_update.emit(it["row"], tr("batchtitle.status.failed"), "Session pool not available")
+            self.done.emit(0, len(self.items))
+            return
+
+        total = len(self.items)
+        pool_size = self.session_manager.pool_size
+
+        self.log.emit(f"Starting parallel processing with {pool_size} browsers")
+
+        # Create worker threads
+        threads = []
+        for worker_id in range(pool_size):
+            thread = threading.Thread(target=self._worker_thread, args=(worker_id,))
+            thread.daemon = True
+            threads.append(thread)
+            thread.start()
+
+        # Wait for all threads to complete
+        for thread in threads:
+            thread.join()
+
+        self.log.emit(f"Completed. Success: {self._ok_count}/{total}")
+        self.done.emit(self._ok_count, total)
+
+    def _worker_thread(self, worker_id: int):
+        """Worker thread that processes items from the queue"""
+        tr = self.main.i18n.tr
+
+        import time as _time
+
+        while not self._stop:
+            # Get next work item
+            with self._lock:
+                if self._work_index >= len(self.items):
+                    break  # No more work
+                idx = self._work_index
+                self._work_index += 1
+
+            it = self.items[idx]
+            row = it["row"]
+            brand = it["brand"]
+            code = it["code"]
+            title_lt = it.get("title_lt") or ""
+            title_en = it.get("title_en") or ""
+            title_lv = it.get("title_lv") or ""
+
+            t0 = _time.perf_counter()
+
+            # Try API first if enabled.
+            if self._update_title_via_api(code, title_lt, title_en, title_lv):
+                self.row_update.emit(row, tr("batchtitle.status.ok"), "")
+                with self._lock:
+                    self._ok_count += 1
+                try:
+                    details = {
+                        "workflow": "batch_titles",
+                        "batch_id": self._batch_id,
+                        "set_lt": bool(title_lt),
+                        "set_en": bool(title_en),
+                        "set_lv": bool(title_lv),
+                        "mode": "api",
+                    }
+                    self.main.db.conn.execute(
+                        """
+                        INSERT INTO processing_history
+                        (brand, product_code, url_or_code, status, duration_seconds,
+                         failed_stage, batch_id, details_json, processed_at)
+                        VALUES (?, ?, ?, 'success', ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            brand,
+                            code,
+                            None,
+                            float(_time.perf_counter() - t0),
+                            None,
+                            self._batch_id,
+                            json.dumps(details, ensure_ascii=False),
+                        ),
+                    )
+                    self.main.db.conn.commit()
+                except Exception:
+                    pass
+                continue
+
+            # Acquire a browser session
+            session = self.session_manager.acquire_session(timeout=60.0)
+            if session is None:
+                self.row_update.emit(row, tr("batchtitle.status.failed"), "Could not acquire browser session")
+                continue
+
+            try:
+                # Update status
+                self.row_update.emit(row, tr("batchtitle.status.running"), "")
+                self.log.emit(tr("batchtitle.progress.open", current=idx+1, total=len(self.items), code=code))
+
+                # Emit session status
+                stats = self.session_manager.get_session_stats()
+                self.session_status.emit(stats)
+
+                # Navigate and update titles via Selenium
+                nav = ProductNavigationHandler(session.driver, logger=self.main.logger)
+                web = WebInteractionHandler(session.driver)
+
+                self._ensure_products_page(session.driver)
+                nav.navigate_to_product(brand, code)
+
+                # Update each provided language title
+                if title_lt:
+                    self.log.emit(tr("batchtitle.progress.fill", current=idx+1, total=len(self.items), code=code, lang="LT"))
+                    self._set_title(session.driver, "lt", title_lt)
+                if title_en:
+                    self.log.emit(tr("batchtitle.progress.fill", current=idx+1, total=len(self.items), code=code, lang="EN"))
+                    self._set_title(session.driver, "en", title_en)
+                if title_lv:
+                    self.log.emit(tr("batchtitle.progress.fill", current=idx+1, total=len(self.items), code=code, lang="LV"))
+                    self._set_title(session.driver, "lv", title_lv)
+
+                self.log.emit(tr("batchtitle.progress.save", current=idx+1, total=len(self.items), code=code))
+                web.save_information()
+                time.sleep(0.5)
+
+                self.row_update.emit(row, tr("batchtitle.status.ok"), "")
+                with self._lock:
+                    self._ok_count += 1
+
+                try:
+                    details = {
+                        "workflow": "batch_titles",
+                        "batch_id": self._batch_id,
+                        "set_lt": bool(title_lt),
+                        "set_en": bool(title_en),
+                        "set_lv": bool(title_lv),
+                        "mode": "parallel",
+                    }
+                    with self._lock:
+                        self.main.db.conn.execute(
+                            """
+                            INSERT INTO processing_history
+                            (brand, product_code, url_or_code, status, duration_seconds,
+                             failed_stage, batch_id, details_json, processed_at)
+                            VALUES (?, ?, ?, 'success', ?, ?, ?, ?, ?)
+                            """,
+                            (
+                                brand,
+                                code,
+                                None,
+                                float(_time.perf_counter() - t0),
+                                None,
+                                self._batch_id,
+                                json.dumps(details, ensure_ascii=False),
+                            ),
+                        )
+                        self.main.db.conn.commit()
+                except Exception:
+                    pass
+
+            except Exception as e:
+                error_msg = str(e)
+                self.row_update.emit(row, tr("batchtitle.status.failed"), error_msg)
+                session.error_count += 1
+
+                try:
+                    details = {
+                        "workflow": "batch_titles",
+                        "batch_id": self._batch_id,
+                        "set_lt": bool(title_lt),
+                        "set_en": bool(title_en),
+                        "set_lv": bool(title_lv),
+                        "mode": "parallel",
+                    }
+                    with self._lock:
+                        self.main.db.conn.execute(
+                            """
+                            INSERT INTO processing_history
+                            (brand, product_code, url_or_code, status, error_message, duration_seconds,
+                             failed_stage, batch_id, details_json, processed_at)
+                            VALUES (?, ?, ?, 'failed', ?, ?, ?, ?, ?, ?)
+                            """,
+                            (
+                                brand,
+                                code,
+                                None,
+                                error_msg,
+                                float(_time.perf_counter() - t0),
+                                "batch_titles",
+                                self._batch_id,
+                                json.dumps(details, ensure_ascii=False),
+                            ),
+                        )
+                        self.main.db.conn.commit()
+                except Exception:
+                    pass
+
+                # Reset session if too many errors
+                if session.error_count >= 3:
+                    self.log.emit(f"Resetting session {session.session_id} due to errors")
+                    self.session_manager.reset_session(session)
+
+            finally:
+                # Always release the session
+                self.session_manager.release_session(session)
+
+                # Update session status
+                stats = self.session_manager.get_session_stats()
+                self.session_status.emit(stats)
+
+
+class BatchTitlesScreen(ResponsiveWidget):
     def __init__(self, main_window, parent=None):
         super().__init__(parent)
         self.main = main_window
         self.worker: BatchTitlesWorker | None = None
+
+        # Multi-session browser pool
+        self.session_manager = None
 
         self.current_mode = "manual"
         self._base_table_rows = 5
@@ -303,12 +837,30 @@ class BatchTitlesScreen(QWidget):
             "TREK", "Rondo", "Octane", "Rascal", "Lee Cougan",
         ]
 
+        # Store references for responsive UI
+        self.scroll = None
+        self.content_widget = None
+
         self._init_ui()
+        self._setup_shortcuts()
         qconfig.themeChangedFinished.connect(self._on_theme_changed)
 
     def showEvent(self, event):
         super().showEvent(event)
         QTimer.singleShot(0, self._ensure_table_fills_viewport)
+
+    def hideEvent(self, event):
+        """Cleanup session manager when screen is hidden"""
+        super().hideEvent(event)
+
+        # Shutdown session manager if it exists
+        if self.session_manager is not None:
+            try:
+                self.session_manager.shutdown_all()
+                self.session_manager = None
+            except Exception as e:
+                if hasattr(self.main, 'logger'):
+                    self.main.logger.log("BatchTitlesScreen", f"Error shutting down session manager: {str(e)}")
 
     def eventFilter(self, obj, event):
         if obj is self.table.viewport() and event.type() == QEvent.Type.Resize:
@@ -326,12 +878,32 @@ class BatchTitlesScreen(QWidget):
         """)
 
     def _init_ui(self):
-        self._apply_theme()
-        self.setAutoFillBackground(True)
+        # Root layout (for ScrollArea container)
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
 
-        root = QVBoxLayout(self)
+        # Create ScrollArea
+        self.scroll = ScrollArea(self)
+        self.scroll.setWidgetResizable(True)
+        root_layout.addWidget(self.scroll)
+
+        # Content widget (inside ScrollArea)
+        self.content_widget = QWidget()
+        self.scroll.setWidget(self.content_widget)
+
+        # Main layout (on content widget)
+        root = QVBoxLayout(self.content_widget)
         root.setContentsMargins(*PAGE_MARGINS)
         root.setSpacing(PAGE_SPACING)
+
+        # Apply theme
+        apply_screen_theme(
+            self,
+            "BatchTitlesScreen",
+            scroll=self.scroll,
+            content=self.content_widget
+        )
 
         header = QHBoxLayout()
         title_container = QHBoxLayout()
@@ -448,6 +1020,10 @@ class BatchTitlesScreen(QWidget):
         # Smooth scrolling (avoid row/column snapping).
         self.table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.table.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+
+        # Enable horizontal scrolling for responsive design
+        self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+
         try:
             self.table.verticalScrollBar().setSingleStep(12)
             self.table.horizontalScrollBar().setSingleStep(12)
@@ -489,15 +1065,20 @@ class BatchTitlesScreen(QWidget):
         self.manual_pill.setText(tr("batch.mode.manual"))
         self.excel_pill.setText(tr("batch.mode.excel"))
         self.add_btn.setText(tr("batch.add_row"))
+        self.add_btn.setToolTip(tr("batch.add_row.tip"))
         self.clear_btn.setText(tr("batch.clear_all"))
+        self.clear_btn.setToolTip(tr("batch.clear_all.tip"))
         self.template_btn.setText(tr("batch.download_template"))
+        self.template_btn.setToolTip(tr("batch.download_template.tip"))
         self.browse_btn.setText(tr("batch.browse_excel"))
+        self.browse_btn.setToolTip(tr("batch.browse_excel.tip"))
         self.excel_file_label.setText(tr("batch.no_file"))
         # Keep the Start button area clean; don't show the "Ready" hint.
         self.status_label.setText("")
         self.status_label.setVisible(False)
         self.status_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
-        self.start_btn.setText(tr("batchtitle.start"))
+        self.start_btn.setText(f"{tr('batchtitle.start')} (Ctrl+Enter)")
+        self.start_btn.setToolTip(tr("batchtitle.start.tip"))
 
         self.table.setHorizontalHeaderLabels([
             tr("batch.table.brand"),
@@ -521,8 +1102,21 @@ class BatchTitlesScreen(QWidget):
             if brand_combo:
                 self._ensure_combo_placeholder_item(brand_combo, tr("batch.select_brand"), self.brands)
 
+    def _on_breakpoint_changed(self, breakpoint: str):
+        """Respond to breakpoint changes - adjust margins and spacing."""
+        margins = get_responsive_margins(breakpoint)
+        spacing = get_responsive_spacing(breakpoint)
+        if hasattr(self, 'content_widget') and self.content_widget and self.content_widget.layout():
+            self.content_widget.layout().setContentsMargins(*margins)
+            self.content_widget.layout().setSpacing(spacing)
+
     def _on_theme_changed(self):
-        self._apply_theme()
+        apply_screen_theme(
+            self,
+            "BatchTitlesScreen",
+            scroll=self.scroll,
+            content=self.content_widget
+        )
         self._update_table_theme()
 
     def _update_table_theme(self):
@@ -870,14 +1464,22 @@ class BatchTitlesScreen(QWidget):
         self._validate()
 
     def _clear_all(self):
-        self.table.setRowCount(self._base_table_rows)
-        for r in range(self.table.rowCount()):
-            self._setup_table_row(r)
-        self.excel_file_label.setText(self.main.i18n.tr("batch.no_file"))
-        if self.current_mode == "excel":
-            self.excel_drop.setVisible(True)
-            self.table.setVisible(False)
-        self._validate()
+        """Clear all rows with confirmation dialog"""
+        # Show confirmation dialog
+        w = MessageBox(
+            title=self.main.i18n.tr("common.confirm"),
+            content=self.main.i18n.tr("batch.clear.confirm"),
+            parent=self
+        )
+        if w.exec():
+            self.table.setRowCount(self._base_table_rows)
+            for r in range(self.table.rowCount()):
+                self._setup_table_row(r)
+            self.excel_file_label.setText(self.main.i18n.tr("batch.no_file"))
+            if self.current_mode == "excel":
+                self.excel_drop.setVisible(True)
+                self.table.setVisible(False)
+            self._validate()
 
     def _delete_row(self, row: int):
         if self.table.rowCount() <= 1:
@@ -888,6 +1490,41 @@ class BatchTitlesScreen(QWidget):
     def _get_widget_from_cell(self, row: int, col: int, widget_type):
         cell = self.table.cellWidget(row, col)
         return cell.findChild(widget_type) if cell else None
+
+    def _setup_shortcuts(self):
+        """Setup keyboard shortcuts for batch titles screen"""
+        # Ctrl+Enter to start upload
+        start_shortcut = QShortcut(QKeySequence("Ctrl+Return"), self)
+        start_shortcut.activated.connect(self._handle_start_shortcut)
+
+        # Escape to cancel/stop upload
+        cancel_shortcut = QShortcut(QKeySequence("Escape"), self)
+        cancel_shortcut.activated.connect(self._handle_cancel_shortcut)
+
+        # Ctrl+R to retry failed items
+        retry_shortcut = QShortcut(QKeySequence("Ctrl+R"), self)
+        retry_shortcut.activated.connect(self._handle_retry_shortcut)
+
+    def _handle_start_shortcut(self):
+        """Handle Ctrl+Enter shortcut to start upload"""
+        if self.start_btn.isEnabled():
+            self._start_upload()
+
+    def _handle_cancel_shortcut(self):
+        """Handle Escape shortcut to cancel/stop upload"""
+        if self.worker is not None and self.worker.isRunning():
+            self.worker.stop()
+            InfoBar.warning(
+                title=self.main.i18n.tr("batch.cancel.title"),
+                content=self.main.i18n.tr("batch.cancel.content"),
+                parent=self,
+                position=InfoBarPosition.TOP
+            )
+
+    def _handle_retry_shortcut(self):
+        """Handle Ctrl+R shortcut to retry failed items"""
+        if self.retry_btn.isVisible() and self.retry_btn.isEnabled():
+            self._retry_failed()
 
     def _setup_table_row(self, row: int):
         def wrap(widget: QWidget):
@@ -1110,6 +1747,48 @@ class BatchTitlesScreen(QWidget):
             if e:
                 e.setText("")
 
+        # Check if multi-session is enabled
+        multi_session_enabled = self.main.settings.get('multi_session_enabled', False)
+        browser_count = self.main.settings.get('browser_count', 2)
+
+        # Initialize session manager if multi-session enabled
+        if multi_session_enabled:
+            if self.session_manager is None or not self.session_manager.is_ready():
+                from Managers.BrowserSessionManager import BrowserSessionManager
+
+                # Get browser type from settings
+                browser_type = self.main.settings.get('browser_choice', 'Chrome')
+
+                InfoBar.info(
+                    title=tr("common.info"),
+                    content=f"Initializing {browser_count} browser instances...",
+                    orient=Qt.Orientation.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP,
+                    duration=3000,
+                    parent=self
+                )
+
+                # Create and initialize session pool
+                self.session_manager = BrowserSessionManager(
+                    browser_type=browser_type,
+                    pool_size=browser_count,
+                    logger=self.main.logger
+                )
+
+                if not self.session_manager.initialize_pool():
+                    InfoBar.error(
+                        title=tr("common.error"),
+                        content="Failed to initialize browser pool. Falling back to single-session mode.",
+                        orient=Qt.Orientation.Horizontal,
+                        isClosable=True,
+                        position=InfoBarPosition.TOP,
+                        duration=5000,
+                        parent=self
+                    )
+                    self.session_manager = None
+                    multi_session_enabled = False
+
         InfoBar.info(
             title=tr("batchtitle.run.started.title"),
             content=tr("batchtitle.run.started.content", count=len(items)),
@@ -1121,16 +1800,60 @@ class BatchTitlesScreen(QWidget):
         )
 
         self._set_busy(True)
-        self.worker = BatchTitlesWorker(self.main, items)
-        self.worker.row_update.connect(self._on_row_update)
-        self.worker.log.connect(self._on_log)
-        self.worker.done.connect(self._on_done)
-        self.worker.start()
+
+        # Choose worker based on multi-session setting
+        if multi_session_enabled and self.session_manager and self.session_manager.is_ready():
+            # Use parallel worker with session pool
+            self.worker = ParallelBatchTitlesWorker(self.main, self.session_manager, items)
+            self.worker.row_update.connect(self._on_row_update)
+            self.worker.log.connect(self._on_log)
+            self.worker.done.connect(self._on_done)
+            self.worker.session_status.connect(self._on_session_status_update)
+            self.worker.start()
+        else:
+            # Use single-session worker
+            self.worker = BatchTitlesWorker(self.main, items)
+            self.worker.row_update.connect(self._on_row_update)
+            self.worker.log.connect(self._on_log)
+            self.worker.progress_update.connect(self._on_progress_update)
+            self.worker.done.connect(self._on_done)
+            self.worker.start()
+
+    def _on_progress_update(self, current: int, total: int, speed: float, eta_seconds: float):
+        """Handle progress updates with ETA from worker thread."""
+        percentage = (current / total * 100) if total > 0 else 0
+
+        # Format ETA
+        if eta_seconds < 60:
+            eta_text = f"{int(eta_seconds)}s"
+        elif eta_seconds < 3600:
+            minutes = int(eta_seconds / 60)
+            seconds = int(eta_seconds % 60)
+            eta_text = f"{minutes}m {seconds}s"
+        else:
+            hours = int(eta_seconds / 3600)
+            minutes = int((eta_seconds % 3600) / 60)
+            eta_text = f"{hours}h {minutes}m"
+
+        # Format speed (items per minute)
+        items_per_min = speed * 60
+
+        # Update status label with progress information
+        message = f"Processing ({current}/{total}) {percentage:.0f}% - ETA: {eta_text} | {items_per_min:.1f} items/min"
+        self.status_label.setText(message)
+        self.status_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self.status_label.setVisible(True)
 
     def _on_log(self, message: str):
         self.status_label.setText(message)
         self.status_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
         self.status_label.setVisible(bool((message or "").strip()))
+
+    def _on_session_status_update(self, stats: dict):
+        """Handle session status updates from parallel worker (optional)"""
+        # BatchTitlesScreen doesn't have a session status label yet
+        # This is just for future extensibility
+        pass
 
     def _on_row_update(self, row: int, status_text: str, error_text: str):
         status = self._get_widget_from_cell(row, 5, BodyLabel)
@@ -1169,6 +1892,48 @@ class BatchTitlesScreen(QWidget):
             duration=6000,
             parent=self,
         )
+
+        # Windows notification
+        self._show_windows_notification(ok, total)
+
+    def _show_windows_notification(self, ok: int, total: int):
+        """Show Windows desktop notification for batch completion."""
+        # NOTE: win10toast relies on pywin32 WNDPROC callbacks that are known to
+        # break on newer Python versions (e.g. 3.12+), causing hard crashes like:
+        # "WNDPROC return value cannot be converted to LRESULT".
+        try:
+            import sys
+            if sys.version_info >= (3, 12):
+                return
+        except Exception:
+            return
+
+        try:
+            from win10toast import ToastNotifier
+            toaster = ToastNotifier()
+
+            failed = total - ok
+            if failed > 0:
+                title = "Batch Titles Update Completed with Errors"
+                message = f"Success: {ok}/{total}\nFailed: {failed}"
+            else:
+                title = "Batch Titles Update Completed Successfully"
+                message = f"All {total} titles updated successfully"
+
+            # Show notification (non-blocking, 10 second duration)
+            toaster.show_toast(
+                title=title,
+                msg=message,
+                duration=10,
+                threaded=True,
+                icon_path=None  # Uses default Windows icon
+            )
+        except ImportError:
+            # win10toast not installed, silently skip
+            pass
+        except Exception:
+            # Any other error, silently skip
+            pass
 
     def _ensure_table_fills_viewport(self):
         if not self.table.isVisible() or self.excel_drop.isVisible():

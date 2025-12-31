@@ -1,15 +1,24 @@
+# Standard library
+import os
+import sys
 import time
+import traceback
 from datetime import datetime
+from typing import List, Dict, Tuple, Optional
+
+# Local
+from uploaderFactory import getUploaderClass
 
 class BatchProcessor:
     """
     Processes multiple bikes sequentially with progress tracking
     """
-    
-    def __init__(self, driver, db_manager, logger=None):
+
+    def __init__(self, driver, db_manager, logger=None, prestashop_api=None):
         self.driver = driver
         self.db = db_manager
         self.logger = logger
+        self.prestashop_api = prestashop_api  # Optional PrestaShop API client
         self.queue = []  # List of {brand, code, url}
         self.current_index = 0
         self.results = []  # List of {code, status, error}
@@ -19,6 +28,18 @@ class BatchProcessor:
     
     def _log(self, message, **context):
         if self.logger:
+            self.logger.log("BatchProcessor", message, **context)
+
+    def _log_error(self, message, exception=None, **context):
+        if not self.logger:
+            return
+        if hasattr(self.logger, "error"):
+            self.logger.error("BatchProcessor", message, exception=exception, **context)
+        else:
+            # Fallback if a custom logger is injected.
+            if exception is not None:
+                context = dict(context)
+                context.setdefault("exception", f"{type(exception).__name__}: {exception}")
             self.logger.log("BatchProcessor", message, **context)
     
     # Utilities/BatchProcessor.py
@@ -95,12 +116,13 @@ class BatchProcessor:
         """Get total items in queue"""
         return len(self.queue)
     
-    def get_progress(self):
+    def get_progress(self) -> Tuple[int, int, float]:
         """
         Get current progress
         Returns: (current, total, percentage)
         """
         total = len(self.queue)
+        # `current_index` is treated as the number of items completed.
         current = self.current_index
         percentage = (current / total * 100) if total > 0 else 0
         return current, total, percentage
@@ -124,7 +146,8 @@ class BatchProcessor:
             raise ValueError("Queue is empty")
 
         self.batch_id = f"batch_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        self._log("Starting batch", batch_id=self.batch_id, items=len(self.queue))
+        total = len(self.queue)
+        self._log("Starting batch", batch_id=self.batch_id, items=total)
 
         self.is_processing = True
         self.should_stop = False
@@ -136,16 +159,18 @@ class BatchProcessor:
                 self._log("Batch processing stopped by user", at_index=idx)
                 break
 
+            # Progress semantics: current_index == completed count.
             self.current_index = idx
             self._log(
                 "Processing item",
                 index=idx + 1,
-                total=len(self.queue),
+                total=total,
                 brand=item['brand'],
                 code=item['product_code']
             )
 
             try:
+                started = time.perf_counter()
                 uploader = uploader_factory(
                     self.driver,
                     item['brand'],
@@ -158,23 +183,48 @@ class BatchProcessor:
 
                 uploader.run()
 
+                duration_seconds = time.perf_counter() - started
+
+                self.current_index = idx + 1
+
                 self.results.append({
                     'code': item['product_code'],
                     'brand': item['brand'],
                     'status': 'success',
-                    'error': None
+                    'error': None,
+                    'duration_seconds': duration_seconds,
+                    'traceback': None,
                 })
                 self._log("Item succeeded", code=item['product_code'])
 
             except Exception as e:
+                duration_seconds = None
+                try:
+                    duration_seconds = time.perf_counter() - started
+                except Exception:
+                    pass
+
                 error_msg = str(e)
+                tb = None
+                try:
+                    tb = traceback.format_exc()
+                except Exception:
+                    pass
+
                 self.results.append({
                     'code': item['product_code'],
                     'brand': item['brand'],
                     'status': 'failed',
-                    'error': error_msg
+                    'error': error_msg,
+                    'duration_seconds': duration_seconds,
+                    'traceback': tb,
                 })
-                self._log("Item failed", code=item['product_code'], error=error_msg)
+                self._log_error(
+                    "Item failed",
+                    exception=e,
+                    code=item['product_code'],
+                    error=error_msg,
+                )
 
         self.current_index = len(self.queue)
         self.is_processing = False
@@ -221,15 +271,18 @@ class BatchProcessor:
             }
             self.add_to_queue(it.get("brand"), it.get("code"), it.get("url"), brand_options=brand_options)
 
-        from uploaderFactory import getUploaderClass
+        # Add project root to path if not already there (for uploaderFactory import)
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if project_root not in sys.path:
+            sys.path.insert(0, project_root)
 
         def uploader_factory(driver, brand, code, url_or_code, db, batch_id, brand_options):
             uploader_class = getUploaderClass(brand)
             return uploader_class(
-                driver,
-                brand,
-                ultraBikeCode=code,
-                bicycleUrlOrCode=url_or_code,
+                driver=driver,
+                brand_name=brand,
+                product_code=code,
+                url_or_code=url_or_code,
                 db_manager=db,
                 brand_options=brand_options,
                 logger=self.logger,
@@ -239,10 +292,10 @@ class BatchProcessor:
 
         return self.start_batch(uploader_factory)
     
-    def get_results(self):
+    def get_results(self) -> List[Dict[str, any]]:
         """Get current results"""
         return self.results
     
-    def get_failed_items(self):
+    def get_failed_items(self) -> List[Dict[str, any]]:
         """Get list of failed items for retry/export"""
         return [r for r in self.results if r['status'] == 'failed']

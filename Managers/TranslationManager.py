@@ -1,14 +1,17 @@
+# Standard library
 import inspect
 from pathlib import Path
-from Utilities.TranslationHandler import TranslationHandler
-from Utilities.FileHandler import FileHandler
+
+# Local
+from Utilities.AppPaths import get_data_dir
 from Utilities.ErrorManager import ErrorManager
+from Utilities.FileHandler import FileHandler
+from Utilities.TranslationHandler import TranslationHandler
 
 class TranslationManager:
     def __init__(self, brandName, db_manager=None, logger=None):
         self.brandName = brandName
         self.logger = logger
-        from Utilities.AppPaths import get_data_dir
         base = get_data_dir()
         self.ltPath = str(base / f"pabaigta{brandName}LT.txt")
         self.enPath = str(base / f"pabaigta{brandName}ENG.txt")
@@ -24,7 +27,6 @@ class TranslationManager:
         if self.logger:
             self.logger.error("TranslationManager", message, exception=exception, **context)
         # Show error in GUI
-        from Utilities.ErrorManager import ErrorManager
         if exception:
             ErrorManager.show_error("UNEXPECTED_ERROR", error=str(exception))
         else:

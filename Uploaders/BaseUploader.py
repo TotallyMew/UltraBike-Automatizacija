@@ -1,18 +1,22 @@
-﻿from abc import ABC, abstractmethod
+﻿# Standard library
+import json
 import time
+from abc import ABC, abstractmethod
 from datetime import datetime
+
+# Local application imports
 from Database.DatabaseManager import DatabaseManager
 from Database.SessionManager import SessionManager
 from Database.SettingsManager import SettingsManager
-from Managers.translationManager import TranslationManager
-from Managers.imageUploader import ImageUploader
-from Managers.FeatureUploader.featureUploader import FeatureUploader
 from Managers.DescriptionManager import DescriptionManager
-from Utilities.ProductNavigationHandler import ProductNavigationHandler
-from Utilities.URLHandler import URLHandler
-from Utilities.TranslationHandler import TranslationHandler
-from Utilities.WebIntercationHandler import WebInteractionHandler
+from Managers.FeatureUploader.FeatureUploader import FeatureUploader
+from Managers.ImageUploader import ImageUploader
+from Managers.TranslationManager import TranslationManager
 from Utilities.ErrorManager import ErrorManager
+from Utilities.ProductNavigationHandler import ProductNavigationHandler
+from Utilities.TranslationHandler import TranslationHandler
+from Utilities.URLHandler import URLHandler
+from Utilities.WebIntercationHandler import WebInteractionHandler
 
 class ProductUploader(ABC):
     def set_retry_callback(self, callback):
@@ -21,131 +25,48 @@ class ProductUploader(ABC):
             self.navigation_manager.set_retry_callback(callback)
         self._retry_callback = callback
 
-    def __init__(self, *args, **kwargs):
-        """Flexible initializer.
+    def __init__(self, driver, brand_name, product_code=None, url_or_code=None,
+                 db_manager=None, brand_options=None, logger=None, batch_id=None,
+                 master_password=None, settings_manager=None):
+        """Initialize ProductUploader with snake_case parameters.
 
-        Legacy positional signature is still accepted for compatibility:
-            (driver, brandName, ultraBikeCode=None, bicycleUrlOrCode=None, ...)
-
-        Preferred GUI style uses keyword args:
-            driver=..., db=..., product_code=..., url_or_code=..., ...
+        Args:
+            driver: Selenium WebDriver instance
+            brand_name: Brand name (e.g., "TREK", "Pinarello")
+            product_code: UltraBike product code (optional if url_or_code provided)
+            url_or_code: Brand-specific URL or code (optional if product_code provided)
+            db_manager: Database manager instance (created if not provided)
+            brand_options: Dict of brand-specific options (description_name, frameset_only, etc.)
+            logger: Logger instance
+            batch_id: Batch ID for batch processing
+            master_password: Master password for decrypting credentials
+            settings_manager: Settings manager instance (created if not provided)
         """
+        # Validate required parameters
+        if product_code is None and url_or_code is None:
+            raise ValueError("Product identifier missing: provide 'product_code' or 'url_or_code'")
 
-        # Detect legacy positional usage
-        driver = None
-        brandName = None
-        db_manager = None
-        brand_options = None
-        logger = None
-        batch_id = None
-
-        if len(args) >= 2:
-            # Legacy positional form
-            driver = args[0]
-            brandName = args[1]
-            master_password = kwargs.pop('master_password', None)
-            ultraBikeCode = kwargs.pop('ultraBikeCode', None)
-            bicycleUrlOrCode = kwargs.pop('bicycleUrlOrCode', None)
-            db_manager = kwargs.pop('db_manager', kwargs.pop('db', None))
-            # Allow legacy callers to still pass GUI-style options.
-            description_name = kwargs.pop('description_name', kwargs.pop('descriptionName', kwargs.pop('description', None)))
-            include_disclaimer = kwargs.pop('include_disclaimer', kwargs.pop('includeDisclaimer', False))
-            include_order_note = kwargs.pop('include_order_note', kwargs.pop('includeOrderNote', False))
-            is_frameset = kwargs.pop('is_frameset', kwargs.pop('isFrameset', None))
-
-            brand_options = kwargs.pop('brand_options', {}) or {}
-            if description_name:
-                brand_options.setdefault('description_name', description_name)
-            if include_disclaimer:
-                brand_options.setdefault('append_disclaimer', include_disclaimer)
-            if include_order_note:
-                brand_options.setdefault('append_order_note', include_order_note)
-            if is_frameset is not None:
-                brand_options.setdefault('frameset_only', is_frameset)
-            logger = kwargs.pop('logger', None)
-            batch_id = kwargs.pop('batch_id', None)
-        else:
-            # GUI-style kwargs
-            db_manager = kwargs.pop('db', kwargs.pop('db_manager', None))
-            logger = kwargs.pop('logger', None)
-            settings_manager = kwargs.pop('settings_manager', None)
-
-            # Optional master password for decrypting credentials during this run
-            master_password = kwargs.pop('master_password', None)
-
-            # Product identifiers
-            ultraBikeCode = kwargs.pop('product_code', kwargs.pop('productCode', kwargs.pop('ultraBikeCode', None)))
-            bicycleUrlOrCode = kwargs.pop('url_or_code', kwargs.pop('url', kwargs.pop('bicycleUrlOrCode', None)))
-
-            # Description / options
-            description_name = kwargs.pop('description_name', kwargs.pop('descriptionName', kwargs.pop('description', None)))
-            include_disclaimer = kwargs.pop('include_disclaimer', kwargs.pop('includeDisclaimer', False))
-            include_order_note = kwargs.pop('include_order_note', kwargs.pop('includeOrderNote', False))
-            is_frameset = kwargs.pop('is_frameset', kwargs.pop('isFrameset', None))
-
-            # Build brand options dict
-            brand_options = kwargs.pop('brand_options', {}) or {}
-            if description_name:
-                brand_options.setdefault('description_name', description_name)
-            if include_disclaimer:
-                brand_options.setdefault('append_disclaimer', include_disclaimer)
-            if include_order_note:
-                brand_options.setdefault('append_order_note', include_order_note)
-            if is_frameset is not None:
-                brand_options.setdefault('frameset_only', is_frameset)
-
-            # Determine brandName from uploader class name if not provided
-            brandName = kwargs.pop('brandName', None) or self.__class__.__name__
-
-            # If GUI provided a settings_manager or db_manager, use them; else create db manager
-            if db_manager is None and settings_manager is not None:
-                try:
-                    db_manager = settings_manager.db
-                except Exception as e:
-                    ErrorManager.show_error("UNEXPECTED_ERROR", error=str(e))
-                    db_manager = None
-
-            # If driver not provided, try to create one using BrowserManager and settings
-            driver = kwargs.pop('driver', None)
-            if driver is None:
-                try:
-                    from Config.BrowserConfig.BrowserManager import BrowserManager
-                    # Use provided settings_manager or create temporary SettingsManager
-                    if settings_manager is None:
-                        settings_manager = SettingsManager(db_manager or DatabaseManager())
-                    browser_choice = settings_manager.get_browser_choice()
-                    bm = BrowserManager()
-                    # Provide a retry_callback that returns False to avoid CLI prompts
-                    driver = bm.setup_browser(browser_choice, retry_callback=lambda: False)
-                except Exception as e:
-                    ErrorManager.show_error("UNEXPECTED_ERROR", error=str(e))
-                    driver = None
-
-        # Assign common attributes
+        # Assign core attributes
         self.driver = driver
         self.logger = logger
-        self.brandName = brandName
+        self.brandName = brand_name
         self.brand_options = brand_options or {}
         self.batch_id = batch_id
+        self.master_password = master_password
 
-        # Optional: used for decrypting external credentials (Basso / Lee Cougan)
-        self.master_password = master_password if 'master_password' in locals() else None
+        # Product identifiers
+        self.ultraBikeCode = product_code
+        self.bicycleUrlOrCode = url_or_code
 
-        # Debug: brand_options can be logged if needed
-
+        # Counters
         self.features_uploaded = 0
         self.images_uploaded = 0
 
+        # Handlers
         self.navigation_manager = ProductNavigationHandler(self.driver, self.logger)
         self.url_handler = URLHandler()
         self.web_handler = WebInteractionHandler(self.driver)
         self.translation_handler = TranslationHandler()
-
-        if ultraBikeCode is None and bicycleUrlOrCode is None:
-            raise ValueError("Product identifier missing: provide 'product_code' or 'url_or_code' when using GUI.")
-
-        self.ultraBikeCode = ultraBikeCode
-        self.bicycleUrlOrCode = bicycleUrlOrCode
 
         # Database setup
         if db_manager:
@@ -161,6 +82,18 @@ class ProductUploader(ABC):
             ErrorManager.show_error("UNEXPECTED_ERROR", error=str(e))
             self.session_manager = SessionManager(self.db)
             self.settings_manager = SettingsManager(self.db)
+
+        # Optional PrestaShop API client (configured via Settings)
+        self.prestashop_api = None
+        try:
+            if bool(self.settings_manager.get('prestashop_api_enabled', False)):
+                base_url = (self.settings_manager.get('prestashop_url', '') or '').strip()
+                api_key = (self.settings_manager.get('prestashop_api_key', '') or '').strip()
+                if base_url and api_key:
+                    from Managers.PrestaShopAPI import PrestaShopAPI
+                    self.prestashop_api = PrestaShopAPI(base_url, api_key, logger=self.logger)
+        except Exception as e:
+            self._log_error("Failed to initialize PrestaShop API client", exception=e)
 
         self.translationManager = TranslationManager(self.brandName, self.db, self.logger)
         self.imageUploader = ImageUploader(self.driver, self.brandName, self.logger, settings_manager=self.settings_manager)
@@ -245,19 +178,36 @@ class ProductUploader(ABC):
         """Record successful upload to database"""
         cursor = self.db.conn.cursor()
         details_json = getattr(self, "_details_json", None)
+        failed_stage = getattr(self, "failed_stage", None)
+
+        # Enrich details_json with workflow metadata (safe best-effort)
+        workflow = "batch_upload" if self.batch_id else "regular_upload"
+        try:
+            details = {}
+            if details_json:
+                details = json.loads(details_json) or {}
+            details.setdefault("workflow", workflow)
+            if self.batch_id:
+                details.setdefault("batch_id", self.batch_id)
+            details_json = json.dumps(details, ensure_ascii=False)
+        except Exception:
+            pass
         cursor.execute("""
-            INSERT INTO processing_history 
-            (brand, product_code, url_or_code, status, duration_seconds, 
-             features_uploaded, images_uploaded, details_json, processed_at)
-            VALUES (?, ?, ?, 'success', ?, ?, ?, ?, datetime('now'))
+            INSERT INTO processing_history
+            (brand, product_code, url_or_code, status, duration_seconds,
+             features_uploaded, images_uploaded, failed_stage, batch_id, details_json, processed_at)
+            VALUES (?, ?, ?, 'success', ?, ?, ?, ?, ?, ?, ?)
         """, (
-            self.brandName, 
-            self.ultraBikeCode, 
-            self.bicycleUrlOrCode, 
+            self.brandName,
+            self.ultraBikeCode,
+            self.bicycleUrlOrCode,
             duration,
             self.features_uploaded,
             self.images_uploaded,
-            details_json
+            failed_stage,
+            self.batch_id,
+            details_json,
+            datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         ))
         self.db.conn.commit()
         self._log("Success recorded in database")
@@ -266,18 +216,34 @@ class ProductUploader(ABC):
         """Record failed upload to database"""
         cursor = self.db.conn.cursor()
         details_json = getattr(self, "_details_json", None)
+        failed_stage = getattr(self, "failed_stage", None)
+
+        workflow = "batch_upload" if self.batch_id else "regular_upload"
+        try:
+            details = {}
+            if details_json:
+                details = json.loads(details_json) or {}
+            details.setdefault("workflow", workflow)
+            if self.batch_id:
+                details.setdefault("batch_id", self.batch_id)
+            details_json = json.dumps(details, ensure_ascii=False)
+        except Exception:
+            pass
         cursor.execute("""
-            INSERT INTO processing_history 
-            (brand, product_code, url_or_code, status, error_message, 
-             duration_seconds, details_json, processed_at)
-            VALUES (?, ?, ?, 'failed', ?, ?, ?, datetime('now'))
+            INSERT INTO processing_history
+            (brand, product_code, url_or_code, status, error_message,
+             duration_seconds, failed_stage, batch_id, details_json, processed_at)
+            VALUES (?, ?, ?, 'failed', ?, ?, ?, ?, ?, ?)
         """, (
-            self.brandName, 
-            self.ultraBikeCode, 
-            self.bicycleUrlOrCode, 
+            self.brandName,
+            self.ultraBikeCode,
+            self.bicycleUrlOrCode,
             error_message,
             duration,
-            details_json
+            failed_stage,
+            self.batch_id,
+            details_json,
+            datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         ))
         self.db.conn.commit()
         self._log("Failure recorded in database")
@@ -295,19 +261,19 @@ class ProductUploader(ABC):
         if existing:
             # Update existing
             cursor.execute("""
-                UPDATE recent_products 
-                SET last_used = datetime('now'), 
+                UPDATE recent_products
+                SET last_used = ?,
                     use_count = ?,
                     url_or_code = ?
                 WHERE id = ?
-            """, (existing['use_count'] + 1, self.bicycleUrlOrCode, existing['id']))
+            """, (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), existing['use_count'] + 1, self.bicycleUrlOrCode, existing['id']))
         else:
             # Insert new
             cursor.execute("""
-                INSERT INTO recent_products 
+                INSERT INTO recent_products
                 (brand, product_code, url_or_code, last_used, use_count)
-                VALUES (?, ?, ?, datetime('now'), 1)
-            """, (self.brandName, self.ultraBikeCode, self.bicycleUrlOrCode))
+                VALUES (?, ?, ?, ?, 1)
+            """, (self.brandName, self.ultraBikeCode, self.bicycleUrlOrCode, datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
 
         self.db.conn.commit()
 
@@ -427,6 +393,67 @@ class ProductUploader(ABC):
         # Upload description with optional disclaimer
         # Debug: Attempting to upload description: {self.description_name}, append_disclaimer={append_disclaimer}
         self._log("Uploading description", name=self.description_name, append_disclaimer=append_disclaimer)
+
+        # Prefer API for description updates when enabled; fall back to browser automation on failure.
+        if self.prestashop_api is not None:
+            try:
+                desc = self.description_manager.load_description(self.description_name)
+                if desc:
+                    lt_html = desc.get('description_lt', '') or ''
+                    en_html = desc.get('description_en', '') or ''
+                    lv_html = desc.get('description_lv', '') or ''
+                    if append_disclaimer:
+                        lt_html, en_html, lv_html = self.description_manager.append_disclaimer_if_missing(
+                            lt_html, en_html, lv_html
+                        )
+
+                    lang_map = self.prestashop_api.get_language_id_map() or {}
+                    en_id = str(lang_map.get('en') or '1')
+                    lt_id = str(lang_map.get('lt') or '2')
+                    lv_id = str(lang_map.get('lv') or '3')
+
+                    payload = {}
+                    if lt_html and lt_id:
+                        payload[lt_id] = lt_html
+                    if en_html and en_id:
+                        payload[en_id] = en_html
+                    if lv_html and lv_id:
+                        payload[lv_id] = lv_html
+
+                    if payload:
+                        product_id = self.prestashop_api.search_product_by_reference(self.ultraBikeCode)
+                        if product_id:
+                            self._log("Updating description via API", code=self.ultraBikeCode)
+                            ok_api = self.prestashop_api.update_product_description(int(product_id), payload)
+                            if ok_api:
+                                self._log("Description updated via API", code=self.ultraBikeCode)
+                                ErrorManager.show_success(f"Aprašymas '{self.description_name}' įkeltas per API!")
+
+                                # Order note still uses browser automation (short description), best-effort.
+                                if append_order_note:
+                                    try:
+                                        self._log("Appending order note to short description", code=self.ultraBikeCode)
+                                        ok_note = self.description_manager.append_order_note_to_short_description(
+                                            self.driver,
+                                            product_code=self.ultraBikeCode,
+                                        )
+                                        if ok_note:
+                                            ErrorManager.show_success("Užsakymo pastaba įkelta!")
+                                        else:
+                                            ErrorManager.show_warning("Nepavyko įkelti užsakymo pastabos")
+                                    except Exception as e:
+                                        self._log_error("Order note upload failed", exception=e)
+                                        ErrorManager.show_warning(f"Užsakymo pastabos įkėlimo klaida: {str(e)}")
+                                return
+                            else:
+                                extra = (self.prestashop_api.last_error_summary() or '').strip()
+                                self._log_error("API description update failed; falling back to browser", exception=None, error=extra)
+                        else:
+                            extra = (self.prestashop_api.last_error_summary() or '').strip()
+                            self._log_error("Product not found via API; falling back to browser", exception=None, error=extra)
+            except Exception as e:
+                self._log_error("API description update crashed; falling back to browser", exception=e)
+
         try:
             success = self.description_manager.upload_to_prestashop(
                 self.driver,
@@ -481,6 +508,30 @@ class ProductUploader(ABC):
             self.features_uploaded = sum(len(table) for table in ltData)
             
             self._log("Feature data loaded", lt_count=len(ltData), en_count=len(enData))
+
+            # Prefer API for feature associations when enabled; fall back to browser automation on failure.
+            if self.prestashop_api is not None:
+                try:
+                    from Managers.PrestaShopFeatureSync import apply_features_from_tables
+
+                    self._log("Uploading features via API", code=self.ultraBikeCode)
+                    result = apply_features_from_tables(
+                        self.prestashop_api,
+                        product_reference=self.ultraBikeCode,
+                        lt_tables=ltData,
+                        en_tables=enData,
+                        lv_tables=lvData,
+                        logger=self.logger,
+                    )
+                    if result and result.get('ok'):
+                        ErrorManager.show_success("Features įkelti per API!")
+                        return
+
+                    msg = (result or {}).get('message') or (self.prestashop_api.last_error_summary() or '')
+                    self._log_error("API feature upload failed; falling back to browser", exception=None, error=str(msg))
+                except Exception as e:
+                    self._log_error("API feature upload crashed; falling back to browser", exception=e)
+
             skipped = self.featureUploader.uploadAllLanguages(ltData, enData, lvData)
             try:
                 if skipped:

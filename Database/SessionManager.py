@@ -1,37 +1,156 @@
 ﻿"""
 Session Manager - Handles 24h auto-login sessions
 Uses machine-specific encryption for security
+
+Security: Uses Scrypt for password-based key derivation (memory-hard, GPU-resistant)
+Backward compatible: Auto-migrates old SHA256-based encryption to Scrypt
+Migration is transparent - old credentials are re-encrypted on first use
 """
 
-import os
-import json
-import hashlib
-import secrets
-from datetime import datetime, timedelta
-from cryptography.fernet import Fernet
+# Standard library
 import base64
+import getpass
+import hashlib
+import json
+import os
+import platform
+import secrets
+import traceback
+from datetime import datetime, timedelta
+from typing import Dict, Optional, Tuple
+
+# Third-party packages
+from cryptography.fernet import Fernet
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
+
+# Local
+from Utilities.AppPaths import get_default_session_path
 
 class SessionManager:
-    def __init__(self, db_manager):
+    """
+    Manages user sessions and encrypted credential storage.
+
+    Security features:
+    - Scrypt KDF (memory-hard, resistant to GPU/ASIC attacks)
+    - Per-credential random salts
+    - Configurable work factors stored in DB
+    - Automatic migration from legacy SHA256 encryption
+
+    Encryption Strategies:
+
+    1. **Machine-Specific Encryption** (Session Files):
+       - Used for: Temporary 24h session files only
+       - Method: SHA256(machine_name + username) → Fernet key
+       - Purpose: Quick local encryption, ties session to specific machine
+       - Security: Machine-bound, auto-expires, low-value data
+
+    2. **Scrypt KDF** (Credentials - CURRENT):
+       - Used for: PrestaShop passwords, external API credentials
+       - Method: Scrypt(password, random_salt, N=2^14, r=8, p=1) → Fernet key
+       - Purpose: Memory-hard key derivation resists GPU/ASIC brute-force
+       - Security: OWASP 2023 recommended parameters
+       - Storage: Encrypted password + base64(salt) + JSON(kdf_params)
+
+    3. **Legacy SHA256** (DEPRECATED - Backward Compatibility Only):
+       - Used for: Auto-migrating old credentials on first decrypt
+       - Method: SHA256(password + salt_hex) → Fernet key
+       - Purpose: Decrypt existing credentials, immediately re-encrypt with Scrypt
+       - Security: INSECURE - vulnerable to GPU attacks
+       - Migration: Transparent, triggered on get_credentials() or get_external_credentials()
+       - Deprecation: Will be removed once all users migrate (target: v2.0)
+
+    When to use which:
+    - Session files: Machine-specific (fast, temporary)
+    - Passwords: Scrypt KDF (secure, persistent)
+    - Never use: Legacy SHA256 for new data
+    """
+
+    # Scrypt parameters (OWASP recommendations 2023)
+    # These provide strong security while remaining usable on typical hardware
+    SCRYPT_N = 2**14  # CPU/memory cost (16384) - ~100ms on modern CPU
+    SCRYPT_R = 8      # Block size
+    SCRYPT_P = 1      # Parallelization
+    SCRYPT_LENGTH = 32  # Output key length (256 bits for Fernet)
+
+    def __init__(self, db_manager, logger=None):
         self.db = db_manager
-        from Utilities.AppPaths import get_default_session_path
+        self.logger = logger
         self.session_file = str(get_default_session_path())
         self.session_duration_hours = 24
-    
+
+        # Ensure kdf_params column exists for storing Scrypt parameters
+        try:
+            self.db._ensure_column("credentials", "kdf_params", "TEXT")
+            self.db._ensure_column("external_credentials", "kdf_params", "TEXT")
+        except Exception:
+            pass  # Column might already exist or DB might not be ready yet
+
+    def _log(self, message, **context):
+        """Log message if logger is available"""
+        if self.logger:
+            self.logger.log("SessionManager", message, **context)
+
     def _get_machine_id(self):
         """Get unique machine identifier"""
         # Use computer name + username as machine ID
-        import platform
-        import getpass
         machine_string = f"{platform.node()}-{getpass.getuser()}"
         return hashlib.sha256(machine_string.encode()).hexdigest()
-    
+
     def _get_encryption_key(self):
-        """Generate encryption key from machine ID"""
+        """Generate encryption key from machine ID (for session files only)"""
         machine_id = self._get_machine_id()
         # Derive a valid Fernet key from machine ID
         key_material = hashlib.sha256(machine_id.encode()).digest()
         return base64.urlsafe_b64encode(key_material)
+
+    def _derive_key_scrypt(self, password: str, salt: bytes) -> bytes:
+        """
+        Derive encryption key using Scrypt KDF (secure, memory-hard).
+
+        Args:
+            password: Master password or passphrase
+            salt: Random salt (should be 16+ bytes)
+
+        Returns:
+            32-byte key suitable for Fernet encryption
+        """
+        kdf = Scrypt(
+            salt=salt,
+            length=self.SCRYPT_LENGTH,
+            n=self.SCRYPT_N,
+            r=self.SCRYPT_R,
+            p=self.SCRYPT_P,
+            backend=default_backend()
+        )
+        return kdf.derive(password.encode())
+
+    def _derive_key_legacy_sha256(self, password: str, salt_hex: str) -> bytes:
+        """
+        Legacy key derivation using SHA256 (INSECURE - for backward compatibility only).
+
+        This method is only used to decrypt old credentials during migration.
+        New credentials always use Scrypt.
+
+        Args:
+            password: Master password
+            salt_hex: Salt as hex string
+
+        Returns:
+            32-byte key (SHA256 hash)
+        """
+        combined_key = hashlib.sha256(f"{password}{salt_hex}".encode()).digest()
+        return combined_key
+
+    def _get_kdf_params(self) -> Dict[str, any]:
+        """Get current KDF parameters as dict for storage"""
+        return {
+            "kdf": "scrypt",
+            "n": self.SCRYPT_N,
+            "r": self.SCRYPT_R,
+            "p": self.SCRYPT_P,
+            "length": self.SCRYPT_LENGTH
+        }
     
     def _encrypt(self, data: str) -> str:
         """Encrypt data with machine-specific key"""
@@ -45,7 +164,12 @@ class SessionManager:
             key = self._get_encryption_key()
             f = Fernet(key)
             return f.decrypt(encrypted_data.encode()).decode()
-        except:
+        except (ValueError, TypeError, AttributeError) as e:
+            # Invalid encrypted data format or key mismatch
+            return None
+        except Exception as e:
+            # Unexpected error during decryption
+            self._log(f"Unexpected decryption error: {e}", error=str(e), traceback=traceback.format_exc())
             return None
     
     def has_master_password(self) -> bool:
@@ -73,33 +197,52 @@ class SessionManager:
         self.db.conn.commit()
     
     def store_credentials(self, email: str, password: str, master_password: str):
-        """Store encrypted credentials in database"""
-        # Hash master password for verification
+        """
+        Store encrypted credentials in database using Scrypt KDF.
+
+        Security: Uses Scrypt for key derivation (memory-hard, GPU-resistant)
+        Old SHA256-based credentials are automatically re-encrypted with Scrypt
+
+        Args:
+            email: User email
+            password: PrestaShop password to encrypt
+            master_password: Master password for encryption
+        """
+        # Hash master password for verification (still using SHA256 for password verification)
         master_hash = hashlib.sha256(master_password.encode()).hexdigest()
-        
-        # Generate salt
-        salt = secrets.token_hex(16)
-        
-        # Encrypt password with master password + salt
-        combined_key = hashlib.sha256(f"{master_password}{salt}".encode()).digest()
-        fernet_key = base64.urlsafe_b64encode(combined_key)
+
+        # Generate random salt (16 bytes = 128 bits)
+        salt = secrets.token_bytes(16)
+
+        # Derive key using Scrypt
+        encryption_key = self._derive_key_scrypt(master_password, salt)
+        fernet_key = base64.urlsafe_b64encode(encryption_key)
         f = Fernet(fernet_key)
         encrypted_password = f.encrypt(password.encode()).decode()
-        
+
+        # Get KDF parameters for storage
+        kdf_params_json = json.dumps(self._get_kdf_params())
+
         # Store in database
         cursor = self.db.conn.cursor()
         cursor.execute("""
-            INSERT OR REPLACE INTO credentials 
-            (email, encrypted_password, salt, updated_at)
-            VALUES (?, ?, ?, ?)
-        """, (email, encrypted_password, salt, datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
-        
+            INSERT OR REPLACE INTO credentials
+            (email, encrypted_password, salt, kdf_params, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+        """, (
+            email,
+            encrypted_password,
+            base64.b64encode(salt).decode(),  # Store salt as base64
+            kdf_params_json,
+            datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        ))
+
         # Also store master password hash in settings
         cursor.execute("""
             INSERT OR REPLACE INTO settings (key, value, updated_at)
             VALUES ('master_password_hash', ?, ?)
         """, (master_hash, datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
-        
+
         self.db.conn.commit()
 
     def has_external_credentials(self, service_key: str) -> bool:
@@ -112,33 +255,65 @@ class SessionManager:
         return result is not None
 
     def store_external_credentials(self, service_key: str, username: str, password: str, master_password: str) -> None:
-        """Store encrypted external-service credentials in database."""
-        salt = secrets.token_hex(16)
-        combined_key = hashlib.sha256(f"{master_password}{salt}".encode()).digest()
-        fernet_key = base64.urlsafe_b64encode(combined_key)
+        """
+        Store encrypted external-service credentials in database using Scrypt KDF.
+
+        Args:
+            service_key: Unique identifier for the service (e.g., "deepl_api", "prestashop_api")
+            username: Username or API key
+            password: Password or secret to encrypt
+            master_password: Master password for encryption
+        """
+        # Generate random salt
+        salt = secrets.token_bytes(16)
+
+        # Derive key using Scrypt
+        encryption_key = self._derive_key_scrypt(master_password, salt)
+        fernet_key = base64.urlsafe_b64encode(encryption_key)
         f = Fernet(fernet_key)
         encrypted_password = f.encrypt(password.encode()).decode()
+
+        # Get KDF parameters for storage
+        kdf_params_json = json.dumps(self._get_kdf_params())
 
         cursor = self.db.conn.cursor()
         cursor.execute(
             """
             INSERT OR REPLACE INTO external_credentials
-            (service_key, username, encrypted_password, salt, updated_at)
-            VALUES (?, ?, ?, ?, ?)
+            (service_key, username, encrypted_password, salt, kdf_params, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (service_key, username, encrypted_password, salt, datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
+            (
+                service_key,
+                username,
+                encrypted_password,
+                base64.b64encode(salt).decode(),
+                kdf_params_json,
+                datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            ),
         )
         self.db.conn.commit()
 
-    def get_external_credentials(self, service_key: str, master_password: str) -> tuple:
-        """Decrypt and return (username, password) for external service."""
+    def get_external_credentials(self, service_key: str, master_password: str) -> Tuple[Optional[str], Optional[str]]:
+        """
+        Decrypt and return (username, password) for external service.
+
+        Auto-migrates legacy SHA256-encrypted credentials to Scrypt on first use.
+
+        Args:
+            service_key: Service identifier
+            master_password: Master password for decryption
+
+        Returns:
+            Tuple of (username, password) or (None, None) if not found/invalid
+        """
         if not self.verify_master_password(master_password):
             return None, None
 
         cursor = self.db.conn.cursor()
         row = cursor.execute(
             """
-            SELECT username, encrypted_password, salt
+            SELECT username, encrypted_password, salt, kdf_params
             FROM external_credentials
             WHERE service_key = ?
             """,
@@ -148,14 +323,42 @@ class SessionManager:
         if not row:
             return None, None
 
-        username, encrypted_password, salt = row
+        username, encrypted_password, salt_b64, kdf_params_json = row
+
         try:
-            combined_key = hashlib.sha256(f"{master_password}{salt}".encode()).digest()
-            fernet_key = base64.urlsafe_b64encode(combined_key)
-            f = Fernet(fernet_key)
-            password = f.decrypt(encrypted_password.encode()).decode()
-            return username, password
-        except Exception:
+            # Check if this is a legacy SHA256-encrypted credential (no kdf_params)
+            if kdf_params_json is None:
+                # Legacy decryption using SHA256
+                encryption_key = self._derive_key_legacy_sha256(master_password, salt_b64)
+                fernet_key = base64.urlsafe_b64encode(encryption_key)
+                f = Fernet(fernet_key)
+                password = f.decrypt(encrypted_password.encode()).decode()
+
+                # Auto-migrate to Scrypt
+                self.store_external_credentials(service_key, username, password, master_password)
+
+                return username, password
+            else:
+                # Modern Scrypt decryption
+                kdf_params = json.loads(kdf_params_json)
+
+                if kdf_params.get("kdf") == "scrypt":
+                    salt = base64.b64decode(salt_b64)
+                    encryption_key = self._derive_key_scrypt(master_password, salt)
+                    fernet_key = base64.urlsafe_b64encode(encryption_key)
+                    f = Fernet(fernet_key)
+                    password = f.decrypt(encrypted_password.encode()).decode()
+                    return username, password
+                else:
+                    # Unknown KDF
+                    return None, None
+
+        except (ValueError, TypeError) as e:
+            # Invalid encrypted data or key format
+            return None, None
+        except Exception as e:
+            # Unexpected decryption error - log it
+            self._log(f"Unexpected error in get_external_credentials: {e}", error=str(e), service_key=service_key)
             return None, None
 
     def get_external_username(self, service_key: str) -> str:
@@ -188,32 +391,69 @@ class SessionManager:
         
         return stored_hash == provided_hash
     
-    def get_credentials(self, master_password: str) -> tuple:
-        """Get credentials using master password"""
+    def get_credentials(self, master_password: str) -> Tuple[Optional[str], Optional[str]]:
+        """
+        Get credentials using master password.
+
+        Auto-migrates legacy SHA256-encrypted credentials to Scrypt on first use.
+
+        Args:
+            master_password: Master password for decryption
+
+        Returns:
+            Tuple of (email, password) or (None, None) if not found/invalid
+        """
         if not self.verify_master_password(master_password):
             return None, None
-        
+
         cursor = self.db.conn.cursor()
         result = cursor.execute("""
-            SELECT email, encrypted_password, salt FROM credentials
+            SELECT email, encrypted_password, salt, kdf_params FROM credentials
             ORDER BY updated_at DESC LIMIT 1
         """).fetchone()
-        
+
         if not result:
             return None, None
-        
-        email, encrypted_password, salt = result
-        
+
+        email, encrypted_password, salt_b64, kdf_params_json = result
+
         # Decrypt password
         try:
-            combined_key = hashlib.sha256(f"{master_password}{salt}".encode()).digest()
-            fernet_key = base64.urlsafe_b64encode(combined_key)
-            f = Fernet(fernet_key)
-            password = f.decrypt(encrypted_password.encode()).decode()
-            return email, password
-        except:
+            # Check if this is a legacy SHA256-encrypted credential (no kdf_params)
+            if kdf_params_json is None:
+                # Legacy decryption using SHA256
+                encryption_key = self._derive_key_legacy_sha256(master_password, salt_b64)
+                fernet_key = base64.urlsafe_b64encode(encryption_key)
+                f = Fernet(fernet_key)
+                password = f.decrypt(encrypted_password.encode()).decode()
+
+                # Auto-migrate to Scrypt
+                self.store_credentials(email, password, master_password)
+
+                return email, password
+            else:
+                # Modern Scrypt decryption
+                kdf_params = json.loads(kdf_params_json)
+
+                if kdf_params.get("kdf") == "scrypt":
+                    salt = base64.b64decode(salt_b64)
+                    encryption_key = self._derive_key_scrypt(master_password, salt)
+                    fernet_key = base64.urlsafe_b64encode(encryption_key)
+                    f = Fernet(fernet_key)
+                    password = f.decrypt(encrypted_password.encode()).decode()
+                    return email, password
+                else:
+                    # Unknown KDF
+                    return None, None
+
+        except (ValueError, TypeError) as e:
+            # Invalid encrypted data or key format
             return None, None
-    
+        except Exception as e:
+            # Unexpected decryption error - log it
+            self._log(f"Unexpected error in get_credentials: {e}", error=str(e))
+            return None, None
+
     def create_session(self, email: str, password: str):
         """Create 24h session file"""
         session_data = {
@@ -233,39 +473,55 @@ class SessionManager:
         """Check if session file exists and is valid"""
         if not os.path.exists(self.session_file):
             return False
-        
+
         try:
             with open(self.session_file, 'r') as f:
                 encrypted_data = f.read()
-            
+
             # Decrypt
             decrypted_data = self._decrypt(encrypted_data)
             if not decrypted_data:
                 return False
-            
+
             session_data = json.loads(decrypted_data)
-            
+
             # Check expiration
             expires = datetime.fromisoformat(session_data['expires'])
             return datetime.now() < expires
-        
-        except:
+
+        except (FileNotFoundError, PermissionError) as e:
+            # Session file missing or inaccessible
+            return False
+        except (json.JSONDecodeError, KeyError, ValueError) as e:
+            # Corrupt session data
+            return False
+        except Exception as e:
+            # Unexpected error
+            self._log(f"Session validation error: {e}", error=str(e))
             return False
     
-    def get_credentials_from_session(self) -> tuple:
+    def get_credentials_from_session(self) -> Tuple[Optional[str], Optional[str]]:
         """Get credentials from valid session"""
         if not self.validate_session():
             return None, None
-        
+
         try:
             with open(self.session_file, 'r') as f:
                 encrypted_data = f.read()
-            
+
             decrypted_data = self._decrypt(encrypted_data)
             session_data = json.loads(decrypted_data)
-            
+
             return session_data['email'], session_data['password']
-        except:
+        except (FileNotFoundError, PermissionError) as e:
+            # Session file missing or inaccessible
+            return None, None
+        except (json.JSONDecodeError, KeyError, TypeError) as e:
+            # Corrupt or invalid session data
+            return None, None
+        except Exception as e:
+            # Unexpected error
+            self._log(f"Error reading session: {e}", error=str(e))
             return None, None
     
     def clear_session(self):

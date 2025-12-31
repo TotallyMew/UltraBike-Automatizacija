@@ -1,8 +1,8 @@
 # uploaders/Basso.py
 
-from Uploaders.baseUploader import ProductUploader
+from Uploaders.BaseUploader import ProductUploader
 from Scrapers.BassoScraper import scrapeAndTranslateToFileBasso
-from Managers.translationManager import TranslationManager
+from Managers.TranslationManager import TranslationManager
 
 class Basso(ProductUploader):
     def scrape(self):

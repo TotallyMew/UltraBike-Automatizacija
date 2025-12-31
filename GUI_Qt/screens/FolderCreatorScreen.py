@@ -30,6 +30,7 @@ from qfluentwidgets import (
     BodyLabel,
     CaptionLabel,
     LineEdit,
+    MessageBox,
     PrimaryPushButton,
     PushButton,
     TransparentToolButton,
@@ -39,14 +40,28 @@ from qfluentwidgets import (
     IndeterminateProgressRing,
     isDarkTheme,
     qconfig,
+    ScrollArea,
 )
 
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
+from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
 from GUI_Qt.styles.theme_config import COLORS, FONTS, RADII, PADDINGS, SIZES, rgba_from_hex
-from GUI_Qt.styles.screen_theme import PAGE_MARGINS, PAGE_SPACING, ICON_TEXT_GAP, PANEL_MARGINS, CONTENT_SPACING, ROW_SPACING, CARD_SPACING, CARD_MARGINS
+from GUI_Qt.styles.screen_theme import (
+    PAGE_MARGINS,
+    PAGE_SPACING,
+    ICON_TEXT_GAP,
+    PANEL_MARGINS,
+    CONTENT_SPACING,
+    ROW_SPACING,
+    CARD_SPACING,
+    CARD_MARGINS,
+    get_responsive_margins,
+    get_responsive_spacing,
+    apply_screen_theme,
+)
 
 
 @dataclass(frozen=True)
@@ -170,7 +185,7 @@ class CreateFoldersWorker(QThread):
             self.finished.emit(False, self.tr("folders.create.failed", error=str(e)))
 
 
-class FolderCreatorScreen(QWidget):
+class FolderCreatorScreen(ResponsiveWidget):
     """Folder creator screen."""
 
     def __init__(self, main_window, parent=None):
@@ -232,7 +247,21 @@ class FolderCreatorScreen(QWidget):
         self._apply_theme()
         self.setAutoFillBackground(True)
 
-        main_layout = QVBoxLayout(self)
+        # Root layout (for ScrollArea container)
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Create ScrollArea
+        self.scroll = ScrollArea(self)
+        self.scroll.setWidgetResizable(True)
+        root_layout.addWidget(self.scroll)
+
+        # Content widget (inside ScrollArea)
+        self.content_widget = QWidget()
+        self.scroll.setWidget(self.content_widget)
+
+        # Main layout (on content widget)
+        main_layout = QVBoxLayout(self.content_widget)
         main_layout.setContentsMargins(*PAGE_MARGINS)
         main_layout.setSpacing(PAGE_SPACING)
 
@@ -253,8 +282,8 @@ class FolderCreatorScreen(QWidget):
         main_layout.addLayout(header)
 
         # Content row
-        content_layout = QHBoxLayout()
-        content_layout.setSpacing(PAGE_SPACING)
+        self.content_layout = QHBoxLayout()
+        self.content_layout.setSpacing(PAGE_SPACING)
 
         # Left: scraped products list
         left_panel = CardWidget()
@@ -287,7 +316,8 @@ class FolderCreatorScreen(QWidget):
         self.list_hint.setStyleSheet(f"color: {COLORS['text_secondary']};")
         left_layout.addWidget(self.list_hint)
 
-        content_layout.addWidget(left_panel, 4)
+        self.left_panel = left_panel
+        self.content_layout.addWidget(left_panel, 4)
 
         # Right: actions
         right_panel = CardWidget()
@@ -360,9 +390,19 @@ class FolderCreatorScreen(QWidget):
         right_layout.addLayout(actions_row)
 
         right_layout.addStretch(1)
-        content_layout.addWidget(right_panel, 6)
+        self.right_panel = right_panel
+        self.content_layout.addWidget(right_panel, 6)
 
-        main_layout.addLayout(content_layout, 1)
+        main_layout.addLayout(self.content_layout, 1)
+
+        # Apply theme
+        apply_screen_theme(
+            self,
+            "FolderCreatorScreen",
+            scroll=self.scroll,
+            content=self.content_widget
+        )
+
         self.retranslate_ui()
 
         # Initial preview state
@@ -377,15 +417,27 @@ class FolderCreatorScreen(QWidget):
         self.preview_title.setText(tr("folders.preview.title"))
         self.preview_hint.setText(tr("folders.preview.hint"))
         self.scrape_btn.setText(tr("folders.scrape"))
+        self.scrape_btn.setToolTip(tr("folders.scrape.tip"))
         self.path_label.setText(tr("folders.path.label"))
         self.path_caption.setText(tr("folders.path.caption"))
         self.path_field.setPlaceholderText(tr("folders.path.placeholder"))
         self.browse_btn.setText(tr("folders.path.browse"))
+        self.browse_btn.setToolTip(tr("folders.path.browse.tip"))
         self.create_btn.setText(tr("folders.create"))
+        self.create_btn.setToolTip(tr("folders.create.tip"))
         self.clear_btn.setText(tr("folders.clear"))
+        self.clear_btn.setToolTip(tr("folders.clear.tip"))
 
         # Re-render empty state label on language change
         self._refresh_preview()
+
+    def _on_breakpoint_changed(self, breakpoint: str):
+        """Respond to breakpoint changes - adjust margins and spacing."""
+        margins = get_responsive_margins(breakpoint)
+        spacing = get_responsive_spacing(breakpoint)
+        if hasattr(self, 'content_widget') and self.content_widget.layout():
+            self.content_widget.layout().setContentsMargins(*margins)
+            self.content_widget.layout().setSpacing(spacing)
 
     def _on_theme_changed(self):
         self._apply_theme()
@@ -404,9 +456,17 @@ class FolderCreatorScreen(QWidget):
             self.path_field.setText(folder)
 
     def _clear_results(self):
-        self._products = []
-        self.products_list.clear()
-        self._refresh_preview()
+        """Clear scraped results with confirmation dialog"""
+        # Show confirmation dialog
+        w = MessageBox(
+            title=self.main.i18n.tr("common.confirm"),
+            content=self.main.i18n.tr("folders.clear.confirm"),
+            parent=self
+        )
+        if w.exec():
+            self._products = []
+            self.products_list.clear()
+            self._refresh_preview()
 
     def _refresh_preview(self):
         """Render a preview of the folder structure that would be created."""

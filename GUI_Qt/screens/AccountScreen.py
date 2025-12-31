@@ -19,12 +19,16 @@ from qfluentwidgets import (
     InfoBarPosition,
 )
 
+from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
 from GUI_Qt.styles.theme_config import COLORS, FONTS, RADII, SIZES
 from qfluentwidgets import isDarkTheme, qconfig
-from GUI_Qt.styles.screen_theme import apply_screen_theme, enforce_transparent_labels, PAGE_MARGINS, PAGE_SPACING, PANEL_MARGINS, MID_SPACING, ICON_TEXT_GAP
+from GUI_Qt.styles.screen_theme import (
+    apply_screen_theme, enforce_transparent_labels, PAGE_MARGINS, PAGE_SPACING,
+    PANEL_MARGINS, MID_SPACING, ICON_TEXT_GAP, get_responsive_margins, get_responsive_spacing
+)
 
 
-class AccountScreen(QWidget):
+class AccountScreen(ResponsiveWidget):
     def __init__(self, main_window, parent=None):
         super().__init__(parent)
         self.main = main_window
@@ -214,6 +218,14 @@ class AccountScreen(QWidget):
 
         # Apply theme after all widgets exist (important for scroll area + cards)
         self._apply_theme()
+
+    def _on_breakpoint_changed(self, breakpoint: str):
+        """Respond to breakpoint changes - adjust margins and spacing."""
+        margins = get_responsive_margins(breakpoint)
+        spacing = get_responsive_spacing(breakpoint)
+        if hasattr(self, 'content') and self.content and self.content.layout():
+            self.content.layout().setContentsMargins(*margins)
+            self.content.layout().setSpacing(spacing)
 
     def _apply_theme(self):
         text_primary = COLORS['text_primary_dark'] if isDarkTheme() else COLORS['text_primary_light']

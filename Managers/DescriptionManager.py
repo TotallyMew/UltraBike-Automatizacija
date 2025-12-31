@@ -3,13 +3,19 @@ Managers/DescriptionManager.py
 Handles description CRUD operations and PrestaShop upload
 """
 
+# Standard library
+import re
 import time
 from datetime import datetime
-import re
+
+# Third-party
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import Select
+from selenium.webdriver.support.ui import WebDriverWait
+
+# Local
+from Utilities.ErrorManager import ErrorManager
 
 
 class DescriptionManager:
@@ -66,7 +72,6 @@ class DescriptionManager:
             self.logger.log("DescriptionManager", message, **context)
 
     def _log_error(self, message, exception=None, **context):
-        from Utilities.ErrorManager import ErrorManager
         if self.logger:
             self.logger.error(
                 "DescriptionManager", message, exception=exception, **context
@@ -465,8 +470,11 @@ class DescriptionManager:
             except Exception:
                 pass
 
+            from Config.LanguageConfig import LANG_CODE_TO_PRESTASHOP_ID
+
             languages = [("lt", lt_html), ("en", en_html), ("lv", lv_html)]
-            lang_id_map = {"lt": "2", "en": "1", "lv": "3"}
+            lang_id_map = LANG_CODE_TO_PRESTASHOP_ID
+
 
             for lang_code, html_content in languages:
                 if not html_content:
@@ -480,23 +488,43 @@ class DescriptionManager:
                 Select(language_dropdown).select_by_value(lang_code)
                 time.sleep(1)
 
+                # 1. Set TinyMCE iframe body
                 iframe_id = f"form_step1_description_{lang_id_map[lang_code]}_ifr"
                 wait.until(
                     EC.frame_to_be_available_and_switch_to_it((By.ID, iframe_id))
                 )
-
                 editor_body = wait.until(
                     EC.presence_of_element_located((By.ID, "tinymce"))
                 )
-
                 driver.execute_script(
-                    "arguments[0].innerHTML = arguments[1];",
+                    "arguments[0].innerHTML = arguments[1];\n"
+                    "var ev1 = new Event('input', { bubbles: true });\n"
+                    "var ev2 = new Event('change', { bubbles: true });\n"
+                    "arguments[0].dispatchEvent(ev1);\n"
+                    "arguments[0].dispatchEvent(ev2);",
                     editor_body,
                     html_content,
                 )
-
                 driver.switch_to.default_content()
-                time.sleep(0.5)
+                time.sleep(0.2)
+
+                # 2. Set hidden textarea value and dispatch events
+                textarea_id = f"form_step1_description_{lang_id_map[lang_code]}"
+                try:
+                    textarea = wait.until(EC.presence_of_element_located((By.ID, textarea_id)))
+                    driver.execute_script(
+                        "const el = arguments[0];\n"
+                        "const value = arguments[1];\n"
+                        "el.focus();\n"
+                        "el.value = value;\n"
+                        "el.dispatchEvent(new Event('input', { bubbles: true }));\n"
+                        "el.dispatchEvent(new Event('change', { bubbles: true }));",
+                        textarea,
+                        html_content,
+                    )
+                except Exception:
+                    pass
+                time.sleep(0.2)
 
             self._log("HTML uploaded successfully", product_code=product_code)
             return True

@@ -17,7 +17,18 @@
       "Bash(ls:*)",
       "Bash(timeout 10 python:*)",
       "Bash(powershell -ExecutionPolicy Bypass -File \"d:\\\\Iš desktop\\\\Programavimas\\\\Projects\\\\Python\\\\UltraBike_Automatizacija\\\\build_pyinstaller_clean.ps1\")",
-      "Bash(powershell -ExecutionPolicy Bypass -File \"d:\\\\Iš desktop\\\\Programavimas\\\\Projects\\\\Python\\\\UltraBike_Automatizacija\\\\Installer\\\\build_installer.ps1\":*)"
+      "Bash(powershell -ExecutionPolicy Bypass -File \"d:\\\\Iš desktop\\\\Programavimas\\\\Projects\\\\Python\\\\UltraBike_Automatizacija\\\\Installer\\\\build_installer.ps1\":*)",
+      "Bash(pip install:*)",
+      "Bash(wc:*)",
+      "Bash(timeout 15 python:*)",
+      "Bash(timeout 20 python:*)",
+      "Bash(git checkout:*)",
+      "Bash(del \"d:\\\\Iš desktop\\\\Programavimas\\\\Projects\\\\Python\\\\UltraBike_Automatizacija\\\\test_sql_injection_fix.py\")",
+      "Bash(git mv:*)",
+      "Bash(git add:*)",
+      "Bash(powershell:*)",
+      "Bash(findstr:*)",
+      "Bash(certutil:*)"
     ],
     "deny": [],
     "ask": []

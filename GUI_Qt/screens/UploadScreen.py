@@ -5,15 +5,16 @@ Single product upload with Space Indigo/Lavender Grey color scheme
 
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QSizePolicy
 from PySide6.QtCore import Qt, QThread, Signal, QEvent, QTimer
-from PySide6.QtGui import QFont, QStandardItemModel
+from PySide6.QtGui import QFont, QStandardItemModel, QKeySequence, QShortcut
 from qfluentwidgets import (
     LineEdit, ComboBox, CheckBox, PrimaryPushButton, PushButton,
     IndeterminateProgressRing, BodyLabel, TitleLabel, CaptionLabel,
-    InfoBar, InfoBarPosition, TransparentToolButton, FluentIcon,
-    CardWidget, isDarkTheme, StrongBodyLabel, qconfig
+    InfoBar, InfoBarPosition, MessageBox, TransparentToolButton, FluentIcon,
+    CardWidget, isDarkTheme, StrongBodyLabel, qconfig, ScrollArea
 )
 from uploaderFactory import getUploaderClass
 from Managers.DescriptionManager import DescriptionManager
+from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
 from GUI_Qt.styles.theme_config import COLORS, FONTS, RADII, SIZES, SPACING, rgba_from_hex
 from GUI_Qt.styles.screen_theme import (
     PAGE_MARGINS,
@@ -25,6 +26,9 @@ from GUI_Qt.styles.screen_theme import (
     CONTENT_SPACING,
     TOOLBAR_MARGINS,
     TIGHT_SPACING,
+    apply_screen_theme,
+    get_responsive_margins,
+    get_responsive_spacing,
 )
 
 
@@ -69,7 +73,7 @@ class UploadWorker(QThread):
         self._waiting_for_retry = False
 
 
-class UploadScreen(QWidget):
+class UploadScreen(ResponsiveWidget):
     """Main upload screen with Fluent Design and responsive scaling"""
 
     def __init__(self, main_window, parent=None):
@@ -89,34 +93,46 @@ class UploadScreen(QWidget):
         # Store references for responsive scaling
         self.form_card = None
         self.current_scale = 1.0
-        self._two_column_layout = None
         self._form_grid = None
         self._field_blocks = []
+        self.scroll = None
+        self.content_widget = None
 
         self._init_ui()
         self._load_descriptions()
+        self._setup_shortcuts()
 
         # Connect to theme change signal
         qconfig.themeChangedFinished.connect(self._on_theme_changed)
 
     def _init_ui(self):
         """Initialize UI with Fluent Design"""
-        # Apply background color
-        is_dark = isDarkTheme()
-        bg_color = COLORS['space_indigo'] if is_dark else COLORS['platinum']
+        # Root layout (for ScrollArea container)
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
 
-        self.setStyleSheet(f"""
-            UploadScreen {{
-                background-color: {bg_color};
-                font-family: {FONTS['family']};
-            }}
-        """)
-        self.setAutoFillBackground(True)
+        # Create ScrollArea
+        self.scroll = ScrollArea(self)
+        self.scroll.setWidgetResizable(True)
+        root_layout.addWidget(self.scroll)
 
-        # Main layout
-        main_layout = QVBoxLayout(self)
+        # Content widget (inside ScrollArea)
+        self.content_widget = QWidget()
+        self.scroll.setWidget(self.content_widget)
+
+        # Main layout (on content widget)
+        main_layout = QVBoxLayout(self.content_widget)
         main_layout.setContentsMargins(*PAGE_MARGINS)
         main_layout.setSpacing(PAGE_SPACING)
+
+        # Apply theme
+        apply_screen_theme(
+            self,
+            "UploadScreen",
+            scroll=self.scroll,
+            content=self.content_widget
+        )
 
         # === HEADER SECTION ===
         header = QHBoxLayout()
@@ -189,9 +205,23 @@ class UploadScreen(QWidget):
         code_caption = self.code_caption
         self._code_block = _label_block(code_label, code_caption)
 
+        # Code field with validation
+        code_input_widget = QWidget()
+        code_input_row = QHBoxLayout(code_input_widget)
+        code_input_row.setContentsMargins(0, 0, 0, 0)
+        code_input_row.setSpacing(8)
+
         self.code_field = LineEdit()
         self.code_field.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.code_field.textChanged.connect(self._on_code_changed)
+
+        self.code_validation_icon = TransparentToolButton(FluentIcon.ACCEPT, self)
+        self.code_validation_icon.setFixedSize(20, 20)
+        self.code_validation_icon.setEnabled(False)
+        self.code_validation_icon.setVisible(False)
+
+        code_input_row.addWidget(self.code_field)
+        code_input_row.addWidget(self.code_validation_icon)
 
         # URL/Code input
         self.url_label = BodyLabel("")
@@ -200,9 +230,23 @@ class UploadScreen(QWidget):
         url_caption = self.url_caption
         self._url_block = _label_block(url_label, url_caption)
 
+        # URL field with validation
+        url_input_widget = QWidget()
+        url_input_row = QHBoxLayout(url_input_widget)
+        url_input_row.setContentsMargins(0, 0, 0, 0)
+        url_input_row.setSpacing(8)
+
         self.url_field = LineEdit()
         self.url_field.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.url_field.textChanged.connect(self._on_url_changed)
+
+        self.url_validation_icon = TransparentToolButton(FluentIcon.ACCEPT, self)
+        self.url_validation_icon.setFixedSize(20, 20)
+        self.url_validation_icon.setEnabled(False)
+        self.url_validation_icon.setVisible(False)
+
+        url_input_row.addWidget(self.url_field)
+        url_input_row.addWidget(self.url_validation_icon)
 
         # Description dropdown
         desc_label_row = QHBoxLayout()
@@ -235,8 +279,8 @@ class UploadScreen(QWidget):
 
         self._field_blocks = [
             (self._brand_block, self.brand_combo),
-            (self._code_block, self.code_field),
-            (self._url_block, self.url_field),
+            (self._code_block, code_input_widget),
+            (self._url_block, url_input_widget),
             (self._desc_block, self.description_combo),
         ]
 
@@ -357,27 +401,30 @@ class UploadScreen(QWidget):
 
         self.retranslate_ui()
 
-        # Apply layout mode after first show when geometry is known
-        QTimer.singleShot(0, self._update_form_layout_for_width)
-
     def showEvent(self, event):
         super().showEvent(event)
-        QTimer.singleShot(0, self._update_form_layout_for_width)
+        # Trigger initial layout (after widgets are created)
+        QTimer.singleShot(0, lambda: self._on_breakpoint_changed(self.get_current_breakpoint() or 'lg'))
 
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self._update_form_layout_for_width()
+    def _on_breakpoint_changed(self, breakpoint: str):
+        """Respond to breakpoint changes - adjust layout and margins."""
+        # Update column count based on breakpoint
+        col_count = self.get_column_count()
+        self._apply_form_layout_mode(col_count)
 
-    def _update_form_layout_for_width(self):
-        """Switch between 1-column and 2-column form layout based on width."""
-        # Threshold tuned for 1920x1080; keeps 1280x720 in 1-column.
-        two_col = self.width() >= 1400
-        if self._two_column_layout == two_col:
-            return
-        self._two_column_layout = two_col
-        self._apply_form_layout_mode(two_col)
+        # Adjust margins based on breakpoint
+        margins = get_responsive_margins(breakpoint)
+        spacing = get_responsive_spacing(breakpoint)
+        if hasattr(self, 'content_widget') and self.content_widget.layout():
+            self.content_widget.layout().setContentsMargins(*margins)
+            self.content_widget.layout().setSpacing(spacing)
 
-    def _apply_form_layout_mode(self, two_columns: bool):
+    def _apply_form_layout_mode(self, columns: int):
+        """Apply grid layout based on column count (1, 2, or 3).
+
+        Args:
+            columns: Number of columns (1, 2, or 3)
+        """
         if not self._form_grid:
             return
         grid = self._form_grid
@@ -388,14 +435,14 @@ class UploadScreen(QWidget):
             if item is None:
                 break
 
-        if not two_columns:
+        if columns == 1:
             # 1-column: label block + widget per row
             for row, (label_block, field_widget) in enumerate(self._field_blocks):
                 grid.addWidget(label_block, row, 0)
                 grid.addWidget(field_widget, row, 1)
             return
 
-        # 2-column: two fields per row
+        # 2-column (or 3-column treated as 2 for upload screen): two fields per row
         pairs = [
             (self._field_blocks[0], self._field_blocks[1]),
             (self._field_blocks[2], self._field_blocks[3]),
@@ -437,34 +484,69 @@ class UploadScreen(QWidget):
         self.frameset_checkbox.setText(tr("upload.frameset"))
         self.frameset_info_btn.setToolTip(tr("upload.frameset.tip"))
 
-        self.upload_button.setText(tr("upload.button"))
+        self.upload_button.setText(f"{tr('upload.button')} (Ctrl+Enter)")
         self.clear_button.setText(tr("upload.clear"))
         self.clear_button.setToolTip(tr("upload.clear.tip"))
 
     def _ensure_brand_placeholder(self, combo: ComboBox) -> None:
-        placeholder = self.main.i18n.tr("batch.select_brand")
+        auto_label = self.main.i18n.tr("upload.brand.auto")
 
         combo.blockSignals(True)
         try:
+            current = combo.currentText()
             combo.clear()
-            combo.addItem(placeholder)
+            combo.addItem(auto_label)
             combo.addItems(self.brands)
 
-            # Disable the placeholder item so it can't be selected from the dropdown.
-            try:
-                model = combo.model()
-                if isinstance(model, QStandardItemModel):
-                    item = model.item(0)
-                    if item is not None:
-                        item.setEnabled(False)
-            except Exception:
-                pass
-
-            # Show placeholder by default if no valid brand is selected.
-            if combo.currentText() not in self.brands:
+            # Default to Auto unless a valid brand is already selected.
+            if current in self.brands:
+                combo.setCurrentText(current)
+            else:
                 combo.setCurrentIndex(0)
         finally:
             combo.blockSignals(False)
+
+    def _detect_brand_from_url(self, url: str) -> str | None:
+        u = (url or "").strip().lower()
+        if not u:
+            return None
+
+        # Prefer URL parsing by recognizable tokens.
+        # Keep ordering from most specific to least.
+        token_map = [
+            ("lee cougan", "Lee Cougan"),
+            ("lee-cougan", "Lee Cougan"),
+            ("leecougan", "Lee Cougan"),
+            ("pinarello", "Pinarello"),
+            ("kross", "KROSS"),
+            ("basso", "Basso"),
+            ("factor", "Factor"),
+            ("trek", "TREK"),
+            ("rondo", "Rondo"),
+            ("octane", "Octane"),
+            ("rascal", "Rascal"),
+        ]
+        for token, brand in token_map:
+            if token in u:
+                return brand
+        return None
+
+    def _auto_set_brand_from_url(self) -> None:
+        """If brand is Auto, try to select a detected brand from URL."""
+        try:
+            current = (self.brand_combo.currentText() or "").strip()
+        except Exception:
+            current = ""
+
+        if current in self.brands:
+            return
+
+        detected = self._detect_brand_from_url(self.url_field.text())
+        if detected and detected in self.brands:
+            try:
+                self.brand_combo.setCurrentText(detected)
+            except Exception:
+                pass
 
     def _load_descriptions(self):
         """Load descriptions from database"""
@@ -486,6 +568,34 @@ class UploadScreen(QWidget):
                 position=InfoBarPosition.TOP
             )
 
+    def _setup_shortcuts(self):
+        """Setup keyboard shortcuts for upload screen"""
+        # Ctrl+Enter to start upload
+        start_shortcut = QShortcut(QKeySequence("Ctrl+Return"), self)
+        start_shortcut.activated.connect(self._handle_start_shortcut)
+
+        # Escape to cancel upload (if running)
+        cancel_shortcut = QShortcut(QKeySequence("Escape"), self)
+        cancel_shortcut.activated.connect(self._handle_cancel_shortcut)
+
+    def _handle_start_shortcut(self):
+        """Handle Ctrl+Enter shortcut to start upload"""
+        if self.upload_button.isEnabled():
+            self._start_upload()
+
+    def _handle_cancel_shortcut(self):
+        """Handle Escape shortcut to cancel upload"""
+        if self.upload_worker is not None and self.upload_worker.isRunning():
+            self.upload_worker.terminate()
+            self.upload_worker.wait()
+            self._reset_ui_after_upload()
+            InfoBar.warning(
+                title=self.main.i18n.tr("upload.cancel.title"),
+                content=self.main.i18n.tr("upload.cancel.content"),
+                parent=self,
+                position=InfoBarPosition.TOP
+            )
+
     def _on_brand_change(self, brand):
         """Handle brand selection change"""
         # Show frameset checkbox only for Pinarello
@@ -495,11 +605,50 @@ class UploadScreen(QWidget):
 
     def _on_code_changed(self, text):
         """Handle product code field change with validation"""
+        # Validate product code format
+        is_valid = self._validate_product_code(text)
+        self._update_validation_icon(self.code_validation_icon, is_valid, text)
         self._check_form_valid()
 
     def _on_url_changed(self, text):
         """Handle URL field change with validation"""
+        # Validate URL format
+        is_valid = self._validate_url(text)
+        self._update_validation_icon(self.url_validation_icon, is_valid, text)
+        self._auto_set_brand_from_url()
         self._check_form_valid()
+
+    def _validate_product_code(self, code: str) -> bool:
+        """Validate product code format (should start with UB- or be non-empty)"""
+        code = code.strip()
+        if not code:
+            return False
+        # Valid if it starts with UB- or is at least 3 characters
+        return code.startswith("UB-") or len(code) >= 3
+
+    def _validate_url(self, url: str) -> bool:
+        """Validate URL format (should be a valid HTTP/HTTPS URL)"""
+        url = url.strip()
+        if not url:
+            return False
+        # Basic URL validation
+        return url.startswith(("http://", "https://", "www.")) and len(url) > 10
+
+    def _update_validation_icon(self, icon_widget, is_valid: bool, text: str):
+        """Update validation icon based on validation result"""
+        if not text.strip():
+            # Hide icon when field is empty
+            icon_widget.setVisible(False)
+        else:
+            icon_widget.setVisible(True)
+            if is_valid:
+                # Green checkmark for valid input
+                icon_widget.setIcon(FluentIcon.ACCEPT)
+                icon_widget.setStyleSheet("color: #2ECC71;")  # Green
+            else:
+                # Red X for invalid input
+                icon_widget.setIcon(FluentIcon.CLOSE)
+                icon_widget.setStyleSheet("color: #E74C3C;")  # Red
 
     def _on_description_changed(self, text):
         """Handle description dropdown change with validation"""
@@ -512,8 +661,9 @@ class UploadScreen(QWidget):
         url = self.url_field.text().strip()
         description = self.description_combo.currentText()
 
-        # Description is optional - require brand + code + url
-        is_valid = bool(brand in self.brands and code and url)
+        # Description is optional - require code + url + (brand selected OR detectable from URL)
+        brand_ok = (brand in self.brands) or (self._detect_brand_from_url(url) in self.brands)
+        is_valid = bool(code and url and brand_ok)
 
         # Debug logging
         # Debug: Validation check and button state
@@ -570,6 +720,26 @@ class UploadScreen(QWidget):
         include_order_note = self.order_note_checkbox.isChecked()
         is_frameset = self.frameset_checkbox.isChecked() if self.frameset_row.isVisible() else False
 
+        # Resolve brand (Auto -> detect from URL)
+        brand = (brand or "").strip()
+        if brand not in self.brands:
+            detected = self._detect_brand_from_url(url)
+            if detected and detected in self.brands:
+                brand = detected
+                try:
+                    self.brand_combo.setCurrentText(brand)
+                except Exception:
+                    pass
+            else:
+                InfoBar.error(
+                    title=self.main.i18n.tr("upload.invalid_brand.title"),
+                    content=self.main.i18n.tr("upload.brand.detect_failed"),
+                    parent=self,
+                    position=InfoBarPosition.TOP,
+                    duration=6000,
+                )
+                return
+
         # Get uploader class
         try:
             uploader_class = getUploaderClass(brand)
@@ -609,17 +779,27 @@ class UploadScreen(QWidget):
                 except Exception:
                     pass
 
+            # Build brand_options dictionary
+            brand_options = {
+                'description_name': description if description else None,
+                'append_disclaimer': include_disclaimer,
+                'append_order_note': include_order_note,
+            }
+
+            # Add brand-specific options
+            if brand == "Pinarello":
+                brand_options['frameset_only'] = is_frameset
+
             uploader = uploader_class(
                 driver=self.main.driver,
-                db=self.main.db,
-                settings_manager=self.main.settings,
+                brand_name=brand,
                 product_code=code,
                 url_or_code=url,
-                description_name=description,
-                include_disclaimer=include_disclaimer,
-                include_order_note=include_order_note,
-                is_frameset=is_frameset if brand == "Pinarello" else None,
-                master_password=master_password
+                db_manager=self.main.db,
+                brand_options=brand_options,
+                logger=self.main.logger,
+                master_password=master_password,
+                settings_manager=self.main.settings
             )
         except Exception as e:
             InfoBar.error(
@@ -730,27 +910,31 @@ class UploadScreen(QWidget):
             )
 
     def _clear_form(self) -> None:
-        """Clear user-editable fields (keeps selected brand)."""
-        self.code_field.clear()
-        self.url_field.clear()
-        self.description_combo.setCurrentIndex(0)
-        self.disclaimer_checkbox.setChecked(False)
-        self.order_note_checkbox.setChecked(False)
-        self.frameset_checkbox.setChecked(False)
-        self.status_label.setText("")
-        self._check_form_valid()
+        """Clear user-editable fields with confirmation dialog (keeps selected brand)."""
+        # Show confirmation dialog
+        w = MessageBox(
+            title=self.main.i18n.tr("common.confirm"),
+            content=self.main.i18n.tr("upload.clear.confirm"),
+            parent=self
+        )
+        if w.exec():
+            self.code_field.clear()
+            self.url_field.clear()
+            self.description_combo.setCurrentIndex(0)
+            self.disclaimer_checkbox.setChecked(False)
+            self.order_note_checkbox.setChecked(False)
+            self.frameset_checkbox.setChecked(False)
+            self.status_label.setText("")
+            self._check_form_valid()
 
     def _on_theme_changed(self):
         """Handle theme change event"""
-        is_dark = isDarkTheme()
-        bg_color = COLORS['space_indigo'] if is_dark else COLORS['platinum']
-
-        self.setStyleSheet(f"""
-            UploadScreen {{
-                background-color: {bg_color};
-                font-family: {FONTS['family']};
-            }}
-        """)
+        apply_screen_theme(
+            self,
+            "UploadScreen",
+            scroll=self.scroll,
+            content=self.content_widget
+        )
 
         self._apply_options_card_theme()
         self._apply_text_theme()

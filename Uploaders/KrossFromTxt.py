@@ -1,9 +1,9 @@
 # # uploaders/KROSS.py
 
-# from Uploaders.baseUploader import ProductUploader
+# from Uploaders.BaseUploader import ProductUploader
 # from Scrapers.KrossFromTxtScraper import scrapeAndTranslateToFileKROSSTXT
-# from Managers.translationManager import TranslationManager
-# from Managers.imageUploader import ImageUploader
+# from Managers.TranslationManager import TranslationManager
+# from Managers.ImageUploader import ImageUploader
 
 # class KROSSTXT(ProductUploader):
 #     def scrape(self):

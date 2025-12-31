@@ -1,4 +1,4 @@
-﻿from Uploaders.baseUploader import ProductUploader
+﻿from Uploaders.BaseUploader import ProductUploader
 from Scrapers.TREKScraper import scrapeAndTranslateToFileTREK
 
 class TREK(ProductUploader):
