@@ -242,7 +242,7 @@ class BassoImageScreen(QWidget):
 
         self.url_label = BodyLabel("")
         self.url_caption = CaptionLabel("")
-        self.url_caption.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self.url_caption.setStyleSheet(f"color: {COLORS['text_secondary']}; background: transparent; background-color: transparent;")
         ll.addWidget(self.url_label)
         ll.addWidget(self.url_caption)
 
@@ -252,7 +252,7 @@ class BassoImageScreen(QWidget):
 
         self.output_label = BodyLabel("")
         self.output_caption = CaptionLabel("")
-        self.output_caption.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self.output_caption.setStyleSheet(f"color: {COLORS['text_secondary']}; background: transparent; background-color: transparent;")
         ll.addWidget(self.output_label)
         ll.addWidget(self.output_caption)
 
@@ -293,9 +293,9 @@ class BassoImageScreen(QWidget):
         rl.setSpacing(ROW_SPACING)
 
         self.log_title = BodyLabel("")
-        self.log_title.setStyleSheet(f"font-weight: 600; color: {COLORS['text_secondary']};")
+        self.log_title.setStyleSheet(f"font-weight: 600; color: {COLORS['text_secondary']}; background: transparent; background-color: transparent;")
         self.log_hint = CaptionLabel("")
-        self.log_hint.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self.log_hint.setStyleSheet(f"color: {COLORS['text_secondary']}; background: transparent; background-color: transparent;")
         self.log_hint.setWordWrap(True)
         rl.addWidget(self.log_title)
         rl.addWidget(self.log_hint)

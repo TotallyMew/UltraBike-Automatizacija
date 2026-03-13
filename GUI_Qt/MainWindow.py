@@ -65,10 +65,10 @@ class MainWindow(FluentWindow):
 
         # Configure window
         self.setWindowTitle(self.i18n.tr("app.title"))
-        # Responsive design: support tablet-sized displays (768x600 minimum)
+        # Responsive design: support tablet-sized displays (900x700 minimum)
         # Screens use adaptive layouts and scrolling to remain usable at all sizes
-        self.resize(1300, 820)
-        self.setMinimumSize(768, 600)
+        self.resize(1400, 900)
+        self.setMinimumSize(900, 700)
 
         # Set application font
         app_font = QFont()
@@ -98,6 +98,7 @@ class MainWindow(FluentWindow):
         self.account_screen = None
         self.settings_screen = None
         self.info_screen = None
+        self.gold_standard_table_screen = None
 
         # Top bar reference
         self.top_bar = None
@@ -247,6 +248,7 @@ class MainWindow(FluentWindow):
         10: Account
         11: Settings
         12: Info
+        13: Gold Standard Table
         """
         if index == 0:  # Upload
             if not self.upload_screen:
@@ -338,6 +340,13 @@ class MainWindow(FluentWindow):
                 self.info_screen = InfoScreen(self)
             self._add_screen_to_stack(self.info_screen, self.i18n.tr("nav.info"))
             return self.info_screen
+
+        if index == 13:  # Gold Standard Table
+            if not self.gold_standard_table_screen:
+                from GUI_Qt.screens.GoldStandardTableScreen import GoldStandardTableScreen
+                self.gold_standard_table_screen = GoldStandardTableScreen(self)
+            self._add_screen_to_stack(self.gold_standard_table_screen, "Gold Table")
+            return self.gold_standard_table_screen
 
         return None
 
@@ -527,6 +536,14 @@ class MainWindow(FluentWindow):
             icon=FluentIcon.PIE_SINGLE,
             text=self.i18n.tr("nav.analytics"),
             onClick=lambda: self._switch_to_screen(9),
+            position=NavigationItemPosition.TOP
+        )
+
+        self._nav_items["gold_table"] = self.navigationInterface.addItem(
+            routeKey="gold_table",
+            icon=FluentIcon.DICTIONARY,
+            text="Gold Table",
+            onClick=lambda: self._switch_to_screen(13),
             position=NavigationItemPosition.TOP
         )
 

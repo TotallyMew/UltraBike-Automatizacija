@@ -1,4 +1,5 @@
 {
+  "model": "opus",
   "permissions": {
     "allow": [
       "Bash(python GUI/main.py:*)",
@@ -28,7 +29,9 @@
       "Bash(git add:*)",
       "Bash(powershell:*)",
       "Bash(findstr:*)",
-      "Bash(certutil:*)"
+      "Bash(certutil:*)",
+      "Bash(del \"d:\\\\Iš desktop\\\\Programavimas\\\\Projects\\\\Python\\\\UltraBike_Automatizacija\\\\fix_label_backgrounds.py\")",
+      "Bash(timeout 3 python:*)"
     ],
     "deny": [],
     "ask": []

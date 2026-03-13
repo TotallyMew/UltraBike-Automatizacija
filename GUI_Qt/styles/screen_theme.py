@@ -132,15 +132,25 @@ def enforce_transparent_labels(root: QWidget) -> None:
     """
 
     try:
+        from qfluentwidgets import CheckBox
+
         flt = getattr(root, "_ub_transparent_label_filter", None)
         if flt is None:
             flt = _TransparentLabelEventFilter(root)
             setattr(root, "_ub_transparent_label_filter", flt)
 
+        # Normalize all QLabel widgets (includes BodyLabel, CaptionLabel, etc.)
         for label in root.findChildren(QLabel):
             _normalize_label_widget(label)
             try:
                 label.installEventFilter(flt)
+            except Exception:
+                pass
+
+        # Also normalize all CheckBox widgets
+        for checkbox in root.findChildren(CheckBox):
+            try:
+                checkbox.setStyleSheet("QCheckBox { background: transparent; } QCheckBox::indicator { background: transparent; }")
             except Exception:
                 pass
     except Exception:
@@ -269,3 +279,7 @@ def apply_screen_theme(
 
     if content is not None:
         content.setStyleSheet(f"background-color: {bg_color};")
+
+    # Enforce transparent labels even when individual widgets override styles
+    if transparent_labels:
+        enforce_transparent_labels(screen)

@@ -296,7 +296,7 @@ class PinarelloImageScreen(ResponsiveWidget):
         url_layout.addWidget(self.url_label)
 
         self.url_caption = CaptionLabel("")
-        self.url_caption.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self.url_caption.setStyleSheet(f"color: {COLORS['text_secondary']}; background: transparent; background-color: transparent;")
         self.url_caption.setWordWrap(True)
         url_layout.addWidget(self.url_caption)
 
@@ -380,7 +380,7 @@ class PinarelloImageScreen(ResponsiveWidget):
         output_layout.addWidget(self.output_label)
 
         self.output_caption = CaptionLabel("")
-        self.output_caption.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self.output_caption.setStyleSheet(f"color: {COLORS['text_secondary']}; background: transparent; background-color: transparent;")
         self.output_caption.setWordWrap(True)
         output_layout.addWidget(self.output_caption)
 
@@ -536,7 +536,7 @@ class PinarelloImageScreen(ResponsiveWidget):
         layout.setContentsMargins(12, 8, 12, 8)
 
         label_widget = CaptionLabel(label)
-        label_widget.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        label_widget.setStyleSheet(f"color: {COLORS['text_secondary']}; background: transparent; background-color: transparent;")
 
         value_widget = BodyLabel(value)
         value_widget.setStyleSheet("font-size: 22px; font-weight: 600;")

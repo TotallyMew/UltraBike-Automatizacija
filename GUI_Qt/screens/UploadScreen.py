@@ -15,6 +15,8 @@ from qfluentwidgets import (
 from uploaderFactory import getUploaderClass
 from Managers.DescriptionManager import DescriptionManager
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
+from GUI_Qt.components.validation import RequiredValidator, URLValidator
+from GUI_Qt.components.accessibility import KeyboardNavigationMixin
 from GUI_Qt.styles.theme_config import COLORS, FONTS, RADII, SIZES, SPACING, rgba_from_hex
 from GUI_Qt.styles.screen_theme import (
     PAGE_MARGINS,
@@ -29,6 +31,7 @@ from GUI_Qt.styles.screen_theme import (
     apply_screen_theme,
     get_responsive_margins,
     get_responsive_spacing,
+    _normalize_label_widget,
 )
 
 
@@ -73,7 +76,7 @@ class UploadWorker(QThread):
         self._waiting_for_retry = False
 
 
-class UploadScreen(ResponsiveWidget):
+class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
     """Main upload screen with Fluent Design and responsive scaling"""
 
     def __init__(self, main_window, parent=None):
@@ -179,6 +182,8 @@ class UploadScreen(ResponsiveWidget):
 
         def _label_block(label_widget, caption_widget):
             block = QWidget()
+            block.setStyleSheet("background: transparent;")
+            block.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
             v = QVBoxLayout(block)
             v.setContentsMargins(0, 0, 0, 0)
             v.setSpacing(TIGHT_SPACING)
@@ -197,6 +202,9 @@ class UploadScreen(ResponsiveWidget):
         self._ensure_brand_placeholder(self.brand_combo)
         self.brand_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.brand_combo.currentTextChanged.connect(self._on_brand_change)
+        # Accessibility
+        self.brand_combo.setAccessibleName(self.main.i18n.tr("upload.brand.label"))
+        self.brand_combo.setAccessibleDescription(self.main.i18n.tr("upload.brand.caption"))
 
         # Product code
         self.code_label = BodyLabel("")
@@ -207,6 +215,8 @@ class UploadScreen(ResponsiveWidget):
 
         # Code field with validation
         code_input_widget = QWidget()
+        code_input_widget.setStyleSheet("background: transparent;")
+        code_input_widget.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
         code_input_row = QHBoxLayout(code_input_widget)
         code_input_row.setContentsMargins(0, 0, 0, 0)
         code_input_row.setSpacing(8)
@@ -214,6 +224,9 @@ class UploadScreen(ResponsiveWidget):
         self.code_field = LineEdit()
         self.code_field.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.code_field.textChanged.connect(self._on_code_changed)
+        # Accessibility
+        self.code_field.setAccessibleName(self.main.i18n.tr("upload.code.label"))
+        self.code_field.setAccessibleDescription(self.main.i18n.tr("upload.code.caption"))
 
         self.code_validation_icon = TransparentToolButton(FluentIcon.ACCEPT, self)
         self.code_validation_icon.setFixedSize(20, 20)
@@ -232,6 +245,8 @@ class UploadScreen(ResponsiveWidget):
 
         # URL field with validation
         url_input_widget = QWidget()
+        url_input_widget.setStyleSheet("background: transparent;")
+        url_input_widget.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
         url_input_row = QHBoxLayout(url_input_widget)
         url_input_row.setContentsMargins(0, 0, 0, 0)
         url_input_row.setSpacing(8)
@@ -239,6 +254,9 @@ class UploadScreen(ResponsiveWidget):
         self.url_field = LineEdit()
         self.url_field.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.url_field.textChanged.connect(self._on_url_changed)
+        # Accessibility
+        self.url_field.setAccessibleName(self.main.i18n.tr("upload.url.label"))
+        self.url_field.setAccessibleDescription(self.main.i18n.tr("upload.url.caption"))
 
         self.url_validation_icon = TransparentToolButton(FluentIcon.ACCEPT, self)
         self.url_validation_icon.setFixedSize(20, 20)
@@ -267,8 +285,13 @@ class UploadScreen(ResponsiveWidget):
         self.description_combo = ComboBox()
         self.description_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.description_combo.currentTextChanged.connect(self._on_description_changed)
+        # Accessibility
+        self.description_combo.setAccessibleName(self.main.i18n.tr("upload.description.label"))
+        self.description_combo.setAccessibleDescription(self.main.i18n.tr("upload.description.caption"))
 
         desc_label_widget = QWidget()
+        desc_label_widget.setStyleSheet("background: transparent;")
+        desc_label_widget.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
         desc_label_layout = QVBoxLayout(desc_label_widget)
         desc_label_layout.setContentsMargins(0, 0, 0, 0)
         desc_label_layout.setSpacing(TIGHT_SPACING)
@@ -308,6 +331,7 @@ class UploadScreen(ResponsiveWidget):
         disclaimer_row.setSpacing(ROW_SPACING)
 
         self.disclaimer_checkbox = CheckBox("")
+        self.disclaimer_checkbox.setStyleSheet("QCheckBox { background: transparent; } QCheckBox::indicator { background: transparent; }")
         disclaimer_info = TransparentToolButton(FluentIcon.INFO, self)
         self.disclaimer_info_btn = disclaimer_info
         disclaimer_info.setFixedSize(SIZES['icon_sm'], SIZES['icon_sm'])
@@ -324,6 +348,7 @@ class UploadScreen(ResponsiveWidget):
         order_note_row.setSpacing(ROW_SPACING)
 
         self.order_note_checkbox = CheckBox("")
+        self.order_note_checkbox.setStyleSheet("QCheckBox { background: transparent; } QCheckBox::indicator { background: transparent; }")
         order_note_info = TransparentToolButton(FluentIcon.INFO, self)
         self.order_note_info_btn = order_note_info
         order_note_info.setFixedSize(SIZES['icon_sm'], SIZES['icon_sm'])
@@ -337,11 +362,14 @@ class UploadScreen(ResponsiveWidget):
 
         # Frameset checkbox (conditional - only for Pinarello)
         self.frameset_row = QWidget()
+        self.frameset_row.setStyleSheet("background: transparent;")
+        self.frameset_row.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
         frameset_layout = QHBoxLayout(self.frameset_row)
         frameset_layout.setContentsMargins(0, 0, 0, 0)
         frameset_layout.setSpacing(ROW_SPACING)
 
         self.frameset_checkbox = CheckBox("")
+        self.frameset_checkbox.setStyleSheet("QCheckBox { background: transparent; } QCheckBox::indicator { background: transparent; }")
         frameset_info = TransparentToolButton(FluentIcon.INFO, self)
         self.frameset_info_btn = frameset_info
         frameset_info.setFixedSize(SIZES['icon_sm'], SIZES['icon_sm'])
@@ -367,11 +395,17 @@ class UploadScreen(ResponsiveWidget):
         self.upload_button.setEnabled(False)
         self.upload_button.setFixedHeight(SIZES['button_height'])
         self.upload_button.clicked.connect(self._handle_upload)
+        # Accessibility
+        self.upload_button.setAccessibleName(self.main.i18n.tr("upload.button") + " (Ctrl+Enter)")
+        self.upload_button.setAccessibleDescription("Upload product to the website")
 
         self.clear_button = PushButton("")
         self.clear_button.setIcon(FluentIcon.DELETE)
         self.clear_button.setFixedHeight(SIZES['button_height'])
         self.clear_button.clicked.connect(self._clear_form)
+        # Accessibility
+        self.clear_button.setAccessibleName(self.main.i18n.tr("upload.clear"))
+        self.clear_button.setAccessibleDescription("Clear all form fields")
 
         self.progress_ring = IndeterminateProgressRing()
         self.progress_ring.setFixedSize(SIZES['progress_ring_lg'], SIZES['progress_ring_lg'])
@@ -644,11 +678,11 @@ class UploadScreen(ResponsiveWidget):
             if is_valid:
                 # Green checkmark for valid input
                 icon_widget.setIcon(FluentIcon.ACCEPT)
-                icon_widget.setStyleSheet("color: #2ECC71;")  # Green
+                icon_widget.setStyleSheet("color: #2ECC71; background: transparent; background-color: transparent;")  # Green
             else:
                 # Red X for invalid input
                 icon_widget.setIcon(FluentIcon.CLOSE)
-                icon_widget.setStyleSheet("color: #E74C3C;")  # Red
+                icon_widget.setStyleSheet("color: #E74C3C; background: transparent; background-color: transparent;")  # Red
 
     def _on_description_changed(self, text):
         """Handle description dropdown change with validation"""
@@ -707,6 +741,37 @@ class UploadScreen(ResponsiveWidget):
         brand = self.brand_combo.currentText()
         code = self.code_field.text().strip()
         url = self.url_field.text().strip()
+
+        # Validate form fields before upload
+        validation_errors = []
+
+        if not brand or brand not in self.brands:
+            validation_errors.append(f"Brand: {self.main.i18n.tr('validation.required')}")
+
+        if not code:
+            validation_errors.append(f"Code: {self.main.i18n.tr('validation.required')}")
+
+        if not url:
+            validation_errors.append(f"URL: {self.main.i18n.tr('validation.required')}")
+        else:
+            url_validator = URLValidator(self.main.i18n.tr)
+            url_result = url_validator.validate(url)
+            if not url_result.valid:
+                validation_errors.append(f"URL: {url_result.error}")
+
+        # Show validation errors if any
+        if validation_errors:
+            error_message = "\n".join(validation_errors)
+            InfoBar.error(
+                title=self.main.i18n.tr("batch.validation.errors_title"),
+                content=error_message,
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=5000,
+                parent=self
+            )
+            return
         description = self.description_combo.currentText()
         # Description is optional. Convert placeholder to "no selection".
         try:
@@ -821,7 +886,7 @@ class UploadScreen(ResponsiveWidget):
         self.clear_button.setEnabled(False)
         self.progress_ring.setVisible(True)
         self.status_label.setText(self.main.i18n.tr("upload.status.uploading"))
-        self.status_label.setStyleSheet(f"color: {COLORS['lavender_grey']};")
+        self.status_label.setStyleSheet(f"color: {COLORS['lavender_grey']}; background: transparent; background-color: transparent;")
 
         self.upload_worker.start()
 
@@ -885,7 +950,7 @@ class UploadScreen(ResponsiveWidget):
 
         if success:
             self.status_label.setText(message)
-            self.status_label.setStyleSheet(f"color: {COLORS['success']};")
+            self.status_label.setStyleSheet(f"color: {COLORS['success']}; background: transparent; background-color: transparent;")
 
             InfoBar.success(
                 title=self.main.i18n.tr("upload.success.title"),
@@ -899,7 +964,7 @@ class UploadScreen(ResponsiveWidget):
 
         else:
             self.status_label.setText(message)
-            self.status_label.setStyleSheet(f"color: {COLORS['error']};")
+            self.status_label.setStyleSheet(f"color: {COLORS['error']}; background: transparent; background-color: transparent;")
 
             InfoBar.error(
                 title=self.main.i18n.tr("upload.failed.title"),
@@ -956,14 +1021,26 @@ class UploadScreen(ResponsiveWidget):
         label_color = COLORS['text_primary_dark'] if is_dark else COLORS['text_primary_light']
         caption_color = COLORS['lavender_grey'] if is_dark else COLORS['text_secondary']
 
+        # Title
+        if hasattr(self, 'title_label') and self.title_label is not None:
+            _normalize_label_widget(self.title_label)
+
         for label in (self.brand_label, self.code_label, self.url_label, self.desc_label):
             label.setStyleSheet(f"font-weight: 600; color: {label_color};")
+            label.setAutoFillBackground(False)
+            _normalize_label_widget(label)
 
         for caption in (self.brand_caption, self.code_caption, self.url_caption, self.desc_caption):
             caption.setStyleSheet(f"color: {caption_color};")
+            caption.setAutoFillBackground(False)
+            _normalize_label_widget(caption)
 
         # Options title + default status text
         if hasattr(self, 'options_title') and self.options_title is not None:
             self.options_title.setStyleSheet(f"color: {label_color};")
+            self.options_title.setAutoFillBackground(False)
+            _normalize_label_widget(self.options_title)
         if hasattr(self, 'status_label') and self.status_label is not None:
             self.status_label.setStyleSheet(f"color: {caption_color};")
+            self.status_label.setAutoFillBackground(False)
+            _normalize_label_widget(self.status_label)

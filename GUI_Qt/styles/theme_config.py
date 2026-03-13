@@ -120,6 +120,7 @@ COLORS = {
     'success': '#10B981',      # Emerald green
     'warning': '#F59E0B',      # Amber
     'error': '#C81D25',        # Flag red
+    'focus_ring': '#8D99AE',   # Lavender grey - for accessibility focus indicators
 
     # Text colors
     'text_primary_dark': '#E0E0E0',    # Light gray for dark theme

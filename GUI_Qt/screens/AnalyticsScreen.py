@@ -49,11 +49,11 @@ class MetricCard(CardWidget):
 
         icon_widget = IconWidget(icon)
         icon_widget.setFixedSize(SIZES['icon_lg'], SIZES['icon_lg'])
-        icon_widget.setStyleSheet(f"color: {COLORS['space_indigo']};")
+        icon_widget.setStyleSheet(f"color: {COLORS['space_indigo']}; background: transparent; background-color: transparent;")
 
         # Keep title explicit and readable (icons alone are ambiguous)
         self.title_label = BodyLabel(str(title))
-        self.title_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-weight: 600;")
+        self.title_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-weight: 600; background: transparent; background-color: transparent;")
 
         header.addWidget(icon_widget)
         header.addWidget(self.title_label)
@@ -73,7 +73,7 @@ class MetricCard(CardWidget):
         # Subtitle with optional trend
         bottom_layout = QHBoxLayout()
         self.subtitle_label = CaptionLabel(str(subtitle))
-        self.subtitle_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self.subtitle_label.setStyleSheet(f"color: {COLORS['text_secondary']}; background: transparent; background-color: transparent;")
         bottom_layout.addWidget(self.subtitle_label)
 
         self.trend_label = CaptionLabel("")
@@ -100,7 +100,7 @@ class MetricCard(CardWidget):
         trend_color = COLORS['success'] if trend_positive else COLORS['error']
         trend_icon = "↑" if trend_positive else "↓"
         self.trend_label.setText(f"{trend_icon} {abs(trend):.1f}%")
-        self.trend_label.setStyleSheet(f"color: {trend_color}; font-weight: 600;")
+        self.trend_label.setStyleSheet(f"color: {trend_color}; font-weight: 600; background: transparent; background-color: transparent;")
 
     def _apply_theme(self):
         """Apply proper theming to card"""
@@ -354,7 +354,7 @@ class AnalyticsScreen(ResponsiveWidget):
         success_chart_layout.addWidget(self.success_donut, 0, Qt.AlignmentFlag.AlignCenter)
 
         success_caption = CaptionLabel("Last 30 days")
-        success_caption.setStyleSheet(f"color: {COLORS['text_tertiary']};")
+        success_caption.setStyleSheet(f"color: {COLORS['text_tertiary']}; background: transparent; background-color: transparent;")
         success_chart_layout.addWidget(success_caption, 0, Qt.AlignmentFlag.AlignCenter)
 
         charts_layout.addWidget(self.success_chart_card, 1)
@@ -653,7 +653,7 @@ class AnalyticsScreen(ResponsiveWidget):
                 self.errors_container.addWidget(error_item)
         else:
             no_errors = CaptionLabel("No errors in this period")
-            no_errors.setStyleSheet(f"color: {COLORS['success']}; font-style: italic;")
+            no_errors.setStyleSheet(f"color: {COLORS['success']}; font-style: italic; background: transparent; background-color: transparent;")
             self.errors_container.addWidget(no_errors)
 
     def _update_metric(self, card, value, subtitle, trend=None, trend_positive=True):
@@ -690,7 +690,7 @@ class AnalyticsScreen(ResponsiveWidget):
         status_color = COLORS['success'] if status == 'success' else COLORS['error']
         icon = IconWidget(status_icon)
         icon.setFixedSize(SIZES['icon_sm'], SIZES['icon_sm'])
-        icon.setStyleSheet(f"color: {status_color};")
+        icon.setStyleSheet(f"color: {status_color}; background: transparent; background-color: transparent;")
         layout.addWidget(icon)
 
         # Brand and code

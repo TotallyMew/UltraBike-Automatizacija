@@ -297,7 +297,7 @@ class FolderCreatorScreen(ResponsiveWidget):
 
         list_header = QHBoxLayout()
         self.list_title = BodyLabel("")
-        self.list_title.setStyleSheet(f"font-weight: 600; color: {COLORS['text_secondary']};")
+        self.list_title.setStyleSheet(f"font-weight: 600; color: {COLORS['text_secondary']}; background: transparent; background-color: transparent;")
 
         self.scrape_btn = PrimaryPushButton("")
         self.scrape_btn.setIcon(FluentIcon.SYNC.icon())
@@ -313,7 +313,7 @@ class FolderCreatorScreen(ResponsiveWidget):
         left_layout.addWidget(self.products_list, 1)
 
         self.list_hint = CaptionLabel("")
-        self.list_hint.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self.list_hint.setStyleSheet(f"color: {COLORS['text_secondary']}; background: transparent; background-color: transparent;")
         left_layout.addWidget(self.list_hint)
 
         self.left_panel = left_panel
@@ -334,11 +334,11 @@ class FolderCreatorScreen(ResponsiveWidget):
 
         # Preview
         self.preview_title = BodyLabel("")
-        self.preview_title.setStyleSheet(f"font-weight: 600; color: {COLORS['text_secondary']};")
+        self.preview_title.setStyleSheet(f"font-weight: 600; color: {COLORS['text_secondary']}; background: transparent; background-color: transparent;")
         right_layout.addWidget(self.preview_title)
 
         self.preview_hint = CaptionLabel("")
-        self.preview_hint.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self.preview_hint.setStyleSheet(f"color: {COLORS['text_secondary']}; background: transparent; background-color: transparent;")
         right_layout.addWidget(self.preview_hint)
 
         self.preview_tree = QTreeWidget()
@@ -352,7 +352,7 @@ class FolderCreatorScreen(ResponsiveWidget):
         # Path chooser card-like block
         self.path_label = BodyLabel("")
         self.path_caption = CaptionLabel("")
-        self.path_caption.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self.path_caption.setStyleSheet(f"color: {COLORS['text_secondary']}; background: transparent; background-color: transparent;")
         right_layout.addWidget(self.path_label)
         right_layout.addWidget(self.path_caption)
 

@@ -18,6 +18,7 @@ from qfluentwidgets import (
 from Managers.DescriptionManager import DescriptionManager
 from Managers.DeepLTranslator import DeepLTranslator
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
+from GUI_Qt.components.dialogs import DestructiveActionDialog
 from GUI_Qt.styles.theme_config import COLORS, FONTS, RADII, PADDINGS, rgba_from_hex
 from GUI_Qt.styles.theme_config import SIZES
 from GUI_Qt.styles.screen_theme import (
@@ -176,7 +177,7 @@ class DescriptionsScreen(ResponsiveWidget):
         list_header = QHBoxLayout()
         self.list_title = BodyLabel("")
         list_title = self.list_title
-        list_title.setStyleSheet(f"font-weight: 600; color: {COLORS['text_secondary']};")
+        list_title.setStyleSheet(f"font-weight: 600; color: {COLORS['text_secondary']}; background: transparent; background-color: transparent;")
 
         self.refresh_btn = TransparentToolButton(FluentIcon.SYNC, self)
         self.refresh_btn.setFixedSize(SIZES['icon_action'], SIZES['icon_action'])
@@ -288,7 +289,7 @@ class DescriptionsScreen(ResponsiveWidget):
         warning = QHBoxLayout()
         warning_icon = FluentIcon.INFO.icon()
         warning_label = CaptionLabel("")
-        warning_label.setStyleSheet(f"color: {COLORS['lavender_grey']}; font-weight: 500;")
+        warning_label.setStyleSheet(f"color: {COLORS['lavender_grey']}; font-weight: 500; background: transparent; background-color: transparent;")
 
         warning.addWidget(warning_label)
         warning.addStretch()
@@ -618,16 +619,16 @@ class DescriptionsScreen(ResponsiveWidget):
         if not self.current_description_name:
             return
 
-        # Confirm deletion
-        dialog = MessageBox(
-            self.main.i18n.tr("descriptions.delete_confirm.title"),
-            self.main.i18n.tr("descriptions.delete_confirm.content", name=self.current_description_name),
-            self
+        # Confirm deletion with destructive dialog
+        confirmed = DestructiveActionDialog.ask(
+            title=self.main.i18n.tr("descriptions.delete_confirm.title"),
+            message=self.main.i18n.tr("descriptions.delete_confirm.content", name=self.current_description_name),
+            action_text=self.main.i18n.tr("common.delete"),
+            parent=self,
+            tr_func=self.main.i18n.tr
         )
-        dialog.yesButton.setText(self.main.i18n.tr("common.delete"))
-        dialog.cancelButton.setText(self.main.i18n.tr("common.cancel"))
 
-        if dialog.exec():
+        if confirmed:
             try:
                 success = self.desc_manager.delete_description(self.current_description_name)
 

@@ -18,6 +18,7 @@ from GUI_Qt.styles.screen_theme import (
     enforce_transparent_labels, apply_screen_theme, get_responsive_margins, get_responsive_spacing
 )
 from GUI_Qt.i18n import normalize_language, translate
+from GUI_Qt.components.accessibility import KeyboardNavigationMixin
 
 
 class _PrestaShopConnectionTestWorker(QThread):
@@ -51,13 +52,14 @@ class _PrestaShopConnectionTestWorker(QThread):
         self.done.emit(False, details)
 
 
-class SettingsScreen(ResponsiveWidget):
+class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
     """Settings screen with language and theme options"""
 
     def __init__(self, main_window, parent=None):
         super().__init__(parent)
         self.main = main_window
         self._loading = True  # Flag to prevent notifications during initial load
+        self._is_dirty = False  # Track unsaved changes
 
         # UI elements that need retranslation
         self._ui = {}
@@ -79,6 +81,12 @@ class SettingsScreen(ResponsiveWidget):
         self._init_ui()
         self._load_settings()
         self._loading = False  # Re-enable notifications after load
+
+        # Setup keyboard shortcuts for accessibility
+        self.setup_keyboard_shortcuts(
+            save_callback=self._save_all_settings,
+            cancel_callback=self._cancel_changes
+        )
 
         # Connect to theme change signal
         qconfig.themeChangedFinished.connect(self._on_theme_changed)
@@ -325,6 +333,9 @@ class SettingsScreen(ResponsiveWidget):
         self.language_combo.setMinimumWidth(SIZES['field_min_width_md'])
         self.language_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.language_combo.currentTextChanged.connect(self._on_language_change)
+        # Accessibility
+        self.language_combo.setAccessibleName(translate(self._preview_lang_code, "settings.language.label"))
+        self.language_combo.setAccessibleDescription(translate(self._preview_lang_code, "settings.language.desc"))
 
         lang_selector_layout.addWidget(lang_label)
         lang_selector_layout.addWidget(self.language_combo)
@@ -623,6 +634,9 @@ class SettingsScreen(ResponsiveWidget):
         self.theme_switch = SwitchButton()
         self.theme_switch.setChecked(isDarkTheme())
         self.theme_switch.checkedChanged.connect(self._on_theme_change)
+        # Accessibility
+        self.theme_switch.setAccessibleName(translate(self._preview_lang_code, "settings.appearance.dark.title"))
+        self.theme_switch.setAccessibleDescription(translate(self._preview_lang_code, "settings.appearance.dark.desc"))
 
         theme_toggle_layout.addLayout(theme_info_layout)
         theme_toggle_layout.addStretch()
@@ -720,7 +734,7 @@ class SettingsScreen(ResponsiveWidget):
 
         app_name = BodyLabel(translate(self._preview_lang_code, "settings.about.app"))
         self._ui["app_name"] = app_name
-        app_name.setStyleSheet(f"color: {COLORS['lavender_grey']};")
+        app_name.setStyleSheet(f"color: {COLORS['lavender_grey']}; background: transparent; background-color: transparent;")
         info_layout.addWidget(app_name)
 
         layout.addWidget(info_card)
@@ -732,20 +746,67 @@ class SettingsScreen(ResponsiveWidget):
         self.scroll.setWidget(self.content_widget)
         main_layout.addWidget(self.scroll)
 
-        # === SAVE BUTTON (Fixed at bottom) ===
+        # === SAVE/CANCEL BUTTONS (Fixed at bottom) ===
         button_container = QWidget()
         button_layout = QHBoxLayout(button_container)
         button_layout.setContentsMargins(*FOOTER_MARGINS)
         button_layout.addStretch()
 
+        # Cancel button
+        cancel_btn = PushButton(translate(self._preview_lang_code, "settings.cancel"))
+        self._ui["cancel_btn"] = cancel_btn
+        cancel_btn.setIcon(FluentIcon.CANCEL)
+        cancel_btn.setFixedHeight(SIZES['button_height'])
+        cancel_btn.clicked.connect(self._cancel_changes)
+        cancel_btn.setEnabled(False)  # Disabled until changes are made
+        # Accessibility
+        cancel_btn.setAccessibleName(translate(self._preview_lang_code, "shortcuts.cancel"))
+        cancel_btn.setAccessibleDescription("Discard all unsaved changes and revert to saved settings")
+
+        # Save button
         save_btn = PrimaryPushButton(translate(self._preview_lang_code, "settings.save"))
         self._ui["save_btn"] = save_btn
         save_btn.setIcon(FluentIcon.SAVE)
         save_btn.setFixedHeight(SIZES['button_height'])
         save_btn.clicked.connect(self._save_all_settings)
+        save_btn.setEnabled(False)  # Disabled until changes are made
+        # Accessibility
+        save_btn.setAccessibleName(translate(self._preview_lang_code, "shortcuts.save"))
+        save_btn.setAccessibleDescription("Save all settings changes")
 
+        button_layout.addWidget(cancel_btn)
+        button_layout.addSpacing(12)
         button_layout.addWidget(save_btn)
         main_layout.addWidget(button_container)
+
+        # Connect all controls to mark dirty when changed
+        self._connect_dirty_tracking()
+
+    def _connect_dirty_tracking(self):
+        """Connect all form controls to mark dirty state when changed"""
+        # Note: language_combo and theme_switch already mark dirty in their handlers
+
+        # ComboBoxes
+        self.browser_combo.currentTextChanged.connect(lambda: self._mark_dirty())
+        if hasattr(self, 'browser_count_combo'):
+            self.browser_count_combo.currentTextChanged.connect(lambda: self._mark_dirty())
+
+        # Switches
+        self.download_images_switch.checkedChanged.connect(lambda: self._mark_dirty())
+        self.auto_save_switch.checkedChanged.connect(lambda: self._mark_dirty())
+        self.auto_delete_pabaigta_switch.checkedChanged.connect(lambda: self._mark_dirty())
+        if hasattr(self, 'multi_session_switch'):
+            self.multi_session_switch.checkedChanged.connect(lambda: self._mark_dirty())
+        if hasattr(self, 'prestashop_api_switch'):
+            self.prestashop_api_switch.checkedChanged.connect(lambda: self._mark_dirty())
+
+        # Text fields
+        self.kross_path_field.textChanged.connect(lambda: self._mark_dirty())
+        self.repo_path_field.textChanged.connect(lambda: self._mark_dirty())
+        if hasattr(self, 'prestashop_url_field'):
+            self.prestashop_url_field.textChanged.connect(lambda: self._mark_dirty())
+        if hasattr(self, 'prestashop_key_field'):
+            self.prestashop_key_field.textChanged.connect(lambda: self._mark_dirty())
 
     def _load_settings(self):
         """Load current settings from database"""
@@ -836,6 +897,9 @@ class SettingsScreen(ResponsiveWidget):
                 self.main.apply_language_preview(self._preview_lang_code)
             except Exception:
                 pass
+
+        # Mark as dirty
+        self._mark_dirty()
 
     def _apply_theme_preview(self, is_dark: bool) -> None:
         """Live preview while Settings screen is visible.
@@ -956,6 +1020,8 @@ class SettingsScreen(ResponsiveWidget):
             self._ui["app_name"].setText(tr("settings.about.app"))
         if "save_btn" in self._ui:
             self._ui["save_btn"].setText(tr("settings.save"))
+        if "cancel_btn" in self._ui:
+            self._ui["cancel_btn"].setText(tr("settings.cancel"))
 
     def _update_scroll_style(self):
         """Update scroll area styling based on current theme"""
@@ -1001,6 +1067,9 @@ class SettingsScreen(ResponsiveWidget):
 
         # Live preview ONLY within Settings screen.
         self._apply_theme_preview(bool(checked))
+
+        # Mark as dirty
+        self._mark_dirty()
 
     def _browse_folder(self, setting_key, text_field):
         """Browse for folder (no longer auto-saves)"""
@@ -1099,6 +1168,9 @@ class SettingsScreen(ResponsiveWidget):
                 parent=self
             )
 
+            # Clear dirty flag after successful save
+            self._mark_clean()
+
         except Exception as e:
             InfoBar.error(
                 title=translate(self._preview_lang_code, "settings.save_failed.title"),
@@ -1109,6 +1181,53 @@ class SettingsScreen(ResponsiveWidget):
                 duration=4000,
                 parent=self
             )
+
+    def _cancel_changes(self):
+        """Discard changes and revert to saved settings"""
+        # Reload settings from database
+        self._loading = True
+        self._load_settings()
+        self._loading = False
+
+        # Reset preview states to saved values
+        self._sync_preview_from_saved_and_retranslate()
+
+        # Clear dirty flag
+        self._mark_clean()
+
+        # Show info message
+        InfoBar.info(
+            title=self.main.i18n.tr("settings.cancelled.title"),
+            content=self.main.i18n.tr("settings.cancelled.content"),
+            orient=Qt.Orientation.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.TOP,
+            duration=2000,
+            parent=self
+        )
+
+    def _mark_dirty(self):
+        """Mark settings as having unsaved changes"""
+        if self._loading:
+            return
+
+        self._is_dirty = True
+
+        # Enable Save/Cancel buttons
+        if "save_btn" in self._ui:
+            self._ui["save_btn"].setEnabled(True)
+        if "cancel_btn" in self._ui:
+            self._ui["cancel_btn"].setEnabled(True)
+
+    def _mark_clean(self):
+        """Mark settings as saved (no unsaved changes)"""
+        self._is_dirty = False
+
+        # Disable Save/Cancel buttons
+        if "save_btn" in self._ui:
+            self._ui["save_btn"].setEnabled(False)
+        if "cancel_btn" in self._ui:
+            self._ui["cancel_btn"].setEnabled(False)
 
     def _on_test_prestashop_connection(self):
         base_url = self.prestashop_url_field.text().strip() if hasattr(self, "prestashop_url_field") else ""

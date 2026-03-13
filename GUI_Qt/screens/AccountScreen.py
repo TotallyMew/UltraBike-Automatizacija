@@ -244,7 +244,7 @@ class AccountScreen(ResponsiveWidget):
         # Ensure the title uses the correct text color (TitleLabel sometimes inherits poorly).
         try:
             if 'title' in self._ui:
-                self._ui['title'].setStyleSheet(f"color: {text_primary};")
+                self._ui['title'].setStyleSheet(f"color: {text_primary}; background: transparent; background-color: transparent;")
         except Exception:
             pass
 

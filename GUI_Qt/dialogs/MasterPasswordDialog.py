@@ -42,6 +42,7 @@ class MasterPasswordSetupDialog(QWidget):
         # Title
         title = TitleLabel(self.main.i18n.tr("master.setup.title"))
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title.setWordWrap(True)
         center_layout.addWidget(title)
 
         subtitle = BodyLabel(self.main.i18n.tr("master.setup.subtitle"))
@@ -161,10 +162,12 @@ class MasterPasswordPromptDialog(QWidget):
         # Title
         title = TitleLabel(self.main.i18n.tr("master.prompt.title"))
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title.setWordWrap(True)
         center_layout.addWidget(title)
 
         subtitle = BodyLabel(self.main.i18n.tr("master.prompt.subtitle"))
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        subtitle.setWordWrap(True)
         center_layout.addWidget(subtitle)
 
         # Spacer
