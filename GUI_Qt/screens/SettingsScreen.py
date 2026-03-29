@@ -21,37 +21,6 @@ from GUI_Qt.i18n import normalize_language, translate
 from GUI_Qt.components.accessibility import KeyboardNavigationMixin
 
 
-class _PrestaShopConnectionTestWorker(QThread):
-    done = Signal(bool, str)  # ok, error_details
-
-    def __init__(self, *, base_url: str, api_key: str, logger=None):
-        super().__init__()
-        self._base_url = base_url
-        self._api_key = api_key
-        self._logger = logger
-
-    def run(self):
-        from Managers.PrestaShopAPI import PrestaShopAPI
-
-        api = PrestaShopAPI(self._base_url, self._api_key, logger=self._logger)
-        ok = False
-        try:
-            ok = bool(api.test_connection())
-        except Exception:
-            ok = False
-
-        if ok:
-            self.done.emit(True, "")
-            return
-
-        details = ""
-        try:
-            details = (api.last_error_summary() or "").strip()
-        except Exception:
-            details = ""
-        self.done.emit(False, details)
-
-
 class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
     """Settings screen with language and theme options"""
 
@@ -504,94 +473,6 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
         browser_count_layout.addWidget(self.browser_count_combo)
         features_layout.addLayout(browser_count_layout)
 
-        # === PRESTASHOP API (optional) ===
-        prestashop_api_header = QHBoxLayout()
-        prestashop_api_icon = IconWidget(FluentIcon.GLOBE)
-        prestashop_api_icon.setFixedSize(SIZES['icon_md'], SIZES['icon_md'])
-        prestashop_api_title = StrongBodyLabel(translate(self._preview_lang_code, "settings.features.prestashop_api.title"))
-        self._ui["prestashop_api_title"] = prestashop_api_title
-        prestashop_api_title.setStyleSheet(f"font-size: {FONTS['size_body_lg']};")
-        prestashop_api_header.addWidget(prestashop_api_icon)
-        prestashop_api_header.addSpacing(ICON_TEXT_GAP)
-        prestashop_api_header.addWidget(prestashop_api_title)
-        prestashop_api_header.addStretch()
-        features_layout.addSpacing(PAGE_SPACING)
-        features_layout.addLayout(prestashop_api_header)
-
-        prestashop_api_desc = CaptionLabel(translate(self._preview_lang_code, "settings.features.prestashop_api.desc"))
-        self._ui["prestashop_api_desc"] = prestashop_api_desc
-        features_layout.addWidget(prestashop_api_desc)
-
-        # Enable toggle
-        prestashop_enable_layout = QHBoxLayout()
-        prestashop_enable_info = QVBoxLayout()
-        prestashop_enable_label = BodyLabel(translate(self._preview_lang_code, "settings.features.prestashop_api.enable"))
-        self._ui["prestashop_enable_label"] = prestashop_enable_label
-        prestashop_enable_label.setStyleSheet("font-weight: 500;")
-        prestashop_enable_info.addWidget(prestashop_enable_label)
-
-        self.prestashop_api_switch = SwitchButton()
-        prestashop_enable_layout.addLayout(prestashop_enable_info)
-        prestashop_enable_layout.addStretch()
-        prestashop_enable_layout.addWidget(self.prestashop_api_switch)
-        features_layout.addLayout(prestashop_enable_layout)
-
-        # URL
-        prestashop_url_layout = QHBoxLayout()
-        prestashop_url_info = QVBoxLayout()
-        prestashop_url_label = BodyLabel(translate(self._preview_lang_code, "settings.features.prestashop_url.label"))
-        self._ui["prestashop_url_label"] = prestashop_url_label
-        prestashop_url_label.setStyleSheet("font-weight: 500;")
-        prestashop_url_caption = CaptionLabel(translate(self._preview_lang_code, "settings.features.prestashop_url.caption"))
-        self._ui["prestashop_url_caption"] = prestashop_url_caption
-        prestashop_url_info.addWidget(prestashop_url_label)
-        prestashop_url_info.addWidget(prestashop_url_caption)
-
-        self.prestashop_url_field = LineEdit()
-        self.prestashop_url_field.setMinimumWidth(SIZES['field_min_width_lg'])
-        self.prestashop_url_field.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-
-        prestashop_url_layout.addLayout(prestashop_url_info)
-        prestashop_url_layout.addStretch()
-        prestashop_url_layout.addWidget(self.prestashop_url_field)
-        features_layout.addLayout(prestashop_url_layout)
-
-        # API key
-        prestashop_key_layout = QHBoxLayout()
-        prestashop_key_info = QVBoxLayout()
-        prestashop_key_label = BodyLabel(translate(self._preview_lang_code, "settings.features.prestashop_api_key.label"))
-        self._ui["prestashop_key_label"] = prestashop_key_label
-        prestashop_key_label.setStyleSheet("font-weight: 500;")
-        prestashop_key_caption = CaptionLabel(translate(self._preview_lang_code, "settings.features.prestashop_api_key.caption"))
-        self._ui["prestashop_key_caption"] = prestashop_key_caption
-        prestashop_key_info.addWidget(prestashop_key_label)
-        prestashop_key_info.addWidget(prestashop_key_caption)
-
-        self.prestashop_key_field = LineEdit()
-        try:
-            from PySide6.QtWidgets import QLineEdit as _QLineEdit
-            self.prestashop_key_field.setEchoMode(_QLineEdit.EchoMode.Password)
-        except Exception:
-            pass
-        self.prestashop_key_field.setMinimumWidth(SIZES['field_min_width_lg'])
-        self.prestashop_key_field.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-
-        prestashop_key_layout.addLayout(prestashop_key_info)
-        prestashop_key_layout.addStretch()
-        prestashop_key_layout.addWidget(self.prestashop_key_field)
-        features_layout.addLayout(prestashop_key_layout)
-
-        # Test connection button
-        prestashop_test_layout = QHBoxLayout()
-        prestashop_test_layout.addStretch()
-        self.prestashop_test_btn = PushButton(
-            translate(self._preview_lang_code, "settings.features.prestashop_api.test")
-        )
-        self._ui["prestashop_test_btn"] = self.prestashop_test_btn
-        self.prestashop_test_btn.clicked.connect(self._on_test_prestashop_connection)
-        prestashop_test_layout.addWidget(self.prestashop_test_btn)
-        features_layout.addLayout(prestashop_test_layout)
-
         layout.addWidget(features_card)
 
         # === THEME CARD ===
@@ -797,16 +678,9 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
         self.auto_delete_pabaigta_switch.checkedChanged.connect(lambda: self._mark_dirty())
         if hasattr(self, 'multi_session_switch'):
             self.multi_session_switch.checkedChanged.connect(lambda: self._mark_dirty())
-        if hasattr(self, 'prestashop_api_switch'):
-            self.prestashop_api_switch.checkedChanged.connect(lambda: self._mark_dirty())
-
         # Text fields
         self.kross_path_field.textChanged.connect(lambda: self._mark_dirty())
         self.repo_path_field.textChanged.connect(lambda: self._mark_dirty())
-        if hasattr(self, 'prestashop_url_field'):
-            self.prestashop_url_field.textChanged.connect(lambda: self._mark_dirty())
-        if hasattr(self, 'prestashop_key_field'):
-            self.prestashop_key_field.textChanged.connect(lambda: self._mark_dirty())
 
     def _load_settings(self):
         """Load current settings from database"""
@@ -850,14 +724,6 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
             self.browser_count_combo.setCurrentText(str(bc))
 
         self._update_multi_session_enabled_state()
-
-        # Load PrestaShop API settings
-        if hasattr(self, 'prestashop_api_switch'):
-            self.prestashop_api_switch.setChecked(bool(self.main.settings.get('prestashop_api_enabled', False)))
-        if hasattr(self, 'prestashop_url_field'):
-            self.prestashop_url_field.setText(self.main.settings.get('prestashop_url', '') or '')
-        if hasattr(self, 'prestashop_key_field'):
-            self.prestashop_key_field.setText(self.main.settings.get('prestashop_api_key', '') or '')
 
         # Load theme
         theme = self.main.settings.get('theme', 'light')
@@ -975,23 +841,6 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
         if "browser_count_caption" in self._ui:
             self._ui["browser_count_caption"].setText(tr("settings.features.browser_count.caption"))
 
-        if "prestashop_api_title" in self._ui:
-            self._ui["prestashop_api_title"].setText(tr("settings.features.prestashop_api.title"))
-        if "prestashop_api_desc" in self._ui:
-            self._ui["prestashop_api_desc"].setText(tr("settings.features.prestashop_api.desc"))
-        if "prestashop_enable_label" in self._ui:
-            self._ui["prestashop_enable_label"].setText(tr("settings.features.prestashop_api.enable"))
-        if "prestashop_url_label" in self._ui:
-            self._ui["prestashop_url_label"].setText(tr("settings.features.prestashop_url.label"))
-        if "prestashop_url_caption" in self._ui:
-            self._ui["prestashop_url_caption"].setText(tr("settings.features.prestashop_url.caption"))
-        if "prestashop_key_label" in self._ui:
-            self._ui["prestashop_key_label"].setText(tr("settings.features.prestashop_api_key.label"))
-        if "prestashop_key_caption" in self._ui:
-            self._ui["prestashop_key_caption"].setText(tr("settings.features.prestashop_api_key.caption"))
-        if "prestashop_test_btn" in self._ui:
-            self._ui["prestashop_test_btn"].setText(tr("settings.features.prestashop_api.test"))
-
         if "theme_title" in self._ui:
             self._ui["theme_title"].setText(tr("settings.appearance.title"))
         if "theme_desc" in self._ui:
@@ -1102,10 +951,6 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
             kross_path = self.kross_path_field.text()
             repo_path = self.repo_path_field.text()
 
-            prestashop_enabled = self.prestashop_api_switch.isChecked() if hasattr(self, 'prestashop_api_switch') else False
-            prestashop_url = self.prestashop_url_field.text().strip() if hasattr(self, 'prestashop_url_field') else ''
-            prestashop_key = self.prestashop_key_field.text().strip() if hasattr(self, 'prestashop_key_field') else ''
-
             # Save all to database
             self.main.settings.set('language', language)
             self.main.settings.set('browser_choice', browser)
@@ -1115,11 +960,6 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
             self.main.settings.set('multi_session_enabled', bool(multi_session_enabled))
             self.main.settings.set('browser_count', int(browser_count))
             self.main.settings.set('theme', theme_name)
-
-            # Optional APIs
-            self.main.settings.set('prestashop_api_enabled', bool(prestashop_enabled))
-            self.main.settings.set('prestashop_url', prestashop_url)
-            self.main.settings.set('prestashop_api_key', prestashop_key)
 
             if kross_path:
                 self.main.settings.set('kross_download_path', kross_path)
@@ -1228,68 +1068,6 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
             self._ui["save_btn"].setEnabled(False)
         if "cancel_btn" in self._ui:
             self._ui["cancel_btn"].setEnabled(False)
-
-    def _on_test_prestashop_connection(self):
-        base_url = self.prestashop_url_field.text().strip() if hasattr(self, "prestashop_url_field") else ""
-        api_key = self.prestashop_key_field.text().strip() if hasattr(self, "prestashop_key_field") else ""
-
-        if not base_url or not api_key:
-            InfoBar.warning(
-                title=translate(self._preview_lang_code, "settings.features.prestashop_api.test_missing.title"),
-                content=translate(self._preview_lang_code, "settings.features.prestashop_api.test_missing.content"),
-                orient=Qt.Orientation.Horizontal,
-                isClosable=True,
-                position=InfoBarPosition.TOP,
-                duration=3500,
-                parent=self,
-            )
-            return
-
-        try:
-            self.prestashop_test_btn.setEnabled(False)
-        except Exception:
-            pass
-
-        worker = _PrestaShopConnectionTestWorker(
-            base_url=base_url,
-            api_key=api_key,
-            logger=getattr(self.main, "logger", None),
-        )
-        self._prestashop_test_worker = worker
-
-        def _done(ok: bool, details: str):
-            try:
-                self.prestashop_test_btn.setEnabled(True)
-            except Exception:
-                pass
-
-            if ok:
-                InfoBar.success(
-                    title=translate(self._preview_lang_code, "settings.features.prestashop_api.test_ok.title"),
-                    content=translate(self._preview_lang_code, "settings.features.prestashop_api.test_ok.content"),
-                    orient=Qt.Orientation.Horizontal,
-                    isClosable=True,
-                    position=InfoBarPosition.TOP,
-                    duration=3000,
-                    parent=self,
-                )
-            else:
-                InfoBar.error(
-                    title=translate(self._preview_lang_code, "settings.features.prestashop_api.test_failed.title"),
-                    content=translate(
-                        self._preview_lang_code,
-                        "settings.features.prestashop_api.test_failed.content",
-                        error=(details or ""),
-                    ),
-                    orient=Qt.Orientation.Horizontal,
-                    isClosable=True,
-                    position=InfoBarPosition.TOP,
-                    duration=5000,
-                    parent=self,
-                )
-
-        worker.done.connect(_done)
-        worker.start()
 
     def _on_breakpoint_changed(self, breakpoint: str):
         """Respond to breakpoint changes - adjust margins and spacing."""

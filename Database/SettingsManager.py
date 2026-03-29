@@ -73,16 +73,6 @@ class SettingsManager:
             ('language', 'English', 'string', 'ui',
              'Application language (English/Lithuanian)', 'English'),
 
-            # APIs (optional)
-            ('prestashop_api_enabled', 'false', 'bool', 'api',
-             'Enable PrestaShop Webservice API for faster batch updates', 'false'),
-
-            ('prestashop_url', '', 'string', 'api',
-             'PrestaShop base URL (shop root, e.g. http://localhost:8000)', ''),
-
-            ('prestashop_api_key', '', 'string', 'api',
-             'PrestaShop Webservice API key', ''),
-
               ('display_name', '', 'string', 'ui',
                'Display name shown in the top bar', ''),
 

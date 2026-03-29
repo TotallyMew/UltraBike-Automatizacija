@@ -14,11 +14,10 @@ class BatchProcessor:
     Processes multiple bikes sequentially with progress tracking
     """
 
-    def __init__(self, driver, db_manager, logger=None, prestashop_api=None):
+    def __init__(self, driver, db_manager, logger=None):
         self.driver = driver
         self.db = db_manager
         self.logger = logger
-        self.prestashop_api = prestashop_api  # Optional PrestaShop API client
         self.queue = []  # List of {brand, code, url}
         self.current_index = 0
         self.results = []  # List of {code, status, error}

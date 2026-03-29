@@ -65,6 +65,7 @@ from GUI_Qt.styles.screen_theme import (
     CARD_SPACING, CONTENT_SPACING, TABLE_CELL_MARGINS, DETAILS_SPACING, MID_SPACING, SPACING,
     apply_screen_theme, get_responsive_margins, get_responsive_spacing
 )
+from Config.Selectors import ProductEditorSelectors, ProductListSelectors
 from Managers.DescriptionManager import DescriptionManager
 from Utilities.ProductNavigationHandler import ProductNavigationHandler
 from Utilities.WebIntercationHandler import WebInteractionHandler
@@ -168,81 +169,18 @@ class BatchDescriptionsWorker(QThread):
         self.items = items
         self._processed_times = []  # Track duration of each processed item
 
-        self._prestashop_api_base_url = (self.main.settings.get('prestashop_url', '') or '').strip()
-        self._prestashop_api_key = (self.main.settings.get('prestashop_api_key', '') or '').strip()
-        self._prestashop_api_enabled = bool(self.main.settings.get('prestashop_api_enabled', False))
-
-    def _update_description_via_api(self, code: str, description_name: str, append_disclaimer: bool) -> bool:
-        try:
-            if not self._prestashop_api_enabled:
-                return False
-            if not (self._prestashop_api_base_url and self._prestashop_api_key):
-                return False
-            if not description_name:
-                return False
-
-            from Managers.PrestaShopAPI import PrestaShopAPI
-            from Managers.DescriptionManager import DescriptionManager
-
-            api = PrestaShopAPI(self._prestashop_api_base_url, self._prestashop_api_key, logger=getattr(self.main, 'logger', None))
-            desc_manager = DescriptionManager(self.main.db, logger=getattr(self.main, 'logger', None))
-            desc = desc_manager.load_description(description_name)
-            if not desc:
-                self.log.emit(f"API: description template not found: {description_name}")
-                return False
-
-            lt_html = desc.get('description_lt', '') or ''
-            en_html = desc.get('description_en', '') or ''
-            lv_html = desc.get('description_lv', '') or ''
-            if append_disclaimer:
-                lt_html, en_html, lv_html = desc_manager.append_disclaimer_if_missing(lt_html, en_html, lv_html)
-
-            lang_map = api.get_language_id_map() or {}
-            en_id = str(lang_map.get('en') or '1')
-            lt_id = str(lang_map.get('lt') or '2')
-            lv_id = str(lang_map.get('lv') or '3')
-
-            payload = {}
-            if lt_html and lt_id:
-                payload[lt_id] = lt_html
-            if en_html and en_id:
-                payload[en_id] = en_html
-            if lv_html and lv_id:
-                payload[lv_id] = lv_html
-            if not payload:
-                return False
-
-            product_id = api.search_product_by_reference(code)
-            if not product_id:
-                extra = (api.last_error_summary() or '').strip()
-                self.log.emit(f"API: product not found for {code}" + (f" ({extra})" if extra else ""))
-                return False
-
-            ok = api.update_product_description(int(product_id), payload)
-            if not ok:
-                extra = (api.last_error_summary() or '').strip()
-                self.log.emit(f"API: description update failed for {code}" + (f" ({extra})" if extra else ""))
-                return False
-
-            self.log.emit(f"API: updated description for {code}")
-            return True
-        except Exception as e:
-            self.log.emit(f"API: description update crashed for {code}: {e}")
-            return False
-
     def _ensure_products_page(self, driver) -> None:
         try:
-            from selenium.webdriver.common.by import By
             from selenium.webdriver.support import expected_conditions as EC
             from selenium.webdriver.support.ui import WebDriverWait
 
             products_link = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.ID, "subtab-AdminProducts"))
+                EC.presence_of_element_located(ProductListSelectors.NAV_PRODUCTS)
             )
             driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", products_link)
             products_link.click()
             WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "table.table"))
+                EC.presence_of_element_located(ProductListSelectors.PRODUCT_TABLE)
             )
         except Exception:
             pass
@@ -250,7 +188,7 @@ class BatchDescriptionsWorker(QThread):
     def run(self):
         tr = self.main.i18n.tr
         driver = getattr(self.main, "driver", None)
-        if driver is None and not (self._prestashop_api_enabled and self._prestashop_api_base_url and self._prestashop_api_key):
+        if driver is None:
             for it in self.items:
                 self.row_update.emit(it["row"], tr("batchdesc.status.failed"), tr("batchdesc.no_session"))
             self.done.emit(0, len(self.items))
@@ -277,7 +215,6 @@ class BatchDescriptionsWorker(QThread):
             code = it["code"]
             desc = it["description"]
             disclaimer = bool(it.get("append_disclaimer"))
-            order_note = bool(it.get("append_order_note"))
 
             self.row_update.emit(row, tr("batchdesc.status.running"), "")
             self.log.emit(tr("batchdesc.progress.open", current=idx, total=total, code=code))
@@ -285,48 +222,6 @@ class BatchDescriptionsWorker(QThread):
             timings = {}
             t0 = _time.perf_counter()
             try:
-                # Try API first (full description). If order note is not requested, we can skip Selenium entirely.
-                api_uploaded = False
-                if desc:
-                    api_uploaded = self._update_description_via_api(code, desc, disclaimer)
-                    if api_uploaded and not order_note:
-                        timings["api_update_description"] = _time.perf_counter() - t0
-                        ok += 1
-                        self.row_update.emit(row, tr("batchdesc.status.ok"), "")
-
-                        try:
-                            details = {
-                                "workflow": "batch_descriptions",
-                                "batch_id": batch_id,
-                                "append_disclaimer": disclaimer,
-                                "append_order_note": order_note,
-                                "description_template": desc or None,
-                                "timings": timings,
-                                "mode": "api",
-                            }
-                            self.main.db.conn.execute(
-                                """
-                                INSERT INTO processing_history
-                                (brand, product_code, url_or_code, status, duration_seconds,
-                                 failed_stage, batch_id, details_json, processed_at)
-                                VALUES (?, ?, ?, 'success', ?, ?, ?, ?, ?)
-                                """,
-                                (
-                                    brand,
-                                    code,
-                                    None,
-                                    float(_time.perf_counter() - t0),
-                                    None,
-                                    batch_id,
-                                    json.dumps(details, ensure_ascii=False),
-                                    datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                                ),
-                            )
-                            self.main.db.conn.commit()
-                        except Exception:
-                            pass
-                        continue
-
                 if driver is None or nav is None or web is None:
                     self.row_update.emit(row, tr("batchdesc.status.failed"), tr("batchdesc.no_session"))
                     continue
@@ -343,16 +238,13 @@ class BatchDescriptionsWorker(QThread):
                 if desc:
                     self.log.emit(tr("batchdesc.progress.upload", current=idx, total=total, code=code))
                     t_start = _time.perf_counter()
-                    if api_uploaded:
-                        uploaded = True
-                    else:
-                        uploaded = desc_manager.upload_to_prestashop(
-                            driver,
-                            product_code=code,
-                            name=desc,
-                            append_disclaimer=disclaimer,
-                        )
-                    timings["upload_to_prestashop"] = _time.perf_counter() - t_start
+                    uploaded = desc_manager.upload_description(
+                        driver,
+                        product_code=code,
+                        name=desc,
+                        append_disclaimer=disclaimer,
+                    )
+                    timings["upload_description"] = _time.perf_counter() - t_start
                     if not uploaded:
                         self.row_update.emit(row, tr("batchdesc.status.failed"), tr("batchdesc.item.failed_upload"))
 
@@ -362,7 +254,6 @@ class BatchDescriptionsWorker(QThread):
                                 "workflow": "batch_descriptions",
                                 "batch_id": batch_id,
                                 "append_disclaimer": disclaimer,
-                                "append_order_note": order_note,
                                 "description_template": desc or None,
                             }
                             self.main.db.conn.execute(
@@ -389,33 +280,15 @@ class BatchDescriptionsWorker(QThread):
                         continue
                     did_upload = True
 
-                # If no description, but disclaimer or order note is checked, still try to append
-                if (not desc) and (disclaimer or order_note):
-                    if order_note:
-                        t_start = _time.perf_counter()
-                        try:
-                            desc_manager.append_order_note_to_short_description(driver, product_code=code)
-                        except Exception:
-                            pass
-                        timings["append_order_note"] = _time.perf_counter() - t_start
-                elif order_note:
-                    t_start = _time.perf_counter()
-                    try:
-                        desc_manager.append_order_note_to_short_description(driver, product_code=code)
-                    except Exception:
-                        pass
-                    timings["append_order_note"] = _time.perf_counter() - t_start
-
                 # Scroll to and click the product title field for the last language edited before saving
                 t_start = _time.perf_counter()
                 try:
                     from selenium.webdriver.support.ui import WebDriverWait
                     from selenium.webdriver.support import expected_conditions as EC
-                    from selenium.webdriver.common.by import By
-                    last_lang_id = "3"  # Latvian
-                    title_field_id = f"form_step1_name_{last_lang_id}"
+                    from Config.LanguageConfig import LANG_CODE_TO_PLATFORM_ID
+                    last_lang_id = LANG_CODE_TO_PLATFORM_ID["lv"]
                     title_field = WebDriverWait(driver, 3).until(
-                        EC.presence_of_element_located((By.ID, title_field_id))
+                        EC.presence_of_element_located(ProductEditorSelectors.name_field(last_lang_id))
                     )
                     driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", title_field)
                     try:
@@ -450,7 +323,6 @@ class BatchDescriptionsWorker(QThread):
                         "workflow": "batch_descriptions",
                         "batch_id": batch_id,
                         "append_disclaimer": disclaimer,
-                        "append_order_note": order_note,
                         "description_template": desc or None,
                         "timings": timings,
                     }
@@ -484,7 +356,6 @@ class BatchDescriptionsWorker(QThread):
                         "workflow": "batch_descriptions",
                         "batch_id": batch_id,
                         "append_disclaimer": disclaimer,
-                        "append_order_note": order_note,
                         "description_template": desc or None,
                     }
                     self.main.db.conn.execute(
@@ -546,73 +417,21 @@ class ParallelBatchDescriptionsWorker(QThread):
 
         self._batch_id = f"batchdesc_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
-        self._prestashop_api_base_url = (self.main.settings.get('prestashop_url', '') or '').strip()
-        self._prestashop_api_key = (self.main.settings.get('prestashop_api_key', '') or '').strip()
-        self._prestashop_api_enabled = bool(self.main.settings.get('prestashop_api_enabled', False))
-
     def stop(self):
         self._stop = True
 
-    def _update_description_via_api(self, code: str, description_name: str, append_disclaimer: bool) -> bool:
-        try:
-            if not self._prestashop_api_enabled:
-                return False
-            if not (self._prestashop_api_base_url and self._prestashop_api_key):
-                return False
-            if not description_name:
-                return False
-
-            from Managers.PrestaShopAPI import PrestaShopAPI
-            from Managers.DescriptionManager import DescriptionManager
-
-            api = PrestaShopAPI(self._prestashop_api_base_url, self._prestashop_api_key, logger=getattr(self.main, 'logger', None))
-            desc_manager = DescriptionManager(self.main.db, logger=getattr(self.main, 'logger', None))
-            desc = desc_manager.load_description(description_name)
-            if not desc:
-                return False
-
-            lt_html = desc.get('description_lt', '') or ''
-            en_html = desc.get('description_en', '') or ''
-            lv_html = desc.get('description_lv', '') or ''
-            if append_disclaimer:
-                lt_html, en_html, lv_html = desc_manager.append_disclaimer_if_missing(lt_html, en_html, lv_html)
-
-            lang_map = api.get_language_id_map() or {}
-            en_id = str(lang_map.get('en') or '1')
-            lt_id = str(lang_map.get('lt') or '2')
-            lv_id = str(lang_map.get('lv') or '3')
-
-            payload = {}
-            if lt_html and lt_id:
-                payload[lt_id] = lt_html
-            if en_html and en_id:
-                payload[en_id] = en_html
-            if lv_html and lv_id:
-                payload[lv_id] = lv_html
-            if not payload:
-                return False
-
-            product_id = api.search_product_by_reference(code)
-            if not product_id:
-                return False
-
-            return bool(api.update_product_description(int(product_id), payload))
-        except Exception:
-            return False
-
     def _ensure_products_page(self, driver) -> None:
         try:
-            from selenium.webdriver.common.by import By
             from selenium.webdriver.support import expected_conditions as EC
             from selenium.webdriver.support.ui import WebDriverWait
 
             products_link = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.ID, "subtab-AdminProducts"))
+                EC.presence_of_element_located(ProductListSelectors.NAV_PRODUCTS)
             )
             driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", products_link)
             products_link.click()
             WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "table.table"))
+                EC.presence_of_element_located(ProductListSelectors.PRODUCT_TABLE)
             )
         except Exception:
             pass
@@ -667,48 +486,7 @@ class ParallelBatchDescriptionsWorker(QThread):
             code = it["code"]
             desc = it["description"]
             disclaimer = bool(it.get("append_disclaimer"))
-            order_note = bool(it.get("append_order_note"))
-
             t0 = _time.perf_counter()
-
-            # Try API for full description first. If order note isn't requested, we can skip Selenium entirely.
-            api_uploaded = False
-            if desc:
-                api_uploaded = self._update_description_via_api(code, desc, disclaimer)
-                if api_uploaded and not order_note:
-                    self.row_update.emit(row, tr("batchdesc.status.ok"), "")
-                    with self._lock:
-                        self._ok_count += 1
-                    try:
-                        details = {
-                            "workflow": "batch_descriptions",
-                            "batch_id": self._batch_id,
-                            "append_disclaimer": disclaimer,
-                            "append_order_note": order_note,
-                            "description_template": desc or None,
-                            "mode": "api",
-                        }
-                        self.main.db.conn.execute(
-                            """
-                            INSERT INTO processing_history
-                            (brand, product_code, url_or_code, status, duration_seconds,
-                             failed_stage, batch_id, details_json, processed_at)
-                            VALUES (?, ?, ?, 'success', ?, ?, ?, ?, ?)
-                            """,
-                            (
-                                brand,
-                                code,
-                                None,
-                                float(_time.perf_counter() - t0),
-                                None,
-                                self._batch_id,
-                                json.dumps(details, ensure_ascii=False),
-                            ),
-                        )
-                        self.main.db.conn.commit()
-                    except Exception:
-                        pass
-                    continue
 
             # Acquire a browser session
             session = self.session_manager.acquire_session(timeout=60.0)
@@ -736,54 +514,37 @@ class ParallelBatchDescriptionsWorker(QThread):
                 did_upload = False
                 if desc:
                     self.log.emit(tr("batchdesc.progress.upload", current=idx+1, total=len(self.items), code=code))
-                    if api_uploaded:
-                        uploaded = True
-                    else:
-                        uploaded = desc_manager.upload_to_prestashop(
-                            session.driver,
-                            product_code=code,
-                            name=desc,
-                            append_disclaimer=disclaimer,
-                        )
+                    uploaded = desc_manager.upload_description(
+                        session.driver,
+                        product_code=code,
+                        name=desc,
+                        append_disclaimer=disclaimer,
+                    )
                     if not uploaded:
                         self.row_update.emit(row, tr("batchdesc.status.failed"), tr("batchdesc.item.failed_upload"))
                         continue
                     did_upload = True
 
-                # Handle order note
-                if (not desc) and (disclaimer or order_note):
-                    if order_note:
-                        try:
-                            desc_manager.append_order_note_to_short_description(session.driver, product_code=code)
-                        except Exception:
-                            pass
-                    elif order_note:
-                        try:
-                            desc_manager.append_order_note_to_short_description(session.driver, product_code=code)
-                        except Exception:
-                            pass
-
-                    # Focus title field before saving
+                # Focus title field before saving
+                try:
+                    from selenium.webdriver.support.ui import WebDriverWait
+                    from selenium.webdriver.support import expected_conditions as EC
+                    from Config.LanguageConfig import LANG_CODE_TO_PLATFORM_ID
+                    last_lang_id = LANG_CODE_TO_PLATFORM_ID["lv"]
+                    title_field = WebDriverWait(session.driver, 3).until(
+                        EC.presence_of_element_located(ProductEditorSelectors.name_field(last_lang_id))
+                    )
+                    session.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", title_field)
                     try:
-                        from selenium.webdriver.support.ui import WebDriverWait
-                        from selenium.webdriver.support import expected_conditions as EC
-                        from selenium.webdriver.common.by import By
-                        last_lang_id = "3"  # Latvian
-                        title_field_id = f"form_step1_name_{last_lang_id}"
-                        title_field = WebDriverWait(session.driver, 3).until(
-                            EC.presence_of_element_located((By.ID, title_field_id))
-                        )
-                        session.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", title_field)
-                        try:
-                            title_field.click()
-                        except Exception:
-                            session.driver.execute_script("arguments[0].click();", title_field)
+                        title_field.click()
                     except Exception:
-                        pass
+                        session.driver.execute_script("arguments[0].click();", title_field)
+                except Exception:
+                    pass
 
-                    self.log.emit(tr("batchdesc.progress.save", current=idx+1, total=len(self.items), code=code))
-                    web.save_information()
-                    _time.sleep(0.5)
+                self.log.emit(tr("batchdesc.progress.save", current=idx+1, total=len(self.items), code=code))
+                web.save_information()
+                _time.sleep(0.5)
 
                 self.row_update.emit(row, tr("batchdesc.status.ok"), "")
                 with self._lock:
@@ -795,7 +556,6 @@ class ParallelBatchDescriptionsWorker(QThread):
                         "workflow": "batch_descriptions",
                         "batch_id": self._batch_id,
                         "append_disclaimer": disclaimer,
-                        "append_order_note": order_note,
                         "description_template": desc or None,
                         "mode": "parallel",
                     }
@@ -832,7 +592,6 @@ class ParallelBatchDescriptionsWorker(QThread):
                         "workflow": "batch_descriptions",
                         "batch_id": self._batch_id,
                         "append_disclaimer": disclaimer,
-                        "append_order_note": order_note,
                         "description_template": desc or None,
                         "mode": "parallel",
                     }

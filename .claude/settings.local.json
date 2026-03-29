@@ -1,5 +1,4 @@
 {
-  "model": "opus",
   "permissions": {
     "allow": [
       "Bash(python GUI/main.py:*)",
@@ -31,9 +30,20 @@
       "Bash(findstr:*)",
       "Bash(certutil:*)",
       "Bash(del \"d:\\\\Iš desktop\\\\Programavimas\\\\Projects\\\\Python\\\\UltraBike_Automatizacija\\\\fix_label_backgrounds.py\")",
-      "Bash(timeout 3 python:*)"
+      "Bash(timeout 3 python:*)",
+      "Bash(grep -rn \"prestashop\\\\|PrestaShop\\\\|PRESTASHOP\\\\|prestashop_api\\\\|PrestaShopAPI\" 'd:\\\\Iš desktop\\\\Programavimas\\\\Projects\\\\Python\\\\UltraBike_Automatizacija\\\\GUI_Qt' --include=*.py)",
+      "Bash(grep -rn \"prestashop\\\\|PrestaShop\\\\|PRESTASHOP\" 'd:\\\\Iš desktop\\\\Programavimas\\\\Projects\\\\Python\\\\UltraBike_Automatizacija\\\\GUI_Qt' --include=*.py)",
+      "Read(//tmp/**)",
+      "Bash(grep -rn \"order_note\\\\|append_order_note\" 'd:\\\\Iš desktop\\\\Programavimas\\\\Projects\\\\Python\\\\UltraBike_Automatizacija\\\\GUI_Qt' --include=*.py)",
+      "Bash(grep -rn \"short_description\\\\|short description\" 'd:\\\\Iš desktop\\\\Programavimas\\\\Projects\\\\Python\\\\UltraBike_Automatizacija\\\\GUI_Qt' --include=*.py)",
+      "Bash(find 'd:\\\\Iš desktop\\\\Programavimas\\\\Projects\\\\Python\\\\UltraBike_Automatizacija\\\\GUI_Qt' -name *.py -type f)",
+      "Bash(while read:*)",
+      "Bash(do if:*)",
+      "Bash(then echo:*)",
+      "Bash(find 'd: -path' *GUI_Qt* -name *.py -type f)"
     ],
     "deny": [],
     "ask": []
-  }
+  },
+  "model": "opus"
 }

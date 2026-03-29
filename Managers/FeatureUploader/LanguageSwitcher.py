@@ -1,9 +1,8 @@
-from selenium.webdriver.support.ui import Select
-from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 import time
+from Config.Selectors import ProductEditorSelectors
 
 class LanguageSwitcher:
     def __init__(self, driver, logger=None):
@@ -17,29 +16,27 @@ class LanguageSwitcher:
     def switchTo(self, langCode):
         self._log("Switching language", lang=langCode)
 
-        dropdown = WebDriverWait(self.driver, 10).until(
-            EC.element_to_be_clickable((By.ID, "form_switch_language"))
+        # Open the locale popup
+        trigger = WebDriverWait(self.driver, 10).until(
+            EC.element_to_be_clickable(ProductEditorSelectors.LANGUAGE_SWITCH)
         )
-        self.driver.execute_script("arguments[0].click();", dropdown)
+        self.driver.execute_script("arguments[0].click();", trigger)
 
-        Select(dropdown).select_by_value(langCode)
+        # Click the option for the requested locale
+        option = WebDriverWait(self.driver, 5).until(
+            EC.element_to_be_clickable(ProductEditorSelectors.language_option(langCode))
+        )
+        option.click()
 
-        # Wait for language-specific element to appear
-        from Config.LanguageConfig import LANG_CODE_TO_PRESTASHOP_ID
-        lang_id = LANG_CODE_TO_PRESTASHOP_ID.get(langCode, "1")
-
+        # Wait for the name field to be ready (same element for all locales)
         try:
-            # Wait for the title field for this language to be present
             WebDriverWait(self.driver, 5).until(
-                EC.presence_of_element_located((By.ID, f"form_step1_name_{lang_id}"))
+                EC.presence_of_element_located(ProductEditorSelectors.NAME_FIELD)
             )
-
-            # Additional check: wait for any loading overlays to disappear
             WebDriverWait(self.driver, 3).until_not(
-                EC.presence_of_element_located((By.CSS_SELECTOR, ".loading, .spinner, .overlay"))
+                EC.presence_of_element_located(ProductEditorSelectors.LOADING_OVERLAY)
             )
         except TimeoutException:
-            # Fallback: short sleep if dynamic wait fails
             time.sleep(0.5)
 
         self._log("Language switched successfully", lang=langCode)

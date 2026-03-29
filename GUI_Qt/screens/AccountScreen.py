@@ -1,5 +1,5 @@
 """Account Screen
-Manage credentials for PrestaShop and external brand portals.
+Manage credentials for admin and external brand portals.
 """
 
 from PySide6.QtCore import QTimer, Qt
@@ -113,11 +113,11 @@ class AccountScreen(ResponsiveWidget):
 
         layout.addWidget(self.profile_card)
 
-        # PrestaShop credentials
-        self.prestashop_card = CardWidget()
-        self.prestashop_card.setObjectName("accountCardPrestaShop")
-        self.prestashop_card.setBorderRadius(RADII['md'])
-        p_layout = QVBoxLayout(self.prestashop_card)
+        # Admin credentials
+        self.admin_card = CardWidget()
+        self.admin_card.setObjectName("accountCardAdmin")
+        self.admin_card.setBorderRadius(RADII['md'])
+        p_layout = QVBoxLayout(self.admin_card)
         p_layout.setContentsMargins(*PANEL_MARGINS)
         p_layout.setSpacing(MID_SPACING)
 
@@ -141,14 +141,14 @@ class AccountScreen(ResponsiveWidget):
         btn_row = QHBoxLayout()
         btn_row.addStretch(1)
         self._ui["ps_view"] = PrimaryPushButton("")
-        self._ui["ps_view"].clicked.connect(self._view_prestashop)
+        self._ui["ps_view"].clicked.connect(self._view_admin_credentials)
         btn_row.addWidget(self._ui["ps_view"])
         self._ui["ps_save"] = PrimaryPushButton("")
-        self._ui["ps_save"].clicked.connect(self._save_prestashop)
+        self._ui["ps_save"].clicked.connect(self._save_admin_credentials)
         btn_row.addWidget(self._ui["ps_save"])
         p_layout.addLayout(btn_row)
 
-        layout.addWidget(self.prestashop_card)
+        layout.addWidget(self.admin_card)
 
         # External brand credentials
         self.brand_card = CardWidget()
@@ -311,7 +311,7 @@ class AccountScreen(ResponsiveWidget):
         except Exception:
             self.display_name.setText("")
 
-        # PrestaShop email can be read without decrypting password
+        # Admin email can be read without decrypting password
         try:
             self.ps_email.setText(self.main.credential_manager.get_last_saved_email() or "")
         except Exception:
@@ -339,8 +339,8 @@ class AccountScreen(ResponsiveWidget):
         self.display_name.setPlaceholderText(tr("account.display_name.placeholder"))
         self._ui["display_name_save"].setText(tr("account.save"))
 
-        self._ui["ps_title"].setText(tr("account.prestashop.title"))
-        self._ui["ps_caption"].setText(tr("account.prestashop.caption"))
+        self._ui["ps_title"].setText(tr("account.admin.title"))
+        self._ui["ps_caption"].setText(tr("account.admin.caption"))
         self._ui["ps_email_label"].setText(tr("account.email"))
         self.ps_email.setPlaceholderText(tr("account.email.placeholder"))
         self._ui["ps_password_label"].setText(tr("account.password"))
@@ -382,7 +382,7 @@ class AccountScreen(ResponsiveWidget):
             return None
         return master
 
-    def _save_prestashop(self):
+    def _save_admin_credentials(self):
         email = self.ps_email.text().strip()
         password = self.ps_password.text().strip()
 
@@ -425,7 +425,7 @@ class AccountScreen(ResponsiveWidget):
                 parent=self,
             )
 
-    def _view_prestashop(self):
+    def _view_admin_credentials(self):
         master = self._require_master()
         if not master:
             return

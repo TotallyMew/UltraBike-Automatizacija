@@ -98,7 +98,6 @@ class MainWindow(FluentWindow):
         self.account_screen = None
         self.settings_screen = None
         self.info_screen = None
-        self.gold_standard_table_screen = None
 
         # Top bar reference
         self.top_bar = None
@@ -248,7 +247,6 @@ class MainWindow(FluentWindow):
         10: Account
         11: Settings
         12: Info
-        13: Gold Standard Table
         """
         if index == 0:  # Upload
             if not self.upload_screen:
@@ -340,13 +338,6 @@ class MainWindow(FluentWindow):
                 self.info_screen = InfoScreen(self)
             self._add_screen_to_stack(self.info_screen, self.i18n.tr("nav.info"))
             return self.info_screen
-
-        if index == 13:  # Gold Standard Table
-            if not self.gold_standard_table_screen:
-                from GUI_Qt.screens.GoldStandardTableScreen import GoldStandardTableScreen
-                self.gold_standard_table_screen = GoldStandardTableScreen(self)
-            self._add_screen_to_stack(self.gold_standard_table_screen, "Gold Table")
-            return self.gold_standard_table_screen
 
         return None
 
@@ -539,14 +530,6 @@ class MainWindow(FluentWindow):
             position=NavigationItemPosition.TOP
         )
 
-        self._nav_items["gold_table"] = self.navigationInterface.addItem(
-            routeKey="gold_table",
-            icon=FluentIcon.DICTIONARY,
-            text="Gold Table",
-            onClick=lambda: self._switch_to_screen(13),
-            position=NavigationItemPosition.TOP
-        )
-
         # === BOTTOM SECTION - System ===
         self._nav_items["account"] = self.navigationInterface.addItem(
             routeKey="account",
@@ -595,7 +578,7 @@ class MainWindow(FluentWindow):
                 pass
             version_layout.addWidget(version_icon, 0, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
-            version_label = BodyLabel(get_app_version('1.1.0'))
+            version_label = BodyLabel(get_app_version('2.0.0'))
             version_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             try:
                 version_label.setStyleSheet(

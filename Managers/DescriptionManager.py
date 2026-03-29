@@ -1,20 +1,19 @@
 ﻿"""
 Managers/DescriptionManager.py
-Handles description CRUD operations and PrestaShop upload
+Handles description CRUD operations and editor upload
 """
 
 # Standard library
-import re
 import time
 from datetime import datetime
 
 # Third-party
-from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import Select
 from selenium.webdriver.support.ui import WebDriverWait
+from selenium.common.exceptions import TimeoutException
 
 # Local
+from Config.Selectors import ProductEditorSelectors
 from Utilities.ErrorManager import ErrorManager
 
 
@@ -47,21 +46,6 @@ class DescriptionManager:
 
     # Detection substring
     DISCLAIMER_SIGNATURE = "Due to the different resolution"
-
-    # Short description "order note" HTML constants
-    ORDER_NOTE_LT = (
-        '<p><b style="color:#d0121a;">Prekę galime užsakyti, dėl jos pasiekiamumo prašome teirautis!</b></p>'
-    )
-    ORDER_NOTE_LV = (
-        '<p><b style="color:#d0121a;">Mēs varam pasūtīt produktu jums, lūdzu, noskaidrojiet tā pieejamību!</b></p>'
-    )
-    ORDER_NOTE_EN = (
-        '<p><b style="color:#d0121a;">We can order the product for you, please inquire about its availability!</b></p>'
-    )
-
-    ORDER_NOTE_SIGNATURE_EN = "We can order the product for you"
-    ORDER_NOTE_SIGNATURE_LT = "Prekę galime užsakyti"
-    ORDER_NOTE_SIGNATURE_LV = "Mēs varam pasūtīt produktu"
 
     def __init__(self, db_manager, logger=None):
         self.db = db_manager
@@ -100,185 +84,6 @@ class DescriptionManager:
             lv_html += self.DISCLAIMER_LV
 
         return lt_html, en_html, lv_html
-
-    def _order_note_present(self, html: str | None, lang_code: str) -> bool:
-        if not html:
-            return False
-        if self.ORDER_NOTE_SIGNATURE_EN in html:
-            return True
-        if lang_code == "lt" and self.ORDER_NOTE_SIGNATURE_LT in html:
-            return True
-        if lang_code == "lv" and self.ORDER_NOTE_SIGNATURE_LV in html:
-            return True
-        return False
-
-    def append_order_note_if_missing(self, lt_html: str, en_html: str, lv_html: str) -> tuple:
-        """Append the short-description order note to each language if not already present."""
-
-        if lt_html is not None and not self._order_note_present(lt_html, "lt"):
-            lt_html += self.ORDER_NOTE_LT
-
-        if en_html is not None and not self._order_note_present(en_html, "en"):
-            en_html += self.ORDER_NOTE_EN
-
-        if lv_html is not None and not self._order_note_present(lv_html, "lv"):
-            lv_html += self.ORDER_NOTE_LV
-
-        return lt_html, en_html, lv_html
-
-    def append_order_note_to_short_description(self, driver, product_code: str) -> bool:
-        """Append the order note to the PrestaShop *short description* field (per language).
-
-        This is designed to be safe to run multiple times: it appends only if missing.
-        Requirement: click the short-description wrapper before injecting HTML.
-        """
-        self._log("Appending order note to short description", product_code=product_code)
-
-        def _strip_leading_empty_paragraphs(html: str | None) -> str:
-            """Remove leading empty <p>...</p> blocks that TinyMCE often inserts."""
-            if not html:
-                return ""
-            cleaned = html.strip()
-            # Remove repeated leading empty paragraphs like:
-            # <p></p>, <p> </p>, <p>&nbsp;</p>, <p><br></p>, <p><br data-mce-bogus="1"></p>
-            empty_p = re.compile(
-                r"^\s*<p>(?:\s|&nbsp;|<br\b[^>]*\/?\s*>)*<\/p>",
-                re.IGNORECASE,
-            )
-            while True:
-                new = empty_p.sub("", cleaned)
-                if new == cleaned:
-                    break
-                cleaned = new.lstrip()
-            return cleaned
-
-        try:
-            wait = WebDriverWait(driver, 10)
-
-            try:
-                current_url = driver.current_url
-                if "#tab-step1" not in current_url:
-                    driver.get(current_url.split("#")[0] + "#tab-step1")
-                    time.sleep(1)
-            except Exception:
-                pass
-
-            languages = [
-                ("lt", self.ORDER_NOTE_LT, "2"),
-                ("en", self.ORDER_NOTE_EN, "1"),
-                ("lv", self.ORDER_NOTE_LV, "3"),
-            ]
-
-            any_updated = False
-
-            for lang_code, note_html, lang_id in languages:
-                # Switch language so we're editing the visible locale.
-                try:
-                    language_dropdown = wait.until(
-                        EC.element_to_be_clickable((By.ID, "form_switch_language"))
-                    )
-                    Select(language_dropdown).select_by_value(lang_code)
-                    time.sleep(0.8)
-                except Exception:
-                    # Best effort; continue.
-                    pass
-
-                # Click the wrapper (per user requirement).
-                try:
-                    wrapper = wait.until(
-                        EC.presence_of_element_located((By.ID, "form_step1_description_short"))
-                    )
-                    driver.execute_script(
-                        "arguments[0].scrollIntoView({block: 'center'});", wrapper
-                    )
-                    try:
-                        wrapper.click()
-                    except Exception:
-                        driver.execute_script("arguments[0].click();", wrapper)
-                    time.sleep(0.1)
-                except Exception:
-                    # If wrapper isn't found, we still try to locate the editor.
-                    pass
-
-                # Preferred: TinyMCE iframe like the full description field.
-                iframe_id = f"form_step1_description_short_{lang_id}_ifr"
-                try:
-                    wait.until(EC.frame_to_be_available_and_switch_to_it((By.ID, iframe_id)))
-                    editor_body = wait.until(EC.presence_of_element_located((By.ID, "tinymce")))
-
-                    current_html = ""
-                    try:
-                        current_html = editor_body.get_attribute("innerHTML") or ""
-                    except Exception:
-                        current_html = ""
-
-                    current_html = _strip_leading_empty_paragraphs(current_html)
-
-                    if not self._order_note_present(current_html, lang_code):
-                        new_html = (current_html or "") + note_html
-                        driver.execute_script(
-                            "arguments[0].innerHTML = arguments[1];",
-                            editor_body,
-                            new_html,
-                        )
-                        any_updated = True
-
-                    driver.switch_to.default_content()
-                    time.sleep(0.2)
-                    continue
-
-                except Exception:
-                    try:
-                        driver.switch_to.default_content()
-                    except Exception:
-                        pass
-
-                # Fallback: plain textarea field.
-                try:
-                    textarea_id = f"form_step1_description_short_{lang_id}"
-                    textarea = wait.until(EC.presence_of_element_located((By.ID, textarea_id)))
-                    current_value = textarea.get_attribute("value") or ""
-
-                    current_value = _strip_leading_empty_paragraphs(current_value)
-
-                    if not self._order_note_present(current_value, lang_code):
-                        new_value = (current_value or "") + note_html
-                        driver.execute_script(
-                            """
-                            const el = arguments[0];
-                            const value = arguments[1];
-                            el.focus();
-                            el.value = value;
-                            el.dispatchEvent(new Event('input', { bubbles: true }));
-                            el.dispatchEvent(new Event('change', { bubbles: true }));
-                            """,
-                            textarea,
-                            new_value,
-                        )
-                        any_updated = True
-                    time.sleep(0.2)
-                except Exception:
-                    # If this language field isn't available, skip.
-                    continue
-
-            self._log(
-                "Short description order note processed",
-                product_code=product_code,
-                updated=any_updated,
-            )
-            return True
-
-        except Exception as e:
-            self._log_error(
-                "Failed to append order note to short description",
-                exception=e,
-                product_code=product_code,
-            )
-            try:
-                driver.switch_to.default_content()
-            except Exception:
-                pass
-            return False
 
     def save_description(
         self, name: str, description_lt: str, description_en: str, description_lv: str
@@ -393,17 +198,13 @@ class DescriptionManager:
             self._log_error("Failed to delete description", exception=e, name=name)
             return False
 
-    def upload_to_prestashop(
+    def upload_description(
         self, driver, product_code: str, name: str, append_disclaimer: bool = False
     ) -> bool:
-        """Upload description to PrestaShop product from database"""
+        """Upload description to product editor from database."""
 
-        self._log(
-            "Uploading description to PrestaShop",
-            product_code=product_code,
-            name=name,
-            append_disclaimer=append_disclaimer,
-        )
+        self._log("Uploading description", product_code=product_code, name=name,
+                  append_disclaimer=append_disclaimer)
 
         desc = self.load_description(name)
         if not desc:
@@ -412,134 +213,121 @@ class DescriptionManager:
 
         lt_html = desc["description_lt"]
         en_html = desc["description_en"]
-        lv_html = desc["description_lv"]
 
         if append_disclaimer:
-            lt_html, en_html, lv_html = self.append_disclaimer_if_missing(
-                lt_html, en_html, lv_html
+            lt_html, en_html, _ = self.append_disclaimer_if_missing(
+                lt_html, en_html, ""
             )
 
-        return self._upload_html_to_prestashop(
-            driver, product_code, lt_html, en_html, lv_html
-        )
+        return self._upload_html(driver, product_code, lt_html, en_html)
 
-    def upload_to_prestashop_raw(
+    def upload_description_raw(
         self,
         driver,
         product_code: str,
         lt_html: str,
         en_html: str,
-        lv_html: str,
+        lv_html: str = "",
         append_disclaimer: bool = False,
     ) -> bool:
-        """Upload raw HTML content to PrestaShop"""
+        """Upload raw HTML content to product editor."""
 
-        self._log(
-            "Uploading raw HTML to PrestaShop",
-            product_code=product_code,
-            append_disclaimer=append_disclaimer,
-        )
+        self._log("Uploading raw HTML", product_code=product_code,
+                  append_disclaimer=append_disclaimer)
 
         if append_disclaimer:
-            lt_html, en_html, lv_html = self.append_disclaimer_if_missing(
-                lt_html, en_html, lv_html
+            lt_html, en_html, _ = self.append_disclaimer_if_missing(
+                lt_html, en_html, ""
             )
 
-        return self._upload_html_to_prestashop(
-            driver, product_code, lt_html, en_html, lv_html
-        )
+        return self._upload_html(driver, product_code, lt_html, en_html)
 
-    def _upload_html_to_prestashop(
+    def _switch_language(self, driver, wait, lang_code: str):
+        """Switch locale via the popup language switcher."""
+        trigger = wait.until(
+            EC.element_to_be_clickable(ProductEditorSelectors.LANGUAGE_SWITCH)
+        )
+        driver.execute_script("arguments[0].click();", trigger)
+
+        option = WebDriverWait(driver, 5).until(
+            EC.element_to_be_clickable(ProductEditorSelectors.language_option(lang_code))
+        )
+        option.click()
+
+        # Wait for the name field to settle after locale switch
+        wait.until(EC.presence_of_element_located(ProductEditorSelectors.NAME_FIELD))
+        time.sleep(0.3)
+
+    def _set_editor_content(self, driver, wait, html_content: str):
+        """Inject HTML into the HugeRTE description editor."""
+        # 1. Set iframe body innerHTML
+        wait.until(EC.frame_to_be_available_and_switch_to_it(
+            ProductEditorSelectors.DESCRIPTION_IFRAME
+        ))
+        editor_body = wait.until(
+            EC.presence_of_element_located(ProductEditorSelectors.TINYMCE_BODY)
+        )
+        driver.execute_script(
+            "arguments[0].innerHTML = arguments[1];"
+            "arguments[0].dispatchEvent(new Event('input', {bubbles:true}));"
+            "arguments[0].dispatchEvent(new Event('change', {bubbles:true}));",
+            editor_body,
+            html_content,
+        )
+        driver.switch_to.default_content()
+        time.sleep(0.2)
+
+        # 2. Also set hidden textarea (best-effort)
+        try:
+            textarea = wait.until(EC.presence_of_element_located(
+                ProductEditorSelectors.DESCRIPTION_TEXTAREA
+            ))
+            driver.execute_script(
+                "const el = arguments[0];"
+                "el.value = arguments[1];"
+                "el.dispatchEvent(new Event('input', {bubbles:true}));"
+                "el.dispatchEvent(new Event('change', {bubbles:true}));",
+                textarea,
+                html_content,
+            )
+        except Exception:
+            pass
+        time.sleep(0.2)
+
+    def _upload_html(
         self,
         driver,
         product_code: str,
         lt_html: str,
         en_html: str,
-        lv_html: str,
     ) -> bool:
-        """Internal method to upload HTML to PrestaShop"""
+        """Upload description HTML for LT and EN via browser automation."""
 
         try:
             wait = WebDriverWait(driver, 10)
 
-            try:
-                current_url = driver.current_url
-                if "#tab-step1" not in current_url:
-                    driver.get(current_url.split("#")[0] + "#tab-step1")
-                    time.sleep(1)
-            except Exception:
-                pass
-
-            from Config.LanguageConfig import LANG_CODE_TO_PRESTASHOP_ID
-
-            languages = [("lt", lt_html), ("en", en_html), ("lv", lv_html)]
-            lang_id_map = LANG_CODE_TO_PRESTASHOP_ID
-
+            languages = [("lt", lt_html), ("en", en_html)]
 
             for lang_code, html_content in languages:
                 if not html_content:
                     continue
 
                 self._log("Uploading language", lang=lang_code)
+                self._switch_language(driver, wait, lang_code)
+                self._set_editor_content(driver, wait, html_content)
 
-                language_dropdown = wait.until(
-                    EC.element_to_be_clickable((By.ID, "form_switch_language"))
-                )
-                Select(language_dropdown).select_by_value(lang_code)
-                time.sleep(1)
-
-                # 1. Set TinyMCE iframe body
-                iframe_id = f"form_step1_description_{lang_id_map[lang_code]}_ifr"
-                wait.until(
-                    EC.frame_to_be_available_and_switch_to_it((By.ID, iframe_id))
-                )
-                editor_body = wait.until(
-                    EC.presence_of_element_located((By.ID, "tinymce"))
-                )
-                driver.execute_script(
-                    "arguments[0].innerHTML = arguments[1];\n"
-                    "var ev1 = new Event('input', { bubbles: true });\n"
-                    "var ev2 = new Event('change', { bubbles: true });\n"
-                    "arguments[0].dispatchEvent(ev1);\n"
-                    "arguments[0].dispatchEvent(ev2);",
-                    editor_body,
-                    html_content,
-                )
-                driver.switch_to.default_content()
-                time.sleep(0.2)
-
-                # 2. Set hidden textarea value and dispatch events
-                textarea_id = f"form_step1_description_{lang_id_map[lang_code]}"
-                try:
-                    textarea = wait.until(EC.presence_of_element_located((By.ID, textarea_id)))
-                    driver.execute_script(
-                        "const el = arguments[0];\n"
-                        "const value = arguments[1];\n"
-                        "el.focus();\n"
-                        "el.value = value;\n"
-                        "el.dispatchEvent(new Event('input', { bubbles: true }));\n"
-                        "el.dispatchEvent(new Event('change', { bubbles: true }));",
-                        textarea,
-                        html_content,
-                    )
-                except Exception:
-                    pass
-                time.sleep(0.2)
+            # Switch back to LT after uploading
+            self._switch_language(driver, wait, "lt")
 
             self._log("HTML uploaded successfully", product_code=product_code)
             return True
 
         except Exception as e:
-            import traceback
-
             self._log_error(
                 "Failed to upload HTML", exception=e, product_code=product_code
             )
-            # Error: traceback.format_exc() can be logged if needed
-
             try:
                 driver.switch_to.default_content()
             except Exception:
                 pass
-
             return False

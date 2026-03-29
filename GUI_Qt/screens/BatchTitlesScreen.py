@@ -68,6 +68,7 @@ from GUI_Qt.styles.screen_theme import (
     CARD_SPACING, CONTENT_SPACING, TABLE_CELL_MARGINS, SPACING,
     apply_screen_theme, get_responsive_margins, get_responsive_spacing
 )
+from Config.Selectors import ProductEditorSelectors, ProductListSelectors
 from Utilities.ProductNavigationHandler import ProductNavigationHandler
 from Utilities.WebIntercationHandler import WebInteractionHandler
 from Managers.FeatureUploader.LanguageSwitcher import LanguageSwitcher
@@ -171,79 +172,30 @@ class BatchTitlesWorker(QThread):
         self.items = items
         self._processed_times = []  # Track duration of each processed item
 
-        self._prestashop_api_base_url = (self.main.settings.get('prestashop_url', '') or '').strip()
-        self._prestashop_api_key = (self.main.settings.get('prestashop_api_key', '') or '').strip()
-        self._prestashop_api_enabled = bool(self.main.settings.get('prestashop_api_enabled', False))
-
-    def _update_title_via_api(self, code: str, title_lt: str, title_en: str, title_lv: str) -> bool:
-        try:
-            if not self._prestashop_api_enabled:
-                return False
-            if not (self._prestashop_api_base_url and self._prestashop_api_key):
-                return False
-
-            from Managers.PrestaShopAPI import PrestaShopAPI
-
-            api = PrestaShopAPI(self._prestashop_api_base_url, self._prestashop_api_key, logger=getattr(self.main, 'logger', None))
-            lang_map = api.get_language_id_map() or {}
-            en_id = str(lang_map.get('en') or '1')
-            lt_id = str(lang_map.get('lt') or '2')
-            lv_id = str(lang_map.get('lv') or '3')
-
-            payload = {}
-            if title_en and en_id:
-                payload[en_id] = title_en
-            if title_lt and lt_id:
-                payload[lt_id] = title_lt
-            if title_lv and lv_id:
-                payload[lv_id] = title_lv
-            if not payload:
-                return False
-
-            product_id = api.search_product_by_reference(code)
-            if not product_id:
-                extra = (api.last_error_summary() or '').strip()
-                self.log.emit(f"API: product not found for {code}" + (f" ({extra})" if extra else ""))
-                return False
-
-            ok = api.update_product_name(int(product_id), payload)
-            if not ok:
-                extra = (api.last_error_summary() or '').strip()
-                self.log.emit(f"API: title update failed for {code}" + (f" ({extra})" if extra else ""))
-                return False
-
-            self.log.emit(f"API: updated title for {code}")
-            return True
-        except Exception as e:
-            self.log.emit(f"API: title update crashed for {code}: {e}")
-            return False
-
     def _ensure_products_page(self, driver) -> None:
         try:
-            from selenium.webdriver.common.by import By
             from selenium.webdriver.support import expected_conditions as EC
             from selenium.webdriver.support.ui import WebDriverWait
 
             products_link = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.ID, "subtab-AdminProducts"))
+                EC.presence_of_element_located(ProductListSelectors.NAV_PRODUCTS)
             )
             driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", products_link)
             products_link.click()
             WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "table.table"))
+                EC.presence_of_element_located(ProductListSelectors.PRODUCT_TABLE)
             )
         except Exception:
             pass
 
     def _set_title(self, driver, lang_code: str, title: str) -> None:
-        from selenium.webdriver.common.by import By
         from selenium.webdriver.common.keys import Keys
         from selenium.webdriver.support import expected_conditions as EC
         from selenium.webdriver.support.ui import WebDriverWait
 
-        from Config.LanguageConfig import LANG_CODE_TO_PRESTASHOP_ID, SUPPORTED_LANGUAGES
+        from Config.LanguageConfig import LANG_CODE_TO_PLATFORM_ID, SUPPORTED_LANGUAGES
 
-        lang_id_map = LANG_CODE_TO_PRESTASHOP_ID
+        lang_id_map = LANG_CODE_TO_PLATFORM_ID
         if lang_code not in SUPPORTED_LANGUAGES:
             raise Exception(f"Unsupported language: {lang_code}")
 
@@ -257,7 +209,7 @@ class BatchTitlesWorker(QThread):
             pass
 
         el = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.ID, f"form_step1_name_{lang_id_map[lang_code]}"))
+            EC.presence_of_element_located(ProductEditorSelectors.name_field(lang_id_map[lang_code]))
         )
         driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", el)
 
@@ -299,7 +251,7 @@ class BatchTitlesWorker(QThread):
     def run(self):
         tr = self.main.i18n.tr
         driver = getattr(self.main, "driver", None)
-        if driver is None and not (self._prestashop_api_enabled and self._prestashop_api_base_url and self._prestashop_api_key):
+        if driver is None:
             for it in self.items:
                 self.row_update.emit(it["row"], tr("batchtitle.status.failed"), tr("batchtitle.no_session"))
             self.done.emit(0, len(self.items))
@@ -330,43 +282,7 @@ class BatchTitlesWorker(QThread):
             t0 = time.perf_counter()
 
             try:
-                # Try API first if enabled.
-                if self._update_title_via_api(code, title_lt, title_en, title_lv):
-                    ok += 1
-                    self.row_update.emit(row, tr("batchtitle.status.ok"), "")
-                    try:
-                        details = {
-                            "workflow": "batch_titles",
-                            "batch_id": batch_id,
-                            "set_lt": bool(title_lt),
-                            "set_en": bool(title_en),
-                            "set_lv": bool(title_lv),
-                            "mode": "api",
-                        }
-                        self.main.db.conn.execute(
-                            """
-                            INSERT INTO processing_history
-                            (brand, product_code, url_or_code, status, duration_seconds,
-                             failed_stage, batch_id, details_json, processed_at)
-                            VALUES (?, ?, ?, 'success', ?, ?, ?, ?, ?)
-                            """,
-                            (
-                                brand,
-                                code,
-                                None,
-                                float(time.perf_counter() - t0),
-                                None,
-                                batch_id,
-                                json.dumps(details, ensure_ascii=False),
-                                datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                            ),
-                        )
-                        self.main.db.conn.commit()
-                    except Exception:
-                        pass
-                    continue
-
-                # Fall back to browser automation.
+                # Browser automation flow.
                 if driver is None or nav is None or web is None:
                     self.row_update.emit(row, tr("batchtitle.status.failed"), tr("batchtitle.no_session"))
                     continue
@@ -492,72 +408,33 @@ class ParallelBatchTitlesWorker(QThread):
 
         self._batch_id = f"batchtitle_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
-        self._prestashop_api_base_url = (self.main.settings.get('prestashop_url', '') or '').strip()
-        self._prestashop_api_key = (self.main.settings.get('prestashop_api_key', '') or '').strip()
-        self._prestashop_api_enabled = bool(self.main.settings.get('prestashop_api_enabled', False))
-
     def stop(self):
         self._stop = True
 
-    def _update_title_via_api(self, code: str, title_lt: str, title_en: str, title_lv: str) -> bool:
-        try:
-            if not self._prestashop_api_enabled:
-                return False
-            if not (self._prestashop_api_base_url and self._prestashop_api_key):
-                return False
-
-            from Managers.PrestaShopAPI import PrestaShopAPI
-
-            api = PrestaShopAPI(self._prestashop_api_base_url, self._prestashop_api_key, logger=getattr(self.main, 'logger', None))
-            lang_map = api.get_language_id_map() or {}
-            en_id = str(lang_map.get('en') or '1')
-            lt_id = str(lang_map.get('lt') or '2')
-            lv_id = str(lang_map.get('lv') or '3')
-
-            payload = {}
-            if title_en and en_id:
-                payload[en_id] = title_en
-            if title_lt and lt_id:
-                payload[lt_id] = title_lt
-            if title_lv and lv_id:
-                payload[lv_id] = title_lv
-            if not payload:
-                return False
-
-            product_id = api.search_product_by_reference(code)
-            if not product_id:
-                return False
-
-            return bool(api.update_product_name(int(product_id), payload))
-        except Exception:
-            return False
-
     def _ensure_products_page(self, driver) -> None:
         try:
-            from selenium.webdriver.common.by import By
             from selenium.webdriver.support import expected_conditions as EC
             from selenium.webdriver.support.ui import WebDriverWait
 
             products_link = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.ID, "subtab-AdminProducts"))
+                EC.presence_of_element_located(ProductListSelectors.NAV_PRODUCTS)
             )
             driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", products_link)
             products_link.click()
             WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "table.table"))
+                EC.presence_of_element_located(ProductListSelectors.PRODUCT_TABLE)
             )
         except Exception:
             pass
 
     def _set_title(self, driver, lang_code: str, title: str) -> None:
-        from selenium.webdriver.common.by import By
         from selenium.webdriver.common.keys import Keys
         from selenium.webdriver.support import expected_conditions as EC
         from selenium.webdriver.support.ui import WebDriverWait
 
-        from Config.LanguageConfig import LANG_CODE_TO_PRESTASHOP_ID, SUPPORTED_LANGUAGES
+        from Config.LanguageConfig import LANG_CODE_TO_PLATFORM_ID, SUPPORTED_LANGUAGES
 
-        lang_id_map = LANG_CODE_TO_PRESTASHOP_ID
+        lang_id_map = LANG_CODE_TO_PLATFORM_ID
         if lang_code not in SUPPORTED_LANGUAGES:
             raise Exception(f"Unsupported language: {lang_code}")
 
@@ -569,7 +446,7 @@ class ParallelBatchTitlesWorker(QThread):
             pass
 
         el = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.ID, f"form_step1_name_{lang_id_map[lang_code]}"))
+            EC.presence_of_element_located(ProductEditorSelectors.name_field(lang_id_map[lang_code]))
         )
         driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", el)
 
@@ -660,42 +537,6 @@ class ParallelBatchTitlesWorker(QThread):
             title_lv = it.get("title_lv") or ""
 
             t0 = _time.perf_counter()
-
-            # Try API first if enabled.
-            if self._update_title_via_api(code, title_lt, title_en, title_lv):
-                self.row_update.emit(row, tr("batchtitle.status.ok"), "")
-                with self._lock:
-                    self._ok_count += 1
-                try:
-                    details = {
-                        "workflow": "batch_titles",
-                        "batch_id": self._batch_id,
-                        "set_lt": bool(title_lt),
-                        "set_en": bool(title_en),
-                        "set_lv": bool(title_lv),
-                        "mode": "api",
-                    }
-                    self.main.db.conn.execute(
-                        """
-                        INSERT INTO processing_history
-                        (brand, product_code, url_or_code, status, duration_seconds,
-                         failed_stage, batch_id, details_json, processed_at)
-                        VALUES (?, ?, ?, 'success', ?, ?, ?, ?, ?)
-                        """,
-                        (
-                            brand,
-                            code,
-                            None,
-                            float(_time.perf_counter() - t0),
-                            None,
-                            self._batch_id,
-                            json.dumps(details, ensure_ascii=False),
-                        ),
-                    )
-                    self.main.db.conn.commit()
-                except Exception:
-                    pass
-                continue
 
             # Acquire a browser session
             session = self.session_manager.acquire_session(timeout=60.0)

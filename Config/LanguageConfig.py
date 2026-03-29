@@ -48,9 +48,8 @@ LANG_DISPLAY_TO_CODE: Dict[str, str] = {
     "Latvian": "lv"
 }
 
-# PrestaShop language ID mapping (default mapping, can be overridden by API)
-# These IDs correspond to the language IDs in PrestaShop database
-LANG_CODE_TO_PRESTASHOP_ID: Dict[str, str] = {
+# Platform language ID mapping used by the admin system.
+LANG_CODE_TO_PLATFORM_ID: Dict[str, str] = {
     "en": "1",
     "lt": "2",
     "lv": "3"
@@ -93,21 +92,21 @@ def normalize_lang_code(lang_code: str) -> str:
     raise ValueError(f"Unsupported language code: '{lang_code}'. Supported: {', '.join(SUPPORTED_LANGUAGES)}")
 
 
-def get_prestashop_id(lang_code: str) -> str:
+def get_platform_id(lang_code: str) -> str:
     """
-    Get PrestaShop language ID for a given language code.
+    Get language ID for a given language code.
 
     Args:
         lang_code: Language code (en, EN, English, etc.)
 
     Returns:
-        PrestaShop language ID as string
+        Platform language ID as string
 
     Raises:
         ValueError: If language code is not supported
     """
     normalized = normalize_lang_code(lang_code)
-    return LANG_CODE_TO_PRESTASHOP_ID[normalized]
+    return LANG_CODE_TO_PLATFORM_ID[normalized]
 
 
 def get_display_name(lang_code: str) -> str:

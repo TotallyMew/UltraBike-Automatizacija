@@ -8,10 +8,10 @@ class CredentialManager:
         self.db = db_manager if db_manager else DatabaseManager()
         self.session_manager = SessionManager(self.db)
 
-    # --- PrestaShop credentials (encrypted with master password) ---
+    # --- Admin credentials (encrypted with master password) ---
 
     def save_credentials(self, email: str, password: str, master_password: str) -> None:
-        """Store PrestaShop credentials encrypted with master password."""
+        """Store admin credentials encrypted with master password."""
         if not master_password:
             raise ValueError("Master password is required to store credentials.")
         self.session_manager.store_credentials(email, password, master_password)
@@ -21,7 +21,7 @@ class CredentialManager:
         return self.session_manager.get_credentials(master_password)
 
     def get_last_saved_email(self) -> str:
-        """Get last stored PrestaShop email without decrypting password."""
+        """Get last stored admin email without decrypting password."""
         try:
             cursor = self.db.conn.cursor()
             row = cursor.execute(

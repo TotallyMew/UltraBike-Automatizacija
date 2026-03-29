@@ -83,18 +83,6 @@ class ProductUploader(ABC):
             self.session_manager = SessionManager(self.db)
             self.settings_manager = SettingsManager(self.db)
 
-        # Optional PrestaShop API client (configured via Settings)
-        self.prestashop_api = None
-        try:
-            if bool(self.settings_manager.get('prestashop_api_enabled', False)):
-                base_url = (self.settings_manager.get('prestashop_url', '') or '').strip()
-                api_key = (self.settings_manager.get('prestashop_api_key', '') or '').strip()
-                if base_url and api_key:
-                    from Managers.PrestaShopAPI import PrestaShopAPI
-                    self.prestashop_api = PrestaShopAPI(base_url, api_key, logger=self.logger)
-        except Exception as e:
-            self._log_error("Failed to initialize PrestaShop API client", exception=e)
-
         self.translationManager = TranslationManager(self.brandName, self.db, self.logger)
         self.imageUploader = ImageUploader(self.driver, self.brandName, self.logger, settings_manager=self.settings_manager)
         self.featureUploader = FeatureUploader(self.driver, self.logger)
@@ -294,7 +282,7 @@ class ProductUploader(ABC):
             raise
 
     def openProduct(self):
-        """Navigate to product in PrestaShop"""
+        """Navigate to product in admin panel"""
         self._log("Opening product", code=self.ultraBikeCode)
         try:
             self.navigation_manager.navigate_to_product(self.brandName, self.ultraBikeCode)
@@ -331,30 +319,19 @@ class ProductUploader(ABC):
             # Don't raise - continue without images
 
     def uploadDescription(self):
-        """Upload product description if provided, or standalone disclaimer if checked"""
-        # Debug: uploadDescription called, description_name = {self.description_name}
+        """Upload product description if provided."""
 
-        # Get append_disclaimer flag from brand_options
         append_disclaimer = self.brand_options.get('append_disclaimer', False)
-        append_order_note = self.brand_options.get('append_order_note', False)
 
-        # If no description template selected, we can still run independent addons.
         if not self.description_name:
-            did_anything = False
-
             if append_disclaimer:
                 self._log("No description selected, but disclaimer requested - uploading standalone disclaimer")
                 try:
-                    success = self.description_manager.upload_to_prestashop_raw(
-                        self.driver,
-                        self.ultraBikeCode,
-                        '',  # Empty LT content
-                        '',  # Empty EN content
-                        '',  # Empty LV content
+                    success = self.description_manager.upload_description_raw(
+                        self.driver, self.ultraBikeCode,
+                        '', '', '',
                         append_disclaimer=True
                     )
-                    did_anything = True
-
                     if success:
                         self._log("Standalone disclaimer uploaded successfully")
                         ErrorManager.show_success("Disclaimer įkeltas!")
@@ -364,105 +341,20 @@ class ProductUploader(ABC):
                 except Exception as e:
                     self._log_error("Standalone disclaimer upload failed", exception=e)
                     ErrorManager.show_warning(f"Disclaimer įkėlimo klaida: {str(e)}")
-
-            if append_order_note:
-                self._log("No description selected, but order note requested - appending to short description")
-                try:
-                    ok = self.description_manager.append_order_note_to_short_description(
-                        self.driver,
-                        product_code=self.ultraBikeCode,
-                    )
-                    did_anything = True
-                    if ok:
-                        ErrorManager.show_success("Užsakymo pastaba įkelta!")
-                    else:
-                        ErrorManager.show_warning("Nepavyko įkelti užsakymo pastabos")
-                except Exception as e:
-                    self._log_error("Order note upload failed", exception=e)
-                    ErrorManager.show_warning(f"Užsakymo pastabos įkėlimo klaida: {str(e)}")
-
-            if did_anything:
                 return
 
-        # If no description and no disclaimer, skip
-        if not self.description_name:
             self._log("No description to upload")
-            # Debug: No description name provided, skipping
             return
 
-        # Upload description with optional disclaimer
-        # Debug: Attempting to upload description: {self.description_name}, append_disclaimer={append_disclaimer}
         self._log("Uploading description", name=self.description_name, append_disclaimer=append_disclaimer)
 
-        # Prefer API for description updates when enabled; fall back to browser automation on failure.
-        if self.prestashop_api is not None:
-            try:
-                desc = self.description_manager.load_description(self.description_name)
-                if desc:
-                    lt_html = desc.get('description_lt', '') or ''
-                    en_html = desc.get('description_en', '') or ''
-                    lv_html = desc.get('description_lv', '') or ''
-                    if append_disclaimer:
-                        lt_html, en_html, lv_html = self.description_manager.append_disclaimer_if_missing(
-                            lt_html, en_html, lv_html
-                        )
-
-                    lang_map = self.prestashop_api.get_language_id_map() or {}
-                    en_id = str(lang_map.get('en') or '1')
-                    lt_id = str(lang_map.get('lt') or '2')
-                    lv_id = str(lang_map.get('lv') or '3')
-
-                    payload = {}
-                    if lt_html and lt_id:
-                        payload[lt_id] = lt_html
-                    if en_html and en_id:
-                        payload[en_id] = en_html
-                    if lv_html and lv_id:
-                        payload[lv_id] = lv_html
-
-                    if payload:
-                        product_id = self.prestashop_api.search_product_by_reference(self.ultraBikeCode)
-                        if product_id:
-                            self._log("Updating description via API", code=self.ultraBikeCode)
-                            ok_api = self.prestashop_api.update_product_description(int(product_id), payload)
-                            if ok_api:
-                                self._log("Description updated via API", code=self.ultraBikeCode)
-                                ErrorManager.show_success(f"Aprašymas '{self.description_name}' įkeltas per API!")
-
-                                # Order note still uses browser automation (short description), best-effort.
-                                if append_order_note:
-                                    try:
-                                        self._log("Appending order note to short description", code=self.ultraBikeCode)
-                                        ok_note = self.description_manager.append_order_note_to_short_description(
-                                            self.driver,
-                                            product_code=self.ultraBikeCode,
-                                        )
-                                        if ok_note:
-                                            ErrorManager.show_success("Užsakymo pastaba įkelta!")
-                                        else:
-                                            ErrorManager.show_warning("Nepavyko įkelti užsakymo pastabos")
-                                    except Exception as e:
-                                        self._log_error("Order note upload failed", exception=e)
-                                        ErrorManager.show_warning(f"Užsakymo pastabos įkėlimo klaida: {str(e)}")
-                                return
-                            else:
-                                extra = (self.prestashop_api.last_error_summary() or '').strip()
-                                self._log_error("API description update failed; falling back to browser", exception=None, error=extra)
-                        else:
-                            extra = (self.prestashop_api.last_error_summary() or '').strip()
-                            self._log_error("Product not found via API; falling back to browser", exception=None, error=extra)
-            except Exception as e:
-                self._log_error("API description update crashed; falling back to browser", exception=e)
-
         try:
-            success = self.description_manager.upload_to_prestashop(
+            success = self.description_manager.upload_description(
                 self.driver,
                 self.ultraBikeCode,
                 self.description_name,
                 append_disclaimer=append_disclaimer
             )
-
-            # Debug: upload_to_prestashop returned: {success}
 
             if success:
                 self._log("Description uploaded successfully")
@@ -470,82 +362,37 @@ class ProductUploader(ABC):
                     ErrorManager.show_success(f"Aprašymas '{self.description_name}' su disclaimer įkeltas!")
                 else:
                     ErrorManager.show_success(f"Aprašymas '{self.description_name}' įkeltas!")
-
-                if append_order_note:
-                    try:
-                        self._log("Appending order note to short description", code=self.ultraBikeCode)
-                        ok_note = self.description_manager.append_order_note_to_short_description(
-                            self.driver,
-                            product_code=self.ultraBikeCode,
-                        )
-                        if ok_note:
-                            ErrorManager.show_success("Užsakymo pastaba įkelta!")
-                        else:
-                            ErrorManager.show_warning("Nepavyko įkelti užsakymo pastabos")
-                    except Exception as e:
-                        self._log_error("Order note upload failed", exception=e)
-                        ErrorManager.show_warning(f"Užsakymo pastabos įkėlimo klaida: {str(e)}")
             else:
                 self._log_error("Description upload returned False")
                 ErrorManager.show_warning(f"Nepavyko įkelti aprašymo '{self.description_name}'")
 
         except Exception as e:
-            import traceback
-            # Debug: Exception in uploadDescription
             self._log_error("Description upload failed", exception=e)
             ErrorManager.show_warning(f"Aprašymo įkėlimo klaida: {str(e)}")
 
 
     def uploadFeatures(self):
-        """Upload product features in all languages"""
+        """Upload product specifications (LT + EN)."""
         self._log("Uploading features")
         try:
             ltData = self.translationManager.loadLT()
             enData = self.translationManager.loadEN()
             lvData = self.translationManager.loadLV()
-            
-            # Count features
+
             self.features_uploaded = sum(len(table) for table in ltData)
-            
             self._log("Feature data loaded", lt_count=len(ltData), en_count=len(enData))
 
-            # Prefer API for feature associations when enabled; fall back to browser automation on failure.
-            if self.prestashop_api is not None:
-                try:
-                    from Managers.PrestaShopFeatureSync import apply_features_from_tables
-
-                    self._log("Uploading features via API", code=self.ultraBikeCode)
-                    result = apply_features_from_tables(
-                        self.prestashop_api,
-                        product_reference=self.ultraBikeCode,
-                        lt_tables=ltData,
-                        en_tables=enData,
-                        lv_tables=lvData,
-                        logger=self.logger,
-                    )
-                    if result and result.get('ok'):
-                        ErrorManager.show_success("Features įkelti per API!")
-                        return
-
-                    msg = (result or {}).get('message') or (self.prestashop_api.last_error_summary() or '')
-                    self._log_error("API feature upload failed; falling back to browser", exception=None, error=str(msg))
-                except Exception as e:
-                    self._log_error("API feature upload crashed; falling back to browser", exception=e)
-
             skipped = self.featureUploader.uploadAllLanguages(ltData, enData, lvData)
-            try:
-                if skipped:
-                    import json
-                    details = {}
-                    if getattr(self, "_details_json", None):
-                        try:
-                            details = json.loads(self._details_json) or {}
-                        except Exception:
-                            details = {}
-                    details["skipped_features"] = skipped
-                    self._details_json = json.dumps(details, ensure_ascii=False)
-            except Exception as e:
-                self._log_error("Failed to store skipped feature details", exception=e)
+            if skipped:
+                details = {}
+                if getattr(self, "_details_json", None):
+                    try:
+                        details = json.loads(self._details_json) or {}
+                    except Exception:
+                        details = {}
+                details["skipped_features"] = skipped
+                self._details_json = json.dumps(details, ensure_ascii=False)
+
             self._log("Features uploaded successfully", count=self.features_uploaded)
         except Exception as e:
             self._log_error("Feature upload failed", exception=e)
@@ -557,7 +404,7 @@ class ProductUploader(ABC):
         pass
 
     def saveUpdate(self):
-        """Save product changes in PrestaShop"""
+        """Save product changes."""
         self._log("Saving updates")
         try:
             self.web_handler.save_information()

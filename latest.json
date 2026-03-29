@@ -1,7 +1,7 @@
 {
-  "version": "1.2.0",
-  "url": "https://github.com/TotallyMew/UltraBike_Automatizacija_Release/releases/download/v1.2.0/UltraBike_Automatizacija_Setup_1.2.0.exe",
+  "version": "2.0.0",
+  "url": "https://github.com/TotallyMew/UltraBike_Automatizacija_Release/releases/download/v2.0.0/UltraBike_Automatizacija_Setup_2.0.0.exe",
   "sha256": "ab6e77af440ddc971e29e4e8b288d338c0fd0c6533a6664c24d463a5f8d479d0",
   "notes": "Major update: PrestaShop API integration, DeepL translations, Analytics Dashboard, Full History screen, PEP 8 compliance, Scrypt encryption, code quality improvements",
-  "installer": "UltraBike_Automatizacija_Setup_1.2.0.exe"
+  "installer": "UltraBike_Automatizacija_Setup_2.0.0.exe"
 }

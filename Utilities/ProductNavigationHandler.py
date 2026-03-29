@@ -4,6 +4,7 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
+from Config.Selectors import ProductListSelectors
 from Utilities.WebIntercationHandler import WebInteractionHandler
 from Utilities.ErrorManager import ErrorManager
 
@@ -23,73 +24,63 @@ class ProductNavigationHandler:
 
     def fix_invisible_products(self):
         self._log("Attempting to fix invisible products")
-        prekesKodoElementID = "filter_column_name_category"
 
         try:
-            prekesElement = WebDriverWait(self.driver, 3).until(
-                EC.element_to_be_clickable((By.NAME, prekesKodoElementID))
-            )
-            self.driver.execute_script("arguments[0].scrollIntoView();", prekesElement)
-            prekesElement.click()
-            self._log("Products filter clicked successfully")
+            self._navigate_via_products_button()
         except TimeoutException:
-            self._log("Products button not found, trying alternative methods")
             try:
-                self._navigate_via_products_button()
+                self._navigate_via_catalog_button()
             except TimeoutException:
                 try:
-                    self._navigate_via_catalog_button()
+                    self._expand_menu_and_navigate()
                 except TimeoutException:
-                    try:
-                        self._expand_menu_and_navigate()
-                    except TimeoutException:
-                        self._log_error("All navigation methods failed")
-                        ErrorManager.show_error("BROWSER_ELEMENT_NOT_FOUND")
-                        return
-        
+                    self._log_error("All navigation methods failed")
+                    ErrorManager.show_error("BROWSER_ELEMENT_NOT_FOUND")
+                    return
+
         self._log("Products visibility fixed")
 
     def _navigate_via_products_button(self):
         self._log("Navigating via products button")
-        prekesMygtukasElement = WebDriverWait(self.driver, 3).until(
-            EC.element_to_be_clickable((By.ID, "subtab-AdminProducts"))
+        el = WebDriverWait(self.driver, 3).until(
+            EC.element_to_be_clickable(ProductListSelectors.NAV_PRODUCTS)
         )
-        self.driver.execute_script("arguments[0].scrollIntoView();", prekesMygtukasElement)
-        prekesMygtukasElement.click()
+        self.driver.execute_script("arguments[0].scrollIntoView();", el)
+        el.click()
 
     def _navigate_via_catalog_button(self):
         self._log("Navigating via catalog button")
-        katalogasMygtukasElement = WebDriverWait(self.driver, 3).until(
-            EC.element_to_be_clickable((By.ID, "subtab-AdminCatalog"))
+        catalog = WebDriverWait(self.driver, 3).until(
+            EC.element_to_be_clickable(ProductListSelectors.NAV_CATALOG)
         )
-        self.driver.execute_script("arguments[0].scrollIntoView();", katalogasMygtukasElement)
-        katalogasMygtukasElement.click()
-        prekesMygtukasElement = WebDriverWait(self.driver, 3).until(
-            EC.element_to_be_clickable((By.ID, "subtab-AdminProducts"))
+        self.driver.execute_script("arguments[0].scrollIntoView();", catalog)
+        catalog.click()
+        el = WebDriverWait(self.driver, 3).until(
+            EC.element_to_be_clickable(ProductListSelectors.NAV_PRODUCTS)
         )
-        self.driver.execute_script("arguments[0].scrollIntoView();", prekesMygtukasElement)
-        prekesMygtukasElement.click()
+        self.driver.execute_script("arguments[0].scrollIntoView();", el)
+        el.click()
 
     def _expand_menu_and_navigate(self):
         self._log("Expanding menu and navigating")
-        sutraukimoIsskleidimoMygtukasElement = WebDriverWait(self.driver, 3).until(
-            EC.element_to_be_clickable((By.CLASS_NAME, "menu-collapse"))
+        hamburger = WebDriverWait(self.driver, 3).until(
+            EC.element_to_be_clickable(ProductListSelectors.NAV_MENU_COLLAPSE)
         )
-        self.driver.execute_script("arguments[0].scrollIntoView();", sutraukimoIsskleidimoMygtukasElement)
-        sutraukimoIsskleidimoMygtukasElement.click()
+        self.driver.execute_script("arguments[0].scrollIntoView();", hamburger)
+        hamburger.click()
         time.sleep(3)
         self._navigate_via_catalog_button()
 
     def navigate_to_product(self, brand_name, unique_code):
         self._log("Navigating to product", brand=brand_name, code=unique_code)
-        
+
         if unique_code.startswith("UB-"):
             try:
                 WebDriverWait(self.driver, 3).until(
-                    EC.element_to_be_clickable((By.NAME, "filter_column_name_category"))
+                    EC.element_to_be_clickable(ProductListSelectors.SEARCH_NAME)
                 )
             except TimeoutException:
-                self._log("Filter not visible, fixing...")
+                self._log("Product list not visible, fixing...")
                 self.fix_invisible_products()
 
             while True:
@@ -141,40 +132,49 @@ class ProductNavigationHandler:
                     continue
 
     def _search_product(self, unique_code):
-        self._log("Searching product (UB code)", code=unique_code)
-        
-        # Scroll to top to ensure all elements are visible
+        self._log("Searching product by External Id filter", code=unique_code)
+
         self.driver.execute_script("window.scrollTo(0, 0);")
         time.sleep(0.5)
-        
-        search_name = self.driver.find_element(By.NAME, "filter_column_name")
-        search_name.clear()
-        search_category = self.driver.find_element(By.NAME, "filter_column_name_category")
-        search_category.clear()
-        search_product = self.driver.find_element(By.NAME, "filter_column_reference")
-        search_product.clear()
-        
-        # Scroll search field into view before entering code
-        self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", search_product)
+
+        # Open the filters panel
+        toggle = WebDriverWait(self.driver, 5).until(
+            EC.element_to_be_clickable(ProductListSelectors.TOGGLE_FILTERS)
+        )
+        toggle.click()
         time.sleep(0.3)
-        
-        search_product.send_keys(unique_code + Keys.ENTER)
+
+        # Add a new filter row (button is only present when no filters exist yet)
+        try:
+            add_btn = WebDriverWait(self.driver, 3).until(
+                EC.element_to_be_clickable(ProductListSelectors.ADD_FILTER_BUTTON)
+            )
+            add_btn.click()
+            time.sleep(0.3)
+        except TimeoutException:
+            # Filter row already present from a previous search
+            pass
+
+        # Type the code into the value input (field defaults to External Id = equals)
+        value_input = WebDriverWait(self.driver, 5).until(
+            EC.element_to_be_clickable(ProductListSelectors.FILTER_VALUE)
+        )
+        self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", value_input)
+        value_input.clear()
+        value_input.send_keys(unique_code + Keys.ENTER)
 
     def _search_product_simple(self, unique_code):
-        self._log("Searching product (SKU)", code=unique_code)
-        
-        # Scroll to top
+        self._log("Searching product by name", code=unique_code)
+
         self.driver.execute_script("window.scrollTo(0, 0);")
         time.sleep(0.5)
-        
-        search_product = self.driver.find_element(By.ID, "bo_query")
-        search_product.clear()
-        
-        # Scroll search field into view
-        self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", search_product)
-        time.sleep(0.3)
-        
-        search_product.send_keys(unique_code + Keys.ENTER)
+
+        search_input = WebDriverWait(self.driver, 5).until(
+            EC.element_to_be_clickable(ProductListSelectors.SEARCH_NAME)
+        )
+        self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", search_input)
+        search_input.clear()
+        search_input.send_keys(unique_code + Keys.ENTER)
 
     def set_retry_callback(self, callback):
         self._retry_callback = callback

@@ -41,7 +41,7 @@ class FolderCreator:
             self.logger.error("FolderCreator", message, exception=exception, **context)
     
     def navigate_to_products(self):
-        """Navigate to products page in PrestaShop admin"""
+        """Navigate to products page in admin panel"""
         self._log("Navigating to products page")
         try:
             products_link = WebDriverWait(self.driver, 10).until(

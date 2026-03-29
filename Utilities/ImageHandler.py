@@ -13,6 +13,7 @@ from pywinauto.keyboard import send_keys
 
 # Local application imports
 from Config.BrowserConfig.WindowManager import WindowManager
+from Config.Selectors import FeatureSelectors, ImageSelectors
 from Utilities.FileHandler import FileHandler
 from Utilities.ErrorManager import ErrorManager
 
@@ -80,10 +81,10 @@ class ImageHandler:
 
     def upload_kross_images(self, driver):
         self._log("Starting KROSS image upload")
-        self.window_manager.resize_window(driver, 'add_feature_button', 160.07, 39.14)
-        
+        self.window_manager.resize_window(driver, FeatureSelectors.ADD_FEATURE_BUTTON[1], 160.07, 39.14)
+
         try:
-            element = driver.find_element(By.CLASS_NAME, 'dz-preview.disabled.openfilemanager.dz-clickable')
+            element = driver.find_element(*ImageSelectors.EXISTING_IMAGE)
             if element.is_displayed() and element.is_enabled():
                 self._log("Images already uploaded, skipping")
                 ErrorManager.show_warning("Nuotraukų jau yra sukelta, naujos nuotraukos nebus keliamos.")
@@ -93,7 +94,7 @@ class ImageHandler:
 
         try:
             download_path = self._construct_directory(driver)
-            upload_button = driver.find_element(By.ID, 'product-images-dropzone')
+            upload_button = driver.find_element(*ImageSelectors.DROPZONE)
             driver.execute_script("arguments[0].scrollIntoView();", upload_button)
             upload_button.click()
             time.sleep(2)
@@ -118,7 +119,7 @@ class ImageHandler:
             raise
 
     def _construct_directory(self, driver):
-        input_element = driver.find_element(By.ID, 'form_step1_name_2')
+        input_element = driver.find_element(*ImageSelectors.NAME_FIELD_LT)
         value = input_element.get_attribute('value')
         base_directory = self.settings_manager.get_kross_path()
         sanitized_value = FileHandler.sanitize_filename(value)

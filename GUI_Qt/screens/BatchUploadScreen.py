@@ -65,15 +65,10 @@ class BatchUploadWorker(QThread):
             return
 
         # Create batch processor
-        # PrestaShop API is intentionally disabled in batch screens.
-        # Use the dedicated API test screen instead.
-        prestashop_api = None
-
         batch_processor = BatchProcessor(
             driver=driver,
             db_manager=self.main_window.db,
             logger=self.main_window.logger,
-            prestashop_api=prestashop_api
         )
 
         ok = 0
@@ -102,7 +97,6 @@ class BatchUploadWorker(QThread):
                     'description_name': row_data.get('description_name'),
                     'frameset_only': row_data.get('frameset_only', False),
                     'append_disclaimer': row_data.get('append_disclaimer', False),
-                    'append_order_note': row_data.get('append_order_note', False),
                 }]
 
                 # Process this single item
@@ -224,15 +218,10 @@ class ParallelBatchUploadWorker(QThread):
                 self.session_status.emit(stats)
 
                 # Create batch processor for this session
-                # PrestaShop API is intentionally disabled in batch screens.
-                # Use the dedicated API test screen instead.
-                prestashop_api = None
-
                 batch_processor = BatchProcessor(
                     driver=session.driver,
                     db_manager=self.main_window.db,
                     logger=self.main_window.logger,
-                    prestashop_api=prestashop_api
                 )
 
                 # Build item
@@ -243,7 +232,6 @@ class ParallelBatchUploadWorker(QThread):
                     'description_name': row_data.get('description_name'),
                     'frameset_only': row_data.get('frameset_only', False),
                     'append_disclaimer': row_data.get('append_disclaimer', False),
-                    'append_order_note': row_data.get('append_order_note', False),
                 }]
 
                 # Process

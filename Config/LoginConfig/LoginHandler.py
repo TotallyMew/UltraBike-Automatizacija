@@ -3,6 +3,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 from Config.LoginConfig.CredentialManager import CredentialManager
+from Config.Selectors import LoginSelectors
 from Utilities.ErrorManager import ErrorManager
 
 class LoginHandler:    
@@ -29,23 +30,23 @@ class LoginHandler:
         self._log("Attempting login", email=email)
         try:
             email_field = WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located((By.ID, "email")))
+                EC.presence_of_element_located(LoginSelectors.EMAIL))
             password_field = WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located((By.ID, "passwd")))
-            
+                EC.presence_of_element_located(LoginSelectors.PASSWORD))
+
             email_field.clear()
             password_field.clear()
-            
+
             email_field.send_keys(email)
             password_field.send_keys(password)
-            
-            submit_button = self.driver.find_element(By.ID, "submit_login")
+
+            submit_button = self.driver.find_element(*LoginSelectors.SUBMIT)
             submit_button.click()
-            
+
             self._log("Login form submitted")
-            
+
             WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located((By.ID, "quick_select"))
+                lambda d: "/login" not in d.current_url
             )
             
             self._log("Login successful", email=email)
@@ -67,7 +68,7 @@ class LoginHandler:
         """
         self._log("Starting login process")
         self.driver.maximize_window()
-        self.driver.get("https://ultrabike.lt/admin-ultro/")
+        self.driver.get(LoginSelectors.URL)
         
         if credentials_callback is None:
             raise ValueError("credentials_callback is required")

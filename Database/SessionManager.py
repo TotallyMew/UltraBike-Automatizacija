@@ -46,7 +46,7 @@ class SessionManager:
        - Security: Machine-bound, auto-expires, low-value data
 
     2. **Scrypt KDF** (Credentials - CURRENT):
-       - Used for: PrestaShop passwords, external API credentials
+    - Used for: admin passwords, external API credentials
        - Method: Scrypt(password, random_salt, N=2^14, r=8, p=1) → Fernet key
        - Purpose: Memory-hard key derivation resists GPU/ASIC brute-force
        - Security: OWASP 2023 recommended parameters
@@ -205,7 +205,7 @@ class SessionManager:
 
         Args:
             email: User email
-            password: PrestaShop password to encrypt
+            password: Admin password to encrypt
             master_password: Master password for encryption
         """
         # Hash master password for verification (still using SHA256 for password verification)
@@ -259,7 +259,7 @@ class SessionManager:
         Store encrypted external-service credentials in database using Scrypt KDF.
 
         Args:
-            service_key: Unique identifier for the service (e.g., "deepl_api", "prestashop_api")
+            service_key: Unique identifier for the service (e.g., "deepl_api")
             username: Username or API key
             password: Password or secret to encrypt
             master_password: Master password for encryption
