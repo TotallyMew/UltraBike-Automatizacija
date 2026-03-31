@@ -575,11 +575,6 @@ class BatchUploadScreen(ResponsiveWidget):
         disclaimer_bulk.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         disclaimer_bulk.stateChanged.connect(self._toggle_all_disclaimers)
 
-        self.order_note_bulk = CheckBox("")
-        order_note_bulk = self.order_note_bulk
-        order_note_bulk.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        order_note_bulk.stateChanged.connect(self._toggle_all_order_notes)
-
         # Spacer between Clear and Bulk Select (hide/show with manual controls)
         self._manual_sep = QWidget()
         self._manual_sep.setStyleSheet("background: transparent;")
@@ -671,7 +666,6 @@ class BatchUploadScreen(ResponsiveWidget):
         toolbar_layout.addWidget(bulk_label)
         toolbar_layout.addWidget(frameset_bulk)
         toolbar_layout.addWidget(disclaimer_bulk)
-        toolbar_layout.addWidget(order_note_bulk)
         toolbar_layout.addWidget(template_btn)
         toolbar_layout.addWidget(browse_btn)
         toolbar_layout.addWidget(self.excel_file_label)
@@ -696,7 +690,7 @@ class BatchUploadScreen(ResponsiveWidget):
 
         # Modern Fluent table
         self.table = QTableWidget()
-        self.table.setColumnCount(10)
+        self.table.setColumnCount(9)
         self.table.setHorizontalHeaderLabels(["", "", "", "", "", "", "", "", "", ""])
         self.table.setRowCount(self._base_table_rows)
 
@@ -744,10 +738,9 @@ class BatchUploadScreen(ResponsiveWidget):
         self.table.setColumnWidth(3, SIZES['col_w_420'])  # Description
         self.table.setColumnWidth(4, SIZES['col_w_120'])  # Frameset
         self.table.setColumnWidth(5, SIZES['col_w_120'])  # Disclaimer
-        self.table.setColumnWidth(6, SIZES['col_w_120'])  # Order note
-        self.table.setColumnWidth(7, SIZES['col_w_120'])  # Status
-        self.table.setColumnWidth(8, SIZES['col_w_260'])  # Error
-        self.table.setColumnWidth(9, SIZES['col_w_56'])   # Delete
+        self.table.setColumnWidth(6, SIZES['col_w_120'])  # Status
+        self.table.setColumnWidth(7, SIZES['col_w_260'])  # Error
+        self.table.setColumnWidth(8, SIZES['col_w_56'])   # Delete
 
         # Populate initial rows
         for row in range(self._base_table_rows):
@@ -795,9 +788,6 @@ class BatchUploadScreen(ResponsiveWidget):
         self.frameset_bulk.setToolTip(tr("batch.bulk.frameset.tip"))
         self.disclaimer_bulk.setText(tr("batch.bulk.disclaimer"))
         self.disclaimer_bulk.setToolTip(tr("batch.bulk.disclaimer.tip"))
-        self.order_note_bulk.setText(tr("batch.bulk.order_note"))
-        self.order_note_bulk.setToolTip(tr("batch.bulk.order_note.tip"))
-
         self.browse_btn.setText(tr("batch.browse_excel"))
         self.browse_btn.setToolTip(tr("batch.browse_excel.tip"))
         self.template_btn.setText(tr("batch.download_template"))
@@ -824,7 +814,6 @@ class BatchUploadScreen(ResponsiveWidget):
             tr("batch.table.desc"),
             tr("batch.table.frameset"),
             tr("batch.table.disclaimer"),
-            tr("batch.table.order_note"),
             tr("batch.table.status"),
             tr("batch.table.error"),
             "",
@@ -995,28 +984,14 @@ class BatchUploadScreen(ResponsiveWidget):
         disclaimer_layout.addWidget(disclaimer_check)
         self.table.setCellWidget(row, 5, disclaimer_container)
 
-        # Order note checkbox - centered with fixed approach
-        order_note_check = CheckBox("")
-        order_note_check.setProperty("ubTableCheck", True)
-        order_note_check.stateChanged.connect(self._validate)
-        order_note_container = QWidget()
-        order_note_container.setStyleSheet("background: transparent;")
-        order_note_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        order_note_layout = QHBoxLayout(order_note_container)
-        order_note_layout.setContentsMargins(SPACING['xs'], 0, SPACING['xs'], 0)
-        order_note_layout.setSpacing(0)
-        order_note_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        order_note_layout.addWidget(order_note_check)
-        self.table.setCellWidget(row, 6, order_note_container)
-
         # Status column (initially empty)
         status_item = QTableWidgetItem("")
         status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.table.setItem(row, 7, status_item)
+        self.table.setItem(row, 6, status_item)
 
         # Error column (initially empty)
         error_item = QTableWidgetItem("")
-        self.table.setItem(row, 8, error_item)
+        self.table.setItem(row, 7, error_item)
 
         # Delete button
         delete_btn = TransparentToolButton(FluentIcon.DELETE)
@@ -1031,7 +1006,7 @@ class BatchUploadScreen(ResponsiveWidget):
         delete_layout.addStretch(1)
         delete_layout.addWidget(delete_btn, 0, Qt.AlignmentFlag.AlignVCenter)
         delete_layout.addStretch(1)
-        self.table.setCellWidget(row, 9, delete_container)
+        self.table.setCellWidget(row, 8, delete_container)
 
     def _get_widget_from_cell(self, row, col, widget_type):
         """Helper to get widget from table cell (handles containers)"""
@@ -1088,7 +1063,6 @@ class BatchUploadScreen(ResponsiveWidget):
         self.bulk_label.setVisible(is_manual)
         self.frameset_bulk.setVisible(is_manual)
         self.disclaimer_bulk.setVisible(is_manual)
-        self.order_note_bulk.setVisible(is_manual)
         self._manual_sep.setVisible(is_manual)
 
         is_excel = mode == "excel"
@@ -1188,14 +1162,6 @@ class BatchUploadScreen(ResponsiveWidget):
         checked = state == Qt.CheckState.Checked.value
         for row in range(self.table.rowCount()):
             checkbox = self._get_widget_from_cell(row, 5, CheckBox)
-            if checkbox:
-                checkbox.setChecked(checked)
-
-    def _toggle_all_order_notes(self, state):
-        """Toggle all order note checkboxes"""
-        checked = state == Qt.CheckState.Checked.value
-        for row in range(self.table.rowCount()):
-            checkbox = self._get_widget_from_cell(row, 6, CheckBox)
             if checkbox:
                 checkbox.setChecked(checked)
 
@@ -1357,9 +1323,6 @@ class BatchUploadScreen(ResponsiveWidget):
                 disclaimer_raw = excel_row[5] if len(excel_row) > 5 else False
                 disclaimer = str(disclaimer_raw).lower() in ("yes", "true", "1") if isinstance(disclaimer_raw, str) else bool(disclaimer_raw)
 
-                order_raw = excel_row[6] if len(excel_row) > 6 else False
-                order_note = str(order_raw).lower() in ("yes", "true", "1") if isinstance(order_raw, str) else bool(order_raw)
-
                 # Setup row
                 self._setup_table_row(table_row)
 
@@ -1387,10 +1350,6 @@ class BatchUploadScreen(ResponsiveWidget):
                 disclaimer_checkbox = self._get_widget_from_cell(table_row, 5, CheckBox)
                 if disclaimer_checkbox:
                     disclaimer_checkbox.setChecked(disclaimer)
-
-                order_checkbox = self._get_widget_from_cell(table_row, 6, CheckBox)
-                if order_checkbox:
-                    order_checkbox.setChecked(order_note)
 
                 if brand and code and url:
                     valid_count += 1
@@ -1544,17 +1503,12 @@ class BatchUploadScreen(ResponsiveWidget):
                 disclaimer_check = disclaimer_cell.findChild(CheckBox) if disclaimer_cell else None
                 row_data['disclaimer'] = "Yes" if (disclaimer_check and disclaimer_check.isChecked()) else "No"
 
-                # Order Note (column 6)
-                order_note_cell = self.table.cellWidget(row, 6)
-                order_note_check = order_note_cell.findChild(CheckBox) if order_note_cell else None
-                row_data['order_note'] = "Yes" if (order_note_check and order_note_check.isChecked()) else "No"
-
-                # Status (column 7)
-                status_item = self.table.item(row, 7)
+                # Status (column 6)
+                status_item = self.table.item(row, 6)
                 row_data['status'] = status_item.text() if status_item else ""
 
-                # Error (column 8)
-                error_item = self.table.item(row, 8)
+                # Error (column 7)
+                error_item = self.table.item(row, 7)
                 row_data['error'] = error_item.text() if error_item else ""
 
                 rows_data.append(row_data)
@@ -1592,10 +1546,10 @@ class BatchUploadScreen(ResponsiveWidget):
 
         # Collect failed items from table
         failed_items = []
-        headers = ["Brand", "Code", "URL", "Description", "Frameset", "Disclaimer", "Order Note", "Status", "Error"]
+        headers = ["Brand", "Code", "URL", "Description", "Frameset", "Disclaimer", "Status", "Error"]
 
         for row in range(self.table.rowCount()):
-            status_item = self.table.item(row, 7)
+            status_item = self.table.item(row, 6)
             status_text = status_item.text() if status_item else ""
 
             # Only include failed items
@@ -1632,16 +1586,11 @@ class BatchUploadScreen(ResponsiveWidget):
                 disclaimer_check = disclaimer_cell.findChild(CheckBox) if disclaimer_cell else None
                 row_data['disclaimer'] = "Yes" if (disclaimer_check and disclaimer_check.isChecked()) else "No"
 
-                # Order Note (column 6)
-                order_note_cell = self.table.cellWidget(row, 6)
-                order_note_check = order_note_cell.findChild(CheckBox) if order_note_cell else None
-                row_data['order_note'] = "Yes" if (order_note_check and order_note_check.isChecked()) else "No"
-
-                # Status (column 7)
+                # Status (column 6)
                 row_data['status'] = status_text
 
-                # Error (column 8)
-                error_item = self.table.item(row, 8)
+                # Error (column 7)
+                error_item = self.table.item(row, 7)
                 row_data['error'] = error_item.text() if error_item else ""
 
                 failed_items.append(row_data)
@@ -1720,19 +1669,19 @@ class BatchUploadScreen(ResponsiveWidget):
             if item:
                 item.setBackground(bg_color)
 
-        # Update status column (column 7)
-        status_item = self.table.item(row, 7)
+        # Update status column (column 6)
+        status_item = self.table.item(row, 6)
         if not status_item:
             status_item = QTableWidgetItem()
             status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.table.setItem(row, 7, status_item)
+            self.table.setItem(row, 6, status_item)
         status_item.setText(status_text)
 
-        # Update error column (column 8)
-        error_item = self.table.item(row, 8)
+        # Update error column (column 7)
+        error_item = self.table.item(row, 7)
         if not error_item:
             error_item = QTableWidgetItem()
-            self.table.setItem(row, 8, error_item)
+            self.table.setItem(row, 7, error_item)
         error_item.setText(error_text)
 
         # Auto-scroll to current row
@@ -1885,7 +1834,7 @@ class BatchUploadScreen(ResponsiveWidget):
 
         # Find all rows with "✗ Failed" status
         for row in range(self.table.rowCount()):
-            status_item = self.table.item(row, 7)
+            status_item = self.table.item(row, 6)
             if status_item and ("✗" in status_item.text() or "Failed" in status_item.text()):
                 # Collect data from this failed row
                 brand_widget = self._get_widget_from_cell(row, 0, ComboBox)
@@ -1912,9 +1861,6 @@ class BatchUploadScreen(ResponsiveWidget):
                 disclaimer_checkbox = self._get_widget_from_cell(row, 5, CheckBox)
                 disclaimer = disclaimer_checkbox.isChecked() if disclaimer_checkbox else False
 
-                order_checkbox = self._get_widget_from_cell(row, 6, CheckBox)
-                order_note = order_checkbox.isChecked() if order_checkbox else False
-
                 items.append({
                     'brand': brand,
                     'code': code,
@@ -1922,7 +1868,6 @@ class BatchUploadScreen(ResponsiveWidget):
                     'description_name': desc,
                     'frameset_only': frameset,
                     'append_disclaimer': disclaimer,
-                    'append_order_note': order_note,
                 })
                 failed_rows.append(row)
 
@@ -1968,11 +1913,11 @@ class BatchUploadScreen(ResponsiveWidget):
 
         # Initialize status/error columns for retry rows
         for row in failed_rows:
-            status_item = self.table.item(row, 7)
+            status_item = self.table.item(row, 6)
             if status_item:
                 status_item.setText("Pending")
 
-            error_item = self.table.item(row, 8)
+            error_item = self.table.item(row, 7)
             if error_item:
                 error_item.setText("")
 
@@ -2064,9 +2009,6 @@ class BatchUploadScreen(ResponsiveWidget):
             disclaimer_checkbox = self._get_widget_from_cell(row, 5, CheckBox)
             disclaimer = disclaimer_checkbox.isChecked() if disclaimer_checkbox else False
 
-            order_checkbox = self._get_widget_from_cell(row, 6, CheckBox)
-            order_note = order_checkbox.isChecked() if order_checkbox else False
-
             items.append({
                 'brand': brand,
                 'code': code,
@@ -2074,7 +2016,6 @@ class BatchUploadScreen(ResponsiveWidget):
                 'description_name': desc,
                 'frameset_only': frameset,
                 'append_disclaimer': disclaimer,
-                'append_order_note': order_note,
             })
             table_rows.append(row)  # Track which table row this item came from
 
@@ -2148,17 +2089,17 @@ class BatchUploadScreen(ResponsiveWidget):
 
             if brand in self.brands and code and url:
                 # Clear status and error for this row
-                status_item = self.table.item(row, 7)
+                status_item = self.table.item(row, 6)
                 if not status_item:
                     status_item = QTableWidgetItem("")
                     status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                    self.table.setItem(row, 7, status_item)
+                    self.table.setItem(row, 6, status_item)
                 status_item.setText("Pending")
 
-                error_item = self.table.item(row, 8)
+                error_item = self.table.item(row, 7)
                 if not error_item:
                     error_item = QTableWidgetItem("")
-                    self.table.setItem(row, 8, error_item)
+                    self.table.setItem(row, 7, error_item)
                 error_item.setText("")
 
                 row_idx += 1

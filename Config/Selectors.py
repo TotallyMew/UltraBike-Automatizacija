@@ -215,10 +215,15 @@ class FeatureSelectors:
         The name text lives in div.relationship--single-value__text inside each
         specifications-row-N container, and the value input is a sibling input
         with an id ending in __value.
+
+        Matches both exact names (e.g. "Rėmas") and categorized names
+        (e.g. "Rėmo komplektacija > Rėmas") by also checking for a
+        "> spec_name" suffix.
         """
         return (By.XPATH,
             f"//div[contains(@class,'relationship--single-value__text')"
-            f" and normalize-space()='{spec_name}']"
+            f" and (normalize-space()='{spec_name}'"
+            f" or contains(normalize-space(), '> {spec_name}'))]"
             f"/ancestor::*[starts-with(@id,'specifications-row-')]"
             f"//input[contains(@id,'__value')]")
 

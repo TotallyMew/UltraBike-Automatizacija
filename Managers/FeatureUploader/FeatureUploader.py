@@ -27,22 +27,32 @@ class FeatureUploader:
 
         LV is no longer used.
         """
+        print(f"[FeatureUploader] Starting specification upload (LT tables: {len(ltData)})")
         self._log("Starting specification upload", lt_count=len(ltData))
 
         # 1. Fill LT specs (applies template if needed)
+        print("[FeatureUploader] Filling LT specs...")
         self.writer.fillFields(ltData, lang="lt", first_language=True)
+        print("[FeatureUploader] LT specs filled")
 
         # 2. Save so values carry over to other locales
+        print("[FeatureUploader] Saving after LT spec fill...")
         self._log("Saving after LT spec fill")
         self.web_handler.save_information()
+        print("[FeatureUploader] Save complete")
 
         # 3. Switch to EN and fill translated values
+        print("[FeatureUploader] Switching to EN...")
         self._log("Switching to EN for translated specs")
         self.lang_switcher.switchTo("en")
+        print("[FeatureUploader] Filling EN specs...")
         self.writer.fillFields(enData, lang="en", first_language=False)
+        print("[FeatureUploader] EN specs filled")
 
         # 4. Switch back to LT
+        print("[FeatureUploader] Switching back to LT...")
         self.lang_switcher.switchTo("lt")
 
+        print("[FeatureUploader] Specification upload complete")
         self._log("Specification upload complete")
         return getattr(self.writer, "skipped_features", [])

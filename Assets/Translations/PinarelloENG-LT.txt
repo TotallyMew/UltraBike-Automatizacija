@@ -3,7 +3,7 @@ Frame:Rėmas
 Fork:Šakė
 Weight:Svoris
 Crankset and Chainrings:Švaistikliai
-Rear Derailleur:Galinis pavarų perjungejas
+Rear Derailleur:Galinis pavarų perjungėjas
 Front Derailleur:Priekinis pavarų perjungėjas
 Front Hub:Priekinė stebulė
 Rear Hub:Galinė stebulė
@@ -12,11 +12,11 @@ Rear Brake Disc:Galiniai stabdžiai
 Gear Count:Pavarų skaičius
 Integrated Handlebar:Vairas
 Handlebar:Vairas
-Wheelset Disc:Ratlankis
+Wheelset Disc:Ratlankiai
 Bar Tape:Vairo rankenėlės / juosta
 Seatpost:Balnakotis
 Chain:Grandinė
-Bottom Bracket:Centrinės ašies guoliai
+Bottom Bracket:Centrinės ašies guolis
 Cassette:Galinis žvaigždžių blokas
 Seat Clamp:Balnakočio užspaustukas
 Tyres:Padangos
@@ -26,10 +26,10 @@ Tyre:Padangos
 BAR TAPE:Vairo rankenėlės / juosta
 Stem:Vairo iškyša
 Saddle:Balnelis
-Tyres disc:Padangos - Padangos plotis (mm / col.)
+Max Tyre Size:Didžiausias padangos plotis (mm)
 Motor:Variklis
 Battery:Akumuliatorius
-Display:Kompiuteriukas
+Display:Ekranas
 Frame:Rėmas
 Frame:Rėmas
 Frame:Rėmas

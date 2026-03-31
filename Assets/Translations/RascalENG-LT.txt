@@ -12,15 +12,15 @@ Saddle:Balnelis
 Crankset:Švaistikliai
 Brakes:
 Belt:
-Wheelset:Ratlankis
+Wheelset:Ratlankiai
 Tires:Padangos
 Pedals:Pedalai
 Weight:Svoris
 Front Brakes:Priekiniai stabdžiai
 Rear Brakes:Galiniai stabdžiai
-Rear Derailleur:Galinis pavarų perjungejas
-Front Derailleru:Priekinis pavarų perjungejas
-Shifters:Pavarų perjungimo rankenėlės
-Front Rotors:Priekinis stabdžių diskas (mm)
-Rear Rotors:Galinis stabdžių diskas (mm)
+Rear Derailleur:Galinis pavarų perjungėjas
+Front Derailleru:Priekinis pavarų perjungėjas
+Shifters:Pavarų rankenėlės
+Front Rotors:Maksimalus stabdžių disko dydis
+Rear Rotors:Maksimalus stabdžių disko dydis
 Cassette:Galinis žvaigždžių blokas

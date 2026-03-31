@@ -9,8 +9,8 @@ Fixed gear:Pavarų skaičius
 Crankset:Švaistikliai
 Chain:Grandinė
 Weight:Svoris
-Bottom bracket:Centrinės ašies guoliai
-Shifters:PAVARŲ PERJUNGIMO RANKENĖLĖS
+Bottom bracket:Centrinės ašies guolis
+Shifters:PAVARŲ RANKENĖLĖS
 Derailleurs:pavarų perjungėjai
 Rotors:stabdžių diskai
 Cassette:galinis žvaigždžių blokas

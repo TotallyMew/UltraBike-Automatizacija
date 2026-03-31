@@ -2,21 +2,21 @@ GEARS: Pavarų skaičius
 FRAME: Rėmas
 FORK: Šakė
 FRONT DERAILLEUR: Priekinis pavarų perjungėjas
-REAR DERAILLEUR: Galinis pavarų perjungejas
+REAR DERAILLEUR: Galinis pavarų perjungėjas
 FRONT BRAKE: Priekiniai stabdžiai
 REAR BRAKE: Galiniai stabdžiai
 BRAKE LEVERS: Stabdžių rankenėlės
 DISCS: Stabdžių diskai
-SHIFTERS: Pavarų perjungimo rankenėlės
+SHIFTERS: Pavarų rankenėlės
 CRANKS: Švaistikliai
 TEETHS: Priekiniai dantračiai
-BOTTOM BRACKET: Centrinės ašies guoliai
+BOTTOM BRACKET: Centrinės ašies guolis
 CHAIN: Grandinė
 CASSETTE/FREEWHEEL: Galinis žvaigždžių blokas
 CASSETTE/FREEWHEEL RANGE: Galinio žvaigždžių bloko diapazonas
 FRONT HUB: Priekinė stebulė
 REAR HUB: Galinė stebulė
-RIMS: Ratlankis
+RIMS: Ratlankiai
 TIRES: Padangos
 HANDLEBAR: Vairas
 STEM: Vairo iškyša

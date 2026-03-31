@@ -777,9 +777,6 @@ class BatchDescriptionsScreen(ResponsiveWidget):
         self.disclaimer_bulk = CheckBox("")
         self.disclaimer_bulk.stateChanged.connect(self._toggle_all_disclaimers)
 
-        self.order_note_bulk = CheckBox("")
-        self.order_note_bulk.stateChanged.connect(self._toggle_all_order_notes)
-
         self.template_btn = PushButton("")
         self.template_btn.setIcon(FluentIcon.DOWNLOAD.icon())
         self.template_btn.clicked.connect(self._download_template)
@@ -831,7 +828,6 @@ class BatchDescriptionsScreen(ResponsiveWidget):
         toolbar_layout.addWidget(self._manual_sep)
         toolbar_layout.addWidget(self.bulk_label)
         toolbar_layout.addWidget(self.disclaimer_bulk)
-        toolbar_layout.addWidget(self.order_note_bulk)
         toolbar_layout.addWidget(self.template_btn)
         toolbar_layout.addWidget(self.browse_btn)
         toolbar_layout.addWidget(self.refresh_btn)
@@ -853,7 +849,7 @@ class BatchDescriptionsScreen(ResponsiveWidget):
         self.excel_drop.file_dropped.connect(self._handle_file_drop)
 
         self.table = QTableWidget()
-        self.table.setColumnCount(8)
+        self.table.setColumnCount(7)
         self.table.verticalHeader().setVisible(False)
         self.table.setAlternatingRowColors(True)
         self.table.setShowGrid(True)
@@ -885,10 +881,9 @@ class BatchDescriptionsScreen(ResponsiveWidget):
         self.table.setColumnWidth(1, SIZES['col_w_180'])  # Code
         self.table.setColumnWidth(2, SIZES['col_w_420'])  # Description
         self.table.setColumnWidth(3, SIZES['col_w_120'])  # Disclaimer
-        self.table.setColumnWidth(4, SIZES['col_w_120'])  # Order note
-        self.table.setColumnWidth(5, SIZES['col_w_160'])  # Status
-        self.table.setColumnWidth(6, SIZES['col_w_420'])  # Error
-        self.table.setColumnWidth(7, SIZES['col_w_56'])   # Delete
+        self.table.setColumnWidth(4, SIZES['col_w_160'])  # Status
+        self.table.setColumnWidth(5, SIZES['col_w_420'])  # Error
+        self.table.setColumnWidth(6, SIZES['col_w_56'])   # Delete
 
         self.table.verticalHeader().setDefaultSectionSize(SIZES['table_row_height_lg'])
 
@@ -916,8 +911,6 @@ class BatchDescriptionsScreen(ResponsiveWidget):
         self.bulk_label.setText(tr("batch.bulk_select"))
         self.disclaimer_bulk.setText(tr("batch.bulk.disclaimer"))
         self.disclaimer_bulk.setToolTip(tr("batch.bulk.disclaimer.tip"))
-        self.order_note_bulk.setText(tr("batch.bulk.order_note"))
-        self.order_note_bulk.setToolTip(tr("batch.bulk.order_note.tip"))
         self.template_btn.setText(tr("batch.download_template"))
         self.template_btn.setToolTip(tr("batch.download_template.tip"))
         self.browse_btn.setText(tr("batch.browse_excel"))
@@ -935,7 +928,6 @@ class BatchDescriptionsScreen(ResponsiveWidget):
             tr("batch.table.code"),
             tr("batch.table.desc"),
             tr("batch.table.disclaimer"),
-            tr("batch.table.order_note"),
             tr("batchdesc.table.status"),
             tr("batchdesc.table.error"),
             "",
@@ -1127,7 +1119,6 @@ class BatchDescriptionsScreen(ResponsiveWidget):
         self.clear_btn.setVisible(is_manual)
         self.bulk_label.setVisible(is_manual)
         self.disclaimer_bulk.setVisible(is_manual)
-        self.order_note_bulk.setVisible(is_manual)
         if hasattr(self, "_manual_sep"):
             self._manual_sep.setVisible(is_manual)
 
@@ -1197,12 +1188,6 @@ class BatchDescriptionsScreen(ResponsiveWidget):
                 else:
                     disclaimer = bool(disclaimer_raw)
 
-                order_raw = excel_row[4] if len(excel_row) > 4 else False
-                if isinstance(order_raw, str):
-                    order_note = order_raw.strip().lower() in ("yes", "true", "1")
-                else:
-                    order_note = bool(order_raw)
-
                 brand_widget = self._get_widget_from_cell(table_row, 0, ComboBox)
                 if brand_widget and brand:
                     brand_widget.setCurrentText(brand)
@@ -1219,16 +1204,11 @@ class BatchDescriptionsScreen(ResponsiveWidget):
                 if disclaimer_widget:
                     disclaimer_widget.setChecked(disclaimer)
 
-                order_widget = self._get_widget_from_cell(table_row, 4, CheckBox)
-                if order_widget:
-                    order_widget.setChecked(order_note)
-
-                # Row is valid if it has brand + code + (description OR disclaimer OR order_note)
+                # Row is valid if it has brand + code + (description OR disclaimer)
                 desc_selected = bool(desc) and desc != self.main.i18n.tr("batch.optional")
                 disclaimer_checked = disclaimer_widget and disclaimer_widget.isChecked()
-                order_note_checked = order_widget and order_widget.isChecked()
 
-                if brand and code and (desc_selected or disclaimer_checked or order_note_checked):
+                if brand and code and (desc_selected or disclaimer_checked):
                     valid_count += 1
                 else:
                     invalid_count += 1
@@ -1395,13 +1375,6 @@ class BatchDescriptionsScreen(ResponsiveWidget):
             if cb:
                 cb.setChecked(checked)
 
-    def _toggle_all_order_notes(self, state):
-        checked = state == Qt.CheckState.Checked.value
-        for row in range(self.table.rowCount()):
-            cb = self._get_widget_from_cell(row, 4, CheckBox)
-            if cb:
-                cb.setChecked(checked)
-
     def _delete_row(self, row: int):
         if self.table.rowCount() <= 1:
             return
@@ -1510,27 +1483,14 @@ class BatchDescriptionsScreen(ResponsiveWidget):
         dl.addWidget(disc)
         self.table.setCellWidget(row, 3, disc_container)
 
-        order = CheckBox("")
-        order.setProperty("ubTableCheck", True)
-        order.stateChanged.connect(self._validate)
-        order_container = QWidget()
-        order_container.setStyleSheet("background: transparent;")
-        order_container.setProperty("ubTableCell", True)
-        ol = QHBoxLayout(order_container)
-        ol.setContentsMargins(SPACING['xs'], 0, SPACING['xs'], 0)
-        order_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        ol.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        ol.addWidget(order)
-        self.table.setCellWidget(row, 4, order_container)
-
         status = BodyLabel(self.main.i18n.tr("batchdesc.status.pending"))
         status.setStyleSheet(f"color: {COLORS['text_secondary']};")
-        self.table.setCellWidget(row, 5, wrap(status))
+        self.table.setCellWidget(row, 4, wrap(status))
 
         error = LineEdit()
         error.setReadOnly(True)
         error.setMinimumHeight(SIZES['input_height'])
-        self.table.setCellWidget(row, 6, wrap(error))
+        self.table.setCellWidget(row, 5, wrap(error))
 
         delete_btn = TransparentToolButton(FluentIcon.DELETE)
         delete_btn.clicked.connect(lambda _=False, r=row: self._delete_row(r))
@@ -1543,7 +1503,7 @@ class BatchDescriptionsScreen(ResponsiveWidget):
         dcl.addStretch(1)
         dcl.addWidget(delete_btn, 0, Qt.AlignmentFlag.AlignVCenter)
         dcl.addStretch(1)
-        self.table.setCellWidget(row, 7, dc)
+        self.table.setCellWidget(row, 6, dc)
 
         self.table.setRowHeight(row, SIZES['table_row_height_lg'])
 
@@ -1554,28 +1514,21 @@ class BatchDescriptionsScreen(ResponsiveWidget):
             c = self._get_widget_from_cell(row, 1, LineEdit)
             d = self._get_widget_from_cell(row, 2, ComboBox)
             disc = self._get_widget_from_cell(row, 3, CheckBox)
-            order = self._get_widget_from_cell(row, 4, CheckBox)
 
             brand = b.currentText().strip() if b else ""
             code_raw = c.text().strip() if c else ""
             code = self._normalize_code(code_raw)
             desc = d.currentText().strip() if d else ""
             disclaimer = disc.isChecked() if disc else False
-            order_note = order.isChecked() if order else False
 
-            # Row is valid if brand and code are set, and at least one of:
-            # - description is selected (not placeholder)
-            # - disclaimer is checked
-            # - order note is checked
             desc_selected = bool(desc) and desc != self.main.i18n.tr("batch.optional")
-            if brand in self.brands and code and (desc_selected or disclaimer or order_note):
+            if brand in self.brands and code and (desc_selected or disclaimer):
                 items.append({
                     "row": row,
                     "brand": brand,
                     "code": code,
                     "description": desc if desc_selected else "",
                     "append_disclaimer": disclaimer,
-                    "append_order_note": order_note,
                 })
         return items
 
@@ -1635,7 +1588,6 @@ class BatchDescriptionsScreen(ResponsiveWidget):
         # Keep table enabled so user can see status updates and scroll
         # self.table.setEnabled(not busy)  # Commented out - table stays interactive
         self.disclaimer_bulk.setEnabled(not busy)
-        self.order_note_bulk.setEnabled(not busy)
         self.start_btn.setEnabled(not busy and len(self._collect_items()) > 0)
 
     def _start_batch(self):
@@ -1666,13 +1618,13 @@ class BatchDescriptionsScreen(ResponsiveWidget):
                 if item:
                     item.setBackground(Qt.GlobalColor.transparent)
 
-            # Reset status (column 5)
-            s = self._get_widget_from_cell(row, 5, BodyLabel)
+            # Reset status (column 4)
+            s = self._get_widget_from_cell(row, 4, BodyLabel)
             if s:
                 s.setText(tr("batchdesc.status.pending"))
                 s.setStyleSheet(f"color: {COLORS['text_secondary']};")
-            # Reset error (column 6)
-            e = self._get_widget_from_cell(row, 6, LineEdit)
+            # Reset error (column 5)
+            e = self._get_widget_from_cell(row, 5, LineEdit)
             if e:
                 e.setText("")
                 e.setStyleSheet("")
@@ -1795,7 +1747,7 @@ class BatchDescriptionsScreen(ResponsiveWidget):
                     item.setBackground(Qt.GlobalColor.transparent)
 
         # Update status
-        status = self._get_widget_from_cell(row, 5, BodyLabel)
+        status = self._get_widget_from_cell(row, 4, BodyLabel)
         if status:
             status.setText(status_text)
             tr = self.main.i18n.tr
@@ -1835,7 +1787,7 @@ class BatchDescriptionsScreen(ResponsiveWidget):
                 status.setStyleSheet(f"color: {COLORS['text_secondary']};")
 
         # Update error message
-        err = self._get_widget_from_cell(row, 6, LineEdit)
+        err = self._get_widget_from_cell(row, 5, LineEdit)
         if err:
             err.setText(error_text or "")
             if error_text:

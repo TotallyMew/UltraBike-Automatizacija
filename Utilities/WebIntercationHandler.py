@@ -55,12 +55,15 @@ class WebInteractionHandler:
 
         Raises on failure so callers can surface a proper error.
         """
+        print("[WebHandler] Clicking Save button...")
         save_btn = WebDriverWait(self.driver, 5).until(
             EC.element_to_be_clickable(ProductEditorSelectors.SAVE_BUTTON)
         )
         self.driver.execute_script("arguments[0].click();", save_btn)
+        print("[WebHandler] Save clicked, waiting for completion...")
 
         self._wait_for_save_completion(timeout=timeout)
+        print("[WebHandler] Save completed")
 
     def _wait_for_save_completion(self, timeout: float = 10.0):
         """Wait for a Sonner toast to confirm save success or report an error."""

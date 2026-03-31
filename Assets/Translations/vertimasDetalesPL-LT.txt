@@ -7,31 +7,31 @@ Wykończenie lakieru:Lako užbaigimas
 Kolor ramy:Pagrindinė spalva
 
 PRZERZUTKA PRZÓD:Priekinis pavarų perjungėjas
-PRZERZUTKA TYŁ:Galinis pavarų perjungejas
-MANETKI:Pavarų perjungimo rankenėlės
+PRZERZUTKA TYŁ:Galinis pavarų perjungėjas
+MANETKI:Pavarų rankenėlės
 KORONKI:Priekiniai dantračiai
 KORBA:Švaistikliai
 KASETA / WOLNOBIEG:Galinis žvaigždžių blokas
 ZAKRES KASETY/WOLNOBIEGU:Galinio žvaigždžių bloko diapazonas
 ILOŚĆ PRZEŁOŻEŃ: Pavarų skaičius
-SUPORT:Centrinės ašies guoliai
+SUPORT:Centrinės ašies guolis
 ŁAŃCUCH:Grandinė
 
 
 PIASTA PRZÓD:Priekinė stebulė
 PIASTA TYŁ:Galinė stebulė
-OBRĘCZE:Ratlankis
+OBRĘCZE:Ratlankiai
 OPONY:Padangos
 
 HAMULEC PRZÓD:Priekiniai stabdžiai
 HAMULEC TYŁ:Galiniai stabdžiai
 DŹWIGNIE HAMULCA:Stabdžių rankenėlės
-TARCZE HAMULCOWE:Priekinis stabdžių diskas (mm)
-Tarcze hamulcowe tył:Galinis stabdžių diskas (mm)
+TARCZE HAMULCOWE:Maksimalus stabdžių disko dydis
+Tarcze hamulcowe tył:Maksimalus stabdžių disko dydis
 
 //NAUJA
-Tarcza Hamulcowa Przód:Priekinis stabdžių diskas (mm)
-Tarcza Hamulcowa Tył:Galinis stabdžių diskas (mm)
+Tarcza Hamulcowa Przód:Maksimalus stabdžių disko dydis
+Tarcza Hamulcowa Tył:Maksimalus stabdžių disko dydis
 Amortyzator / Widelec: Šakė
 //FIX PRIEKINIO AMORTIZATORIAUS EIGA vertimas turetu but
 Skok Amortyzatora Przód:Šakės eiga
@@ -39,8 +39,8 @@ Kolor Bazowy:Pagrindinė spalva
 Rama:Rėmas
 Ilość Biegów:Pavarų skaičius
 Zakres Kasety:Galinio žvaigždžių bloko diapazonas
-Wkład Suportu:Centrinės ašies guoliai
-Maksymalna szerokość opony (mm):Maksimalus padangos plotis (mm)
+Wkład Suportu:Centrinės ašies guolis
+Maksymalna szerokość opony (mm):Didžiausias padangos plotis (mm)
 
 
 KIEROWNICA:Vairas
@@ -53,7 +53,7 @@ PEDAŁY:Pedalai
 
 SILNIK:Variklis
 BATERIA:Akumuliatorius
-WYŚWIETLACZ:Kompiuteriukas
+WYŚWIETLACZ:Ekranas
 Waga:Svoris
 DŁUGOŚĆ:Ilgis
 KOLOR:Pagrindinė spalva

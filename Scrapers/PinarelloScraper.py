@@ -62,6 +62,31 @@ def scrapeAndTranslateToFilePinarello(bicycleUrlOrCode, outputFile, frameset_onl
                     uniqueKeys.add(translatedKey)
                 continue
 
+            if title.lower() == "tyres disc":
+                # Split "maxxis aggressor 700c, max tyre size 42mm (width as measured)"
+                # into Padangos = tire name, Didžiausias padangos plotis (mm) = size
+                import re
+                size_match = re.search(r',\s*max\s+tyre\s+size\s+(.+)', spec, re.IGNORECASE)
+                if size_match:
+                    tire_name = spec[:size_match.start()].strip()
+                    tire_size = size_match.group(1).strip()
+                else:
+                    tire_name = spec
+                    tire_size = None
+
+                tyres_key = keyTranslations.get("TYRES", "TYRES")
+                translatedValue = translation_handler.translate_first_word(
+                    valueTranslations.get(tire_name.upper(), tire_name), valueTranslations
+                )
+                tableData[tyres_key] = translatedValue
+                uniqueKeys.add(tyres_key)
+
+                if tire_size:
+                    size_key = keyTranslations.get("MAX TYRE SIZE", "Didžiausias padangos plotis (mm)")
+                    tableData[size_key] = tire_size
+                    uniqueKeys.add(size_key)
+                continue
+
             if frameset_only and title not in allowed_fields:
                 continue
 

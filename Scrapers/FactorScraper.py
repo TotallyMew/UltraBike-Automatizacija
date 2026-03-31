@@ -18,9 +18,9 @@ def scrapeAndTranslateToFileFactor(bicycleUrlOrCode, outputFile, db_manager=None
 
     # Skip these fields until translations are available
     skip_fields = {
-        "barstem", "head tube diameter", "saddle rail clamps", 
+        "barstem", "head tube diameter", "saddle rail clamps",
         "cable routing", "compatible components", "max chainring",
-        "wheel size", "manufacturer warranty"
+        "wheel size", "manufacturer warranty", "included accessories"
     }
 
     allData = []
@@ -69,52 +69,6 @@ def scrapeAndTranslateToFileFactor(bicycleUrlOrCode, outputFile, db_manager=None
                 # Clean up the value
                 if "Standard Package: n/a" in value:
                     value = value.replace("Standard Package: n/a", "").strip()
-
-                # Handle special keys that need to be split
-                if key.lower() == "max rotor size":
-                    if "front" in value.lower() and "rear" in value.lower():
-                        import re
-                        size_match = re.search(r'(\d+mm)', value)
-                        if size_match:
-                            size = size_match.group(1)
-                            
-                            for subKey in ["FRONT ROTORS", "REAR ROTORS"]:
-                                translatedKey = keyTranslations.get(subKey, subKey)
-                                translatedValue = translation_handler.translate_first_word(
-                                    valueTranslations.get(size.upper(), size), valueTranslations
-                                )
-                                tableData[translatedKey] = translatedValue
-                                uniqueKeys.add(translatedKey)
-                            continue
-                    else:
-                        for subKey in ["FRONT ROTORS", "REAR ROTORS"]:
-                            translatedKey = keyTranslations.get(subKey, subKey)
-                            translatedValue = translation_handler.translate_first_word(
-                                valueTranslations.get(value.upper(), value), valueTranslations
-                            )
-                            tableData[translatedKey] = translatedValue
-                            uniqueKeys.add(translatedKey)
-                        continue
-
-                if key.lower() == "rotors":
-                    for subKey in ["FRONT ROTORS", "REAR ROTORS"]:
-                        translatedKey = keyTranslations.get(subKey, subKey)
-                        translatedValue = translation_handler.translate_first_word(
-                            valueTranslations.get(value.upper(), value), valueTranslations
-                        )
-                        tableData[translatedKey] = translatedValue
-                        uniqueKeys.add(translatedKey)
-                    continue
-
-                if key.lower() == "brake type":
-                    for subKey in ["FRONT BRAKES", "REAR BRAKES"]:
-                        translatedKey = keyTranslations.get(subKey, subKey)
-                        translatedValue = translation_handler.translate_first_word(
-                            valueTranslations.get(value.upper(), value), valueTranslations
-                        )
-                        tableData[translatedKey] = translatedValue
-                        uniqueKeys.add(translatedKey)
-                    continue
 
                 # Translate key and value
                 translatedKey = keyTranslations.get(key, key)

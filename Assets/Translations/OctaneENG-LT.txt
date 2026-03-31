@@ -6,12 +6,12 @@ seatpost:balnakotis
 front brake:priekiniai stabdžiai
 levers:stabdžių rankenėlės
 front derailleur: priekinis pavarų perjungėjas
-rear derailleur: galinis pavarų perjungejas
+rear derailleur: galinis pavarų perjungėjas
 rear hub:galinė stebulė
 crankset:švaistikliai
 pedals:pedalai
 chainguide:pagrindinė spalva
-shifters:pavarų perjungimo rankenėlės
+shifters:pavarų rankenėlės
 weight:svoris
 sizes:dydis
 fork:šakė
@@ -22,13 +22,13 @@ rear brake:galiniai stabdžiai
 tires:padangos
 front hub:priekinė stebulė
 tires front/rear:padangos
-bottom bracket:centrinės ašies guoliai
+bottom bracket:centrinės ašies guolis
 chain:grandinė
 front derailleur:priekinis pavarų perjungėjas
-rear derailleur:galinis pavarų perjungejas
+rear derailleur:galinis pavarų perjungėjas
 cassette/cog:galinis žvaigždžių blokas
 cassette:galinis žvaigždžių blokas
 spokes:stipinai
-rims:ratlankis
+rims:ratlankiai
 
 

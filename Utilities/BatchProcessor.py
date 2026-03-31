@@ -63,15 +63,6 @@ class BatchProcessor:
         else:
             append_disclaimer = bool(raw_disclaimer)
 
-        # --- NORMALIZE ORDER NOTE (SHORT DESCRIPTION) ---
-        raw_order_note = brand_options.get("append_order_note", False)
-
-        if isinstance(raw_order_note, str):
-            raw_order_note = raw_order_note.strip().lower()
-            append_order_note = raw_order_note in ("yes", "true", "1")
-        else:
-            append_order_note = bool(raw_order_note)
-
         # --- PRESERVE ALL BRAND OPTIONS ---
         # Start with all original options (preserves brand-specific options)
         normalized_brand_options = dict(brand_options)
@@ -79,7 +70,6 @@ class BatchProcessor:
         # Override with normalized values
         normalized_brand_options["description_name"] = description_name
         normalized_brand_options["append_disclaimer"] = append_disclaimer
-        normalized_brand_options["append_order_note"] = append_order_note
 
         # This preserves brand-specific options like:
         # - frameset_only (Pinarello)
@@ -99,7 +89,6 @@ class BatchProcessor:
             code=product_code,
             description=description_name,
             disclaimer=append_disclaimer,
-            order_note=append_order_note,
         )
 
 
@@ -266,7 +255,6 @@ class BatchProcessor:
                 "description_name": it.get("description_name") or None,
                 "frameset_only": bool(it.get("frameset_only")) if it.get("frameset_only") is not None else False,
                 "append_disclaimer": bool(it.get("append_disclaimer")) if it.get("append_disclaimer") is not None else False,
-                "append_order_note": bool(it.get("append_order_note")) if it.get("append_order_note") is not None else False,
             }
             self.add_to_queue(it.get("brand"), it.get("code"), it.get("url"), brand_options=brand_options)
 

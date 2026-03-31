@@ -40,7 +40,9 @@
       "Bash(while read:*)",
       "Bash(do if:*)",
       "Bash(then echo:*)",
-      "Bash(find 'd: -path' *GUI_Qt* -name *.py -type f)"
+      "Bash(find 'd: -path' *GUI_Qt* -name *.py -type f)",
+      "Bash(grep -r Modelis '/d/Iš desktop/Programavimas/Projects/Python/UltraBike_Automatizacija' --include=*.py)",
+      "Bash(python3 -c \":*)"
     ],
     "deny": [],
     "ask": []

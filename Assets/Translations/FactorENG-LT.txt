@@ -2,17 +2,17 @@
 Fork:Šakė
 Seatpost:Balnakotis
 Headset:Vairo kolonėlės guoliai
-Bottom bracket:Centrinės ašies guoliai
-Groupset:Pavarų sistema
+Bottom bracket:Centrinės ašies guolis
+Groupset:Grupė
 Crank:Švaistikliai
 Cassette:Galinis žvaigždžių blokas
-Wheelset:Ratlankis
-Front Axle:Priekinė "Thru-Axle" ašis
-Rear Axle:Galinė "Thru-Axle" ašis
+Wheelset:Ratlankiai
+Front Axle:Priekinė ašis
+Rear Axle:Galinė ašis
 Front Brakes:Priekiniai stabdžiai
 Rear Brakes:Galiniai stabdžiai
-Front Rotors:Priekinis stabdžių diskas (mm)
-Rear Rotors:Galinis stabdžių diskas (mm)
+Front Rotors:Maksimalus stabdžių disko dydis
+Rear Rotors:Maksimalus stabdžių disko dydis
 Frame:Rėmas
 //Barstem
 //Head Tube Diameter
@@ -21,5 +21,5 @@ Frame:Rėmas
 //Compatible Components
 //Max Chainring
 //Wheel Size
-Max Tire Clearance:Maksimalus padangos plotis (mm)
+Max Tire Clearance:Didžiausias padangos plotis (mm)
 Speed:Pavarų skaičius

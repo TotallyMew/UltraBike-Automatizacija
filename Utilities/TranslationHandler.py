@@ -18,6 +18,7 @@ class TranslationHandler:
             self.own_db = True
         
         self._cache = {}  # Cache translations in memory for speed
+        print(f"[TranslationHandler] Using DB: {self.db.db_path}")
     
     def get_translation(self, source_term: str, source_lang: str = "EN", 
                        target_lang: str = "LT") -> str:

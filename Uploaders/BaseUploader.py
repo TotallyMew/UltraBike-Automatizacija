@@ -107,32 +107,45 @@ class ProductUploader(ABC):
 
         try:
             # Main upload workflow
+            print(f"[Upload] === Starting upload for {self.ultraBikeCode} ({self.brandName}) ===")
+            print(f"[Upload] Step 1/7: Scraping...")
             self.scrape()
+            print(f"[Upload] Step 2/7: Translating...")
             self.translate()
+            print(f"[Upload] Step 3/7: Opening product...")
             self.openProduct()
 
             # Optional image upload
             if self.settings_manager.download_pictures_and_upload():
+                print(f"[Upload] Step 4/7: Uploading images...")
                 self.uploadImages()
                 self.images_uploaded = True
-
-            # Debug: about to call uploadDescription()
+                print(f"[Upload] Images uploaded")
+            else:
+                print(f"[Upload] Step 4/7: Image upload disabled, skipping")
 
             # Upload description (if provided)
+            print(f"[Upload] Step 5/7: Uploading description...")
             self.uploadDescription()
-
-            # Debug: uploadDescription() completed
+            print(f"[Upload] Description done")
 
             # Upload features
+            print(f"[Upload] Step 6/7: Uploading features...")
             self.uploadFeatures()
+            print(f"[Upload] Features done")
 
             # Upload brand
+            print(f"[Upload] Step 7/7: Uploading brand...")
             self.uploadBrand()
+            print(f"[Upload] Brand done")
 
             # Auto-save if enabled in settings
             if self.settings_manager.is_auto_save_enabled():
+                print(f"[Upload] Final save...")
                 self.saveUpdate()
+                print(f"[Upload] Saved")
             else:
+                print(f"[Upload] Auto-save disabled, skipping")
                 self._log("Auto-save disabled, skipping saveUpdate()")
 
             # Calculate duration

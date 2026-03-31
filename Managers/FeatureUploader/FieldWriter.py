@@ -32,20 +32,27 @@ class FeatureFieldWriter:
 
         Returns None — keep_mask is not used in pim.bo.
         """
+        print(f"[FieldWriter] fillFields called (lang={lang}, first_language={first_language}, tables={len(tablesData)})")
         self._log("Filling specifications", lang=lang, first_language=first_language, tables=len(tablesData))
         self.skipped_features = []
 
         if first_language:
+            print("[FieldWriter] Applying template...")
             self._ensure_template_applied()
+            print("[FieldWriter] Template applied")
 
         filled = 0
         for table in tablesData:
             for spec_name, value in table.items():
                 if not value:
                     continue
+                print(f"[FieldWriter] Filling spec: {spec_name} = {value[:50] if len(str(value)) > 50 else value}")
                 if self._fill_spec(spec_name, str(value)):
                     filled += 1
+                else:
+                    print(f"[FieldWriter] FAILED to fill: {spec_name}")
 
+        print(f"[FieldWriter] Done (lang={lang}, filled={filled}, skipped={len(self.skipped_features)})")
         self._log("Specifications filled", lang=lang, filled=filled, skipped=len(self.skipped_features))
         return None
 
@@ -59,22 +66,29 @@ class FeatureFieldWriter:
             WebDriverWait(self.driver, 3).until(
                 EC.presence_of_element_located(FeatureSelectors.FIRST_SPEC_VALUE)
             )
+            print("[FieldWriter] Template already applied, skipping")
             self._log("Template already applied, skipping")
             return
         except TimeoutException:
             pass
 
+        print("[FieldWriter] Applying Dviračiai template...")
         self._log("Applying Dviračiai template")
         self._click_specs_tab()
+        print("[FieldWriter] Specs tab clicked")
         self._select_template("Dviračiai")
+        print("[FieldWriter] Template selected")
         self._click_apply_template()
+        print("[FieldWriter] Apply button clicked, waiting for spec rows...")
 
         # Wait for first spec row to appear
         try:
             WebDriverWait(self.driver, 10).until(
                 EC.presence_of_element_located(FeatureSelectors.FIRST_SPEC_VALUE)
             )
+            print("[FieldWriter] Spec rows appeared")
         except TimeoutException:
+            print("[FieldWriter] ERROR: Spec rows did NOT appear after applying template")
             self._log_error("Spec rows did not appear after applying template")
 
     def _click_specs_tab(self):

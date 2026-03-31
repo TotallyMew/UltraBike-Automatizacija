@@ -8,21 +8,21 @@ Saddle:BALNELIS
 Seatpost:BALNAKOTIS
 Front Brakes:Priekiniai stabdžiai
 Rear Brakes:Galiniai stabdžiai
-Front Rotors:Priekinis stabdžių diskas (mm)
-Rear Rotors:Galinis stabdžių diskas (mm)
-Shifters:PAVARŲ PERJUNGIMO RANKENĖLĖS
+Front Rotors:Maksimalus stabdžių disko dydis
+Rear Rotors:Maksimalus stabdžių disko dydis
+Shifters:PAVARŲ RANKENĖLĖS
 Crankset:Švaistikliai
-Bottom bracket:CENTRINĖS AŠIES GUOLIAI
+Bottom bracket:CENTRINĖS AŠIES GUOLIS
 Deraileur front:PRIEKINIS PAVARŲ PERJUNGĖJAS
-Deraileur rear:GALINIS PAVARŲ PERJUNGEJAS
+Deraileur rear:GALINIS PAVARŲ PERJUNGĖJAS
 Cassette:GALINIS ŽVAIGŽDŽIŲ BLOKAS
 Chain:GRANDINĖ
 Front Hub:Priekinė stebulė
 Rear Hub:Galinė stebulė
-Rims:RATLANKIS
+Rims:RATLANKIAI
 Tyres:PADANGOS
 Tires:Padangos
 Tyre Clearance:
-Fenders:Purvasargiai
+Fenders:Purvasaugiai
 Weight:Svoris
 
