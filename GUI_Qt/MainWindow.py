@@ -99,6 +99,7 @@ class MainWindow(FluentWindow):
         self.settings_screen = None
         self.info_screen = None
         self.spec_checker_screen = None
+        self.name_getter_screen = None
 
         # Top bar reference
         self.top_bar = None
@@ -224,6 +225,7 @@ class MainWindow(FluentWindow):
                 (getattr(self, 'settings_screen', None), "nav.settings"),
                 (getattr(self, 'info_screen', None), "nav.info"),
                 (getattr(self, 'spec_checker_screen', None), "nav.spec_checker"),
+                (getattr(self, 'name_getter_screen', None), "nav.name_getter"),
             ]
 
             for screen, key in mapping:
@@ -347,6 +349,13 @@ class MainWindow(FluentWindow):
                 self.spec_checker_screen = SpecCheckerScreen(self)
             self._add_screen_to_stack(self.spec_checker_screen, self.i18n.tr("nav.spec_checker"))
             return self.spec_checker_screen
+
+        if index == 14:  # Name Getter
+            if not self.name_getter_screen:
+                from GUI_Qt.screens.NameGetterScreen import NameGetterScreen
+                self.name_getter_screen = NameGetterScreen(self)
+            self._add_screen_to_stack(self.name_getter_screen, self.i18n.tr("nav.name_getter"))
+            return self.name_getter_screen
 
         return None
 
@@ -547,6 +556,14 @@ class MainWindow(FluentWindow):
             position=NavigationItemPosition.TOP
         )
 
+        self._nav_items["name_getter"] = self.navigationInterface.addItem(
+            routeKey="name_getter",
+            icon=FluentIcon.SEARCH,
+            text=self.i18n.tr("nav.name_getter"),
+            onClick=lambda: self._switch_to_screen(14),
+            position=NavigationItemPosition.TOP
+        )
+
         # === BOTTOM SECTION - System ===
         self._nav_items["account"] = self.navigationInterface.addItem(
             routeKey="account",
@@ -722,6 +739,7 @@ class MainWindow(FluentWindow):
             self._set_nav_item_text("settings", self.i18n.tr("nav.settings"))
             self._set_nav_item_text("info", self.i18n.tr("nav.info"))
             self._set_nav_item_text("spec_checker", self.i18n.tr("nav.spec_checker"))
+            self._set_nav_item_text("name_getter", self.i18n.tr("nav.name_getter"))
 
             # Notify screens if they implement live retranslation
             for screen in (
@@ -740,6 +758,7 @@ class MainWindow(FluentWindow):
                 getattr(self, "settings_screen", None),
                 getattr(self, "info_screen", None),
                 getattr(self, "spec_checker_screen", None),
+                getattr(self, "name_getter_screen", None),
             ):
                 if screen is not None and hasattr(screen, "retranslate_ui"):
                     try:
