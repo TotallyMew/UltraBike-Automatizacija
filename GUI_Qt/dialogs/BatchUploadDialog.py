@@ -19,6 +19,7 @@ from Managers.DescriptionManager import DescriptionManager
 
 from GUI_Qt.styles.theme_config import get_text_color, get_status_text_color, get_status_row_style, FONTS, SPACING, SIZES
 from GUI_Qt.styles.screen_theme import CARD_SPACING, CONTENT_SPACING, ROW_SPACING, MICRO_SPACING
+from GUI_Qt.widgets import show_file_saved_bar
 
 
 class BatchRowWidget(QWidget):
@@ -670,14 +671,11 @@ class BatchUploadDialog(QDialog):
             wb.save(filename)
             wb.close()
 
-            InfoBar.success(
-                title=self._tr("common.success"),
-                content=self._tr("batch.template.saved", path=filename),
-                orient=Qt.Orientation.Horizontal,
-                isClosable=True,
-                position=InfoBarPosition.TOP,
-                duration=3000,
-                parent=self
+            show_file_saved_bar(
+                self,
+                self._tr("common.success"),
+                self._tr("batch.template.saved"),
+                filename,
             )
 
         except Exception as ex:

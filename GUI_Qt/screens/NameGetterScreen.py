@@ -49,6 +49,7 @@ from qfluentwidgets import (
     isDarkTheme,
 )
 
+from GUI_Qt.widgets import show_file_saved_bar
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
 from GUI_Qt.styles.theme_config import COLORS, FONTS, RADII, PADDINGS, SIZES
 from GUI_Qt.styles.screen_theme import (
@@ -655,12 +656,11 @@ class NameGetterScreen(ResponsiveWidget):
             ws["A1"].font = Font(bold=True)
             ws.column_dimensions["A"].width = 25
             wb.save(path)
-            InfoBar.success(
+            show_file_saved_bar(
+                self,
                 self.tr("common.success"),
-                self.tr("batch.template.saved", path=path),
-                parent=self,
-                position=InfoBarPosition.TOP,
-                duration=3000,
+                self.tr("batch.template.saved"),
+                path,
             )
         except Exception as e:
             InfoBar.error(
@@ -805,12 +805,11 @@ class NameGetterScreen(ResponsiveWidget):
             ws.column_dimensions["D"].width = 60
 
             wb.save(path)
-            InfoBar.success(
+            show_file_saved_bar(
+                self,
                 self.tr("common.success"),
-                self.tr("batch.template.saved", path=path),
-                parent=self,
-                position=InfoBarPosition.TOP,
-                duration=3000,
+                self.tr("batch.template.saved"),
+                path,
             )
         except Exception as e:
             InfoBar.error(
