@@ -232,6 +232,26 @@ class FeatureSelectors:
 # Images
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Variants
+# ---------------------------------------------------------------------------
+
+class VariantSelectors:
+    """Selectors for the product variants section."""
+
+    # Variants tab button
+    VARIANTS_TAB = (By.XPATH,
+        "//button[contains(@class,'tabs-field__tab-button')"
+        " and normalize-space()='Variants']")
+
+    # All variant option values (the size text inside each variant's Option field).
+    # Each variant row (variants-row-N) has a variantAttributes sub-section
+    # where the Option relationship shows the size in a single-value__text div.
+    VARIANT_OPTION_VALUES = (By.CSS_SELECTOR,
+        "#field-variants [id*='variantAttributes'][id*='option'] "
+        "div.relationship--single-value__text")
+
+
 class ImageSelectors:
     """Selectors for the product image upload area."""
 

@@ -130,12 +130,17 @@ class ProductUploader(ABC):
             print(f"[Upload] Description done")
 
             # Upload features
-            print(f"[Upload] Step 6/7: Uploading features...")
+            print(f"[Upload] Step 6/8: Uploading features...")
             self.uploadFeatures()
             print(f"[Upload] Features done")
 
+            # Fill variant sizes into specs
+            print(f"[Upload] Step 7/8: Extracting variant sizes...")
+            self.uploadVariantSizes()
+            print(f"[Upload] Variant sizes done")
+
             # Upload brand
-            print(f"[Upload] Step 7/7: Uploading brand...")
+            print(f"[Upload] Step 8/8: Uploading brand...")
             self.uploadBrand()
             print(f"[Upload] Brand done")
 
@@ -411,6 +416,62 @@ class ProductUploader(ABC):
             self._log_error("Feature upload failed", exception=e)
             ErrorManager.show_error("UPLOAD_FEATURE_FAILED", feature="multiple")
             raise
+
+    def uploadVariantSizes(self):
+        """Read variant sizes from the Variants tab and fill 'Galimi rėmo dydžiai' spec."""
+        from selenium.webdriver.support.ui import WebDriverWait
+        from selenium.webdriver.support import expected_conditions as EC
+        from selenium.common.exceptions import TimeoutException
+        from Config.Selectors import VariantSelectors, FeatureSelectors
+
+        self._log("Extracting variant sizes")
+        try:
+            # 1. Click Variants tab
+            variants_tab = WebDriverWait(self.driver, 5).until(
+                EC.element_to_be_clickable(VariantSelectors.VARIANTS_TAB)
+            )
+            variants_tab.click()
+            time.sleep(1)
+
+            # 2. Collect all variant option values (sizes)
+            elements = self.driver.find_elements(*VariantSelectors.VARIANT_OPTION_VALUES)
+            sizes = []
+            for el in elements:
+                text = el.text.strip()
+                if text:
+                    sizes.append(text)
+
+            if not sizes:
+                self._log("No variant sizes found, skipping")
+                return
+
+            sizes_str = ", ".join(sizes)
+            self._log("Variant sizes found", sizes=sizes_str)
+
+            # 3. Switch back to Specifications tab
+            specs_tab = WebDriverWait(self.driver, 5).until(
+                EC.element_to_be_clickable(FeatureSelectors.SPECS_TAB)
+            )
+            specs_tab.click()
+            time.sleep(0.5)
+
+            # 4. Fill the "Galimi rėmo dydžiai" spec field
+            try:
+                size_input = WebDriverWait(self.driver, 5).until(
+                    EC.presence_of_element_located(
+                        FeatureSelectors.spec_value_by_name("Galimi rėmo dydžiai")
+                    )
+                )
+                size_input.clear()
+                size_input.send_keys(sizes_str)
+                self._log("Variant sizes filled", value=sizes_str)
+            except TimeoutException:
+                self._log("Spec field 'Galimi rėmo dydžiai' not found, skipping")
+
+        except TimeoutException:
+            self._log("Variants tab not found, skipping variant sizes")
+        except Exception as e:
+            self._log_error("Failed to extract variant sizes", exception=e)
 
     def uploadBrand(self):
         """Add brand name to product (implemented by child classes if needed)"""
