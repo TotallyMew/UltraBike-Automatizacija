@@ -63,7 +63,8 @@ from GUI_Qt.styles.theme_config import COLORS, COMPONENT_COLORS, FONTS, RADII, P
 from GUI_Qt.styles.screen_theme import (
     PAGE_MARGINS, PAGE_SPACING, ICON_TEXT_GAP, ROW_SPACING, TOOLBAR_MARGINS,
     CARD_SPACING, CONTENT_SPACING, TABLE_CELL_MARGINS, DETAILS_SPACING, MID_SPACING, SPACING,
-    apply_screen_theme, get_responsive_margins, get_responsive_spacing
+    apply_screen_theme, enforce_transparent_labels,
+    get_responsive_margins, get_responsive_spacing,
 )
 from Config.Selectors import ProductEditorSelectors, ProductListSelectors
 from Managers.DescriptionManager import DescriptionManager
@@ -898,6 +899,7 @@ class BatchDescriptionsScreen(ResponsiveWidget):
         self._update_table_theme()
         self._switch_mode("manual")
         self.retranslate_ui()
+        enforce_transparent_labels(self)
 
     def retranslate_ui(self):
         tr = self.main.i18n.tr
@@ -959,6 +961,7 @@ class BatchDescriptionsScreen(ResponsiveWidget):
             scroll=self.scroll,
             content=self.content_widget
         )
+        enforce_transparent_labels(self)
         self._update_table_theme()
 
     def _update_table_theme(self):

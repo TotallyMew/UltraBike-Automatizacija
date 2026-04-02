@@ -26,7 +26,8 @@ from GUI_Qt.styles.theme_config import COLORS, FONTS, COMPONENT_COLORS, RADII, P
 from GUI_Qt.styles.screen_theme import (
     PAGE_MARGINS, PAGE_SPACING, CARD_MARGINS, CARD_SPACING, ICON_TEXT_GAP,
     ROW_SPACING, TOOLBAR_MARGINS, CONTENT_SPACING, TABLE_CELL_MARGINS,
-    apply_screen_theme, get_responsive_margins, get_responsive_spacing
+    apply_screen_theme, enforce_transparent_labels,
+    get_responsive_margins, get_responsive_spacing,
 )
 
 
@@ -767,6 +768,10 @@ class BatchUploadScreen(ResponsiveWidget):
         layout.addWidget(content_card, 1)
 
         self.retranslate_ui()
+
+        # Re-enforce transparent labels now that all widgets have been created.
+        # The initial apply_screen_theme call happens before toolbar widgets exist.
+        enforce_transparent_labels(self)
 
         # Ensure initial toolbar visibility matches the active mode.
         # Without this, excel-mode controls can appear in manual mode until the user toggles pills.
@@ -2424,6 +2429,7 @@ class BatchUploadScreen(ResponsiveWidget):
             scroll=self.scroll,
             content=self.content_widget
         )
+        enforce_transparent_labels(self)
 
         # Update table theme
         self._update_table_theme()

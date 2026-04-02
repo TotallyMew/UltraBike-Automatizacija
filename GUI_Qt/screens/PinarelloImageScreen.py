@@ -30,6 +30,7 @@ from qfluentwidgets import (
     PushButton,
     TransparentToolButton,
     FluentIcon,
+    IconWidget,
     InfoBar,
     InfoBarPosition,
     IndeterminateProgressRing,
@@ -428,8 +429,8 @@ class PinarelloImageScreen(ResponsiveWidget):
 
         # Status header
         status_header = QHBoxLayout()
-        self.status_icon = BodyLabel("⏳")
-        self.status_icon.setStyleSheet("font-size: 32px;")
+        self.status_icon = IconWidget(FluentIcon.HISTORY)
+        self.status_icon.setFixedSize(SIZES['icon_lg'], SIZES['icon_lg'])
         self.status_title = TitleLabel("Ready")
         status_header.addWidget(self.status_icon)
         status_header.addSpacing(12)
@@ -728,7 +729,7 @@ class PinarelloImageScreen(ResponsiveWidget):
             return
 
         self.detail_log.clear()
-        self.status_icon.setText("⟳")
+        self.status_icon.setIcon(FluentIcon.SYNC)
         self.status_title.setText("Loading...")
         self._set_busy(True)
 
@@ -754,7 +755,7 @@ class PinarelloImageScreen(ResponsiveWidget):
             self._populate_variant_table(preview_data)
 
             variant_count = len(preview_data.get('variants', []))
-            self.status_icon.setText("✓")
+            self.status_icon.setIcon(FluentIcon.ACCEPT)
             self.status_title.setText("Ready")
 
             InfoBar.success(
@@ -767,7 +768,7 @@ class PinarelloImageScreen(ResponsiveWidget):
                 parent=self,
             )
         else:
-            self.status_icon.setText("✗")
+            self.status_icon.setIcon(FluentIcon.CLOSE)
             self.status_title.setText("Failed")
             InfoBar.error(
                 title=tr("common.error"),
@@ -910,7 +911,7 @@ class PinarelloImageScreen(ResponsiveWidget):
 
         self.detail_log.clear()
         self.summary_card.setVisible(False)
-        self.status_icon.setText("⟳")
+        self.status_icon.setIcon(FluentIcon.SYNC)
         self.status_title.setText("Downloading")
         self.main_progress.setValue(0)
         self.download_start_time = time.time()
@@ -938,7 +939,7 @@ class PinarelloImageScreen(ResponsiveWidget):
             try:
                 r = results if isinstance(results, dict) else None
                 if r:
-                    self.status_icon.setText("✓")
+                    self.status_icon.setIcon(FluentIcon.ACCEPT)
                     self.status_title.setText("Complete")
                     self.main_progress.setValue(100)
 
@@ -973,7 +974,7 @@ class PinarelloImageScreen(ResponsiveWidget):
                 parent=self,
             )
         else:
-            self.status_icon.setText("✗")
+            self.status_icon.setIcon(FluentIcon.CLOSE)
             self.status_title.setText("Failed")
             InfoBar.error(
                 title=tr("common.error"),

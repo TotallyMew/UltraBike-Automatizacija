@@ -154,12 +154,19 @@ class SimpleBarChart(QWidget):
             painter.setPen(Qt.PenStyle.NoPen)
             painter.drawRoundedRect(int(x), int(y), int(bar_width), int(bar_height), 4, 4)
 
-            # Value on top
-            painter.setPen(QColor(COLORS['text_primary_dark'] if is_dark else COLORS['text_primary_light']))
+            # Value label
             font = QFont("Segoe UI", 10, QFont.Weight.Bold)
             painter.setFont(font)
             value_text = str(int(value))
-            painter.drawText(int(x), int(y - 5), int(bar_width), 20, Qt.AlignmentFlag.AlignCenter, value_text)
+            label_h = 20
+            if y >= label_h + 2:
+                # Enough room above the bar — draw above
+                painter.setPen(QColor(COLORS['text_primary_dark'] if is_dark else COLORS['text_primary_light']))
+                painter.drawText(int(x), int(y - label_h), int(bar_width), label_h, Qt.AlignmentFlag.AlignCenter, value_text)
+            else:
+                # Bar is too tall — draw inside the bar at the top
+                painter.setPen(QColor("#FFFFFF"))
+                painter.drawText(int(x), int(y + 4), int(bar_width), label_h, Qt.AlignmentFlag.AlignCenter, value_text)
 
             # Label at bottom
             painter.setPen(QColor(COLORS['text_secondary']))

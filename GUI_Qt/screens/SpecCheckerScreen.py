@@ -50,11 +50,14 @@ from qfluentwidgets import (
 
 from GUI_Qt.widgets import show_file_saved_bar
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
-from GUI_Qt.styles.theme_config import COLORS, FONTS, RADII, PADDINGS, SIZES
+from GUI_Qt.styles.theme_config import (
+    COLORS, COMPONENT_COLORS, FONTS, RADII, PADDINGS, SIZES, SPACING as THEME_SPACING,
+)
 from GUI_Qt.styles.screen_theme import (
     PAGE_MARGINS, PAGE_SPACING, ICON_TEXT_GAP, ROW_SPACING, TOOLBAR_MARGINS,
     CARD_SPACING, CONTENT_SPACING, SPACING,
-    apply_screen_theme, get_responsive_margins, get_responsive_spacing,
+    apply_screen_theme, enforce_transparent_labels,
+    get_responsive_margins, get_responsive_spacing,
 )
 from Config.Selectors import FeatureSelectors, ProductListSelectors
 from Utilities.ProductNavigationHandler import ProductNavigationHandler
@@ -476,16 +479,23 @@ class SpecCheckerScreen(ResponsiveWidget):
         root.setContentsMargins(*PAGE_MARGINS)
         root.setSpacing(PAGE_SPACING)
 
-        scroll = ScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
-        root.addWidget(scroll)
+        self._scroll = ScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        root.addWidget(self._scroll)
 
-        container = QWidget()
-        self._layout = QVBoxLayout(container)
+        self._container = QWidget()
+        self._layout = QVBoxLayout(self._container)
         self._layout.setContentsMargins(0, 0, 0, 0)
         self._layout.setSpacing(CONTENT_SPACING)
-        scroll.setWidget(container)
+        self._scroll.setWidget(self._container)
+
+        apply_screen_theme(
+            self,
+            "SpecCheckerScreen",
+            scroll=self._scroll,
+            content=self._container,
+        )
 
         # -- Header ----------------------------------------------------------
         header = QHBoxLayout()
@@ -568,6 +578,110 @@ class SpecCheckerScreen(ResponsiveWidget):
         self._table.verticalHeader().setVisible(False)
         self._table.setMinimumHeight(200)
         self._layout.addWidget(self._table, 1)
+
+        self._update_table_theme()
+        enforce_transparent_labels(self)
+
+    # -- Table theme ---------------------------------------------------------
+
+    def _update_table_theme(self):
+        is_dark = isDarkTheme()
+        tc = COMPONENT_COLORS['table']
+        bg = tc['row_alt_bg_dark'] if is_dark else tc['row_alt_bg_light']
+        alt_bg = tc['row_bg_dark'] if is_dark else tc['row_bg_light']
+        border = tc['border_dark'] if is_dark else tc['border_light']
+        header_bg = COLORS['lavender_grey'] if is_dark else COLORS['space_indigo']
+        header_text = COLORS['space_indigo'] if is_dark else COLORS['text_white']
+        text_color = COLORS['text_primary_dark'] if is_dark else COLORS['text_primary_light']
+
+        from GUI_Qt.styles.theme_config import (
+            get_scrollbar_handle_bg, get_scrollbar_handle_hover_bg, get_selection_bg,
+        )
+
+        self._table.setStyleSheet(f"""
+            QTableWidget {{
+                background-color: {bg};
+                alternate-background-color: {alt_bg};
+                border: 1px solid {border};
+                border-radius: {RADII['md']}px;
+                gridline-color: {border};
+                selection-background-color: {get_selection_bg()};
+                color: {text_color};
+            }}
+            QTableWidget::viewport {{
+                background-color: {bg};
+                border-bottom-left-radius: {RADII['md']}px;
+                border-bottom-right-radius: {RADII['md']}px;
+            }}
+            QAbstractScrollArea::corner {{
+                background: transparent;
+            }}
+            QTableWidget::item {{
+                padding: {PADDINGS['table_cell']};
+                color: {text_color};
+                border: none;
+            }}
+            QTableWidget::item:focus {{
+                outline: none;
+            }}
+            QTableWidget:focus {{
+                outline: none;
+            }}
+            QTableWidget::item:selected {{
+                background-color: {get_selection_bg()};
+                color: {text_color};
+            }}
+            QHeaderView::section {{
+                background-color: {header_bg};
+                color: {header_text};
+                padding: {PADDINGS['table_header']};
+                border: none;
+                border-bottom: 1px solid {border};
+                font-weight: 600;
+                font-size: {FONTS['size_body_sm']};
+                letter-spacing: 0.5px;
+                text-transform: uppercase;
+            }}
+            QHeaderView {{
+                background: transparent;
+                border: none;
+            }}
+            QHeaderView::section {{
+                border-right: 1px solid {border};
+            }}
+            QHeaderView::section:last {{
+                border-right: none;
+            }}
+            QHeaderView::section:first {{
+                border-top-left-radius: {RADII['md']}px;
+            }}
+            QHeaderView::section:last {{
+                border-top-right-radius: {RADII['md']}px;
+            }}
+            QScrollBar:vertical {{
+                background: transparent;
+                width: {SIZES['scrollbar_thickness']}px;
+                margin: {THEME_SPACING['xxs']}px {THEME_SPACING['xxs']}px {THEME_SPACING['xxs']}px 0px;
+                border: none;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {get_scrollbar_handle_bg(is_dark)};
+                border-radius: {RADII['sm']}px;
+                min-height: {SIZES['scrollbar_handle_min']}px;
+                margin: 0px {THEME_SPACING['xxs']}px;
+                border: none;
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background: {get_scrollbar_handle_hover_bg(is_dark)};
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                height: 0px;
+                border: none;
+            }}
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+                background: none;
+            }}
+        """)
 
     # -- File handling -------------------------------------------------------
 

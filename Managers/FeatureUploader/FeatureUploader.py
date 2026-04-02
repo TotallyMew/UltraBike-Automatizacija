@@ -41,17 +41,17 @@ class FeatureUploader:
         self.web_handler.save_information()
         print("[FeatureUploader] Save complete")
 
-        # 3. Switch to EN and fill translated values
-        print("[FeatureUploader] Switching to EN...")
-        self._log("Switching to EN for translated specs")
-        self.lang_switcher.switchTo("en")
-        print("[FeatureUploader] Filling EN specs...")
-        self.writer.fillFields(enData, lang="en", first_language=False)
-        print("[FeatureUploader] EN specs filled")
+        # 3. EN spec filling is temporarily disabled — not needed at this time.
+        # print("[FeatureUploader] Switching to EN...")
+        # self._log("Switching to EN for translated specs")
+        # self.lang_switcher.switchTo("en")
+        # print("[FeatureUploader] Filling EN specs...")
+        # self.writer.fillFields(enData, lang="en", first_language=False)
+        # print("[FeatureUploader] EN specs filled")
 
-        # 4. Switch back to LT
-        print("[FeatureUploader] Switching back to LT...")
-        self.lang_switcher.switchTo("lt")
+        # # 4. Switch back to LT
+        # print("[FeatureUploader] Switching back to LT...")
+        # self.lang_switcher.switchTo("lt")
 
         print("[FeatureUploader] Specification upload complete")
         self._log("Specification upload complete")
