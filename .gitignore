@@ -83,6 +83,9 @@ Installer/
 # Temporary translation files
 pabaigta*.txt
 
+#todo file
+todo.txt
+
 # Local runtime/test data directories (DB/session written here during dev/frozen tests)
 _fresh_data/
 _fresh_data_frozen/
