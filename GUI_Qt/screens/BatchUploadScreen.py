@@ -20,6 +20,7 @@ import openpyxl
 import time
 from openpyxl.styles import Font, PatternFill, Alignment
 from Managers.DescriptionManager import DescriptionManager
+from GUI_Qt.screens.UploadScreen import ATTRIBUTE_DEFINITIONS
 from Utilities.ExcelHandler import ExcelHandler
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
 from GUI_Qt.styles.theme_config import COLORS, FONTS, COMPONENT_COLORS, RADII, PADDINGS, SIZES, SPACING
@@ -98,6 +99,9 @@ class BatchUploadWorker(QThread):
                     'description_name': row_data.get('description_name'),
                     'frameset_only': row_data.get('frameset_only', False),
                     'append_disclaimer': row_data.get('append_disclaimer', False),
+                    'attribute_values': row_data.get('attribute_values', []),
+
+
                 }]
 
                 # Process this single item
@@ -233,6 +237,9 @@ class ParallelBatchUploadWorker(QThread):
                     'description_name': row_data.get('description_name'),
                     'frameset_only': row_data.get('frameset_only', False),
                     'append_disclaimer': row_data.get('append_disclaimer', False),
+                    'attribute_values': row_data.get('attribute_values', []),
+
+
                 }]
 
                 # Process
@@ -680,6 +687,9 @@ class BatchUploadScreen(ResponsiveWidget):
         toolbar_layout.addWidget(self.start_btn)
         layout.addWidget(toolbar_card)
 
+        # === ATTRIBUTES SECTION (shared for all batch items) ===
+        self._build_batch_attributes_section(layout)
+
         # === CONTENT AREA ===
         content_card = CardWidget()
         content_card.setBorderRadius(RADII['md'])
@@ -823,6 +833,13 @@ class BatchUploadScreen(ResponsiveWidget):
             tr("batch.table.error"),
             "",
         ])
+
+        # Batch attributes section
+        if hasattr(self, 'batch_attr_title'):
+            self.batch_attr_title.setText(tr("upload.attr.title"))
+            self.batch_attr_table.setHorizontalHeaderLabels([
+                tr("upload.attr.name"), tr("upload.attr.value"), ""
+            ])
 
         # Drop-zone text
         if hasattr(self, "excel_empty") and hasattr(self.excel_empty, "retranslate_ui"):
@@ -1169,6 +1186,117 @@ class BatchUploadScreen(ResponsiveWidget):
             checkbox = self._get_widget_from_cell(row, 5, CheckBox)
             if checkbox:
                 checkbox.setChecked(checked)
+
+    # -- Batch attribute helpers ------------------------------------------------
+
+    def _build_batch_attributes_section(self, parent_layout):
+        """Build the shared attributes card for batch upload."""
+        from qfluentwidgets import CardWidget as _CW
+
+        self.batch_attr_card = _CW()
+        self.batch_attr_card.setBorderRadius(RADII['md'])
+        self.batch_attr_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
+
+        attr_layout = QVBoxLayout(self.batch_attr_card)
+        attr_layout.setContentsMargins(*TOOLBAR_MARGINS)
+        attr_layout.setSpacing(CONTENT_SPACING)
+
+        self.batch_attr_title = StrongBodyLabel("")
+        attr_layout.addWidget(self.batch_attr_title)
+
+        # Picker row: ComboBox + "+" button
+        picker_row = QHBoxLayout()
+        picker_row.setSpacing(ROW_SPACING)
+
+        self.batch_attr_combo = ComboBox()
+        self.batch_attr_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        for defn in ATTRIBUTE_DEFINITIONS:
+            self.batch_attr_combo.addItem(defn["name"])
+
+        self.batch_attr_add_btn = PushButton("+")
+        self.batch_attr_add_btn.setFixedWidth(40)
+        self.batch_attr_add_btn.clicked.connect(self._batch_add_attribute)
+
+        picker_row.addWidget(self.batch_attr_combo)
+        picker_row.addWidget(self.batch_attr_add_btn)
+        attr_layout.addLayout(picker_row)
+
+        # Attributes table
+        self.batch_attr_table = QTableWidget(0, 3)
+        self.batch_attr_table.setHorizontalHeaderLabels(["Attribute", "Value", ""])
+        self.batch_attr_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.batch_attr_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.batch_attr_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
+        self.batch_attr_table.setColumnWidth(2, 40)
+        self.batch_attr_table.verticalHeader().setVisible(False)
+        self.batch_attr_table.setMaximumHeight(180)
+        attr_layout.addWidget(self.batch_attr_table)
+
+        parent_layout.addWidget(self.batch_attr_card)
+
+    def _batch_add_attribute(self):
+        """Add the selected attribute to the batch attribute table."""
+        attr_name = self.batch_attr_combo.currentText()
+        if not attr_name:
+            return
+
+        for row in range(self.batch_attr_table.rowCount()):
+            existing = self.batch_attr_table.item(row, 0)
+            if existing and existing.text() == attr_name:
+                InfoBar.warning(
+                    title=self.main.i18n.tr("upload.attr.duplicate_title"),
+                    content=self.main.i18n.tr("upload.attr.duplicate", name=attr_name),
+                    parent=self,
+                    position=InfoBarPosition.TOP,
+                    duration=2000,
+                )
+                return
+
+        row = self.batch_attr_table.rowCount()
+        self.batch_attr_table.insertRow(row)
+
+        name_item = QTableWidgetItem(attr_name)
+        name_item.setFlags(name_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        self.batch_attr_table.setItem(row, 0, name_item)
+
+        value_edit = LineEdit()
+        value_edit.setPlaceholderText(self.main.i18n.tr("upload.attr.value_placeholder"))
+        self.batch_attr_table.setCellWidget(row, 1, value_edit)
+
+        remove_btn = TransparentToolButton(FluentIcon.DELETE, self)
+        remove_btn.setFixedSize(24, 24)
+        remove_btn.clicked.connect(lambda: self._batch_remove_attribute(remove_btn))
+        self.batch_attr_table.setCellWidget(row, 2, remove_btn)
+
+    def _batch_remove_attribute(self, sender_btn):
+        """Remove an attribute row from the batch attribute table."""
+        for r in range(self.batch_attr_table.rowCount()):
+            widget = self.batch_attr_table.cellWidget(r, 2)
+            if widget is sender_btn:
+                self.batch_attr_table.removeRow(r)
+                return
+
+    def _get_batch_attribute_values(self) -> list[dict]:
+        """Collect attribute values from the batch attribute table."""
+        result = []
+        for row in range(self.batch_attr_table.rowCount()):
+            name_item = self.batch_attr_table.item(row, 0)
+            value_widget = self.batch_attr_table.cellWidget(row, 1)
+            if not name_item or not value_widget:
+                continue
+            name = name_item.text().strip()
+            value = value_widget.text().strip()
+            if not name or not value:
+                continue
+
+            field = "options"
+            for defn in ATTRIBUTE_DEFINITIONS:
+                if defn["name"] == name:
+                    field = defn["field"]
+                    break
+
+            result.append({"name": name, "value": value, "field": field})
+        return result
 
     def _on_code_changed(self, text, field):
         """Handle product code field change with validation"""
@@ -1873,6 +2001,9 @@ class BatchUploadScreen(ResponsiveWidget):
                     'description_name': desc,
                     'frameset_only': frameset,
                     'append_disclaimer': disclaimer,
+                    'attribute_values': self._get_batch_attribute_values(),
+
+
                 })
                 failed_rows.append(row)
 
@@ -2021,6 +2152,7 @@ class BatchUploadScreen(ResponsiveWidget):
                 'description_name': desc,
                 'frameset_only': frameset,
                 'append_disclaimer': disclaimer,
+                'attribute_values': self._get_batch_attribute_values(),
             })
             table_rows.append(row)  # Track which table row this item came from
 
@@ -2408,6 +2540,50 @@ class BatchUploadScreen(ResponsiveWidget):
             }}
         """)
 
+    def _update_batch_attr_theme(self):
+        """Apply themed QSS to the batch attribute card and table."""
+        if not hasattr(self, 'batch_attr_card'):
+            return
+        is_dark = isDarkTheme()
+        from GUI_Qt.styles.theme_config import rgba_from_hex
+        self.batch_attr_card.setStyleSheet(f"""
+            CardWidget {{
+                background-color: {rgba_from_hex(COLORS['text_white'], 0.03) if is_dark else rgba_from_hex(COLORS['space_indigo'], 0.03)};
+                border: 1px solid {COLORS.get('border_dark', '#444') if is_dark else COLORS.get('border_light', '#ddd')};
+            }}
+        """)
+
+        tc = COMPONENT_COLORS['table']
+        suffix = '_dark' if is_dark else '_light'
+        text_color = COLORS['text_primary_dark'] if is_dark else COLORS['text_primary_light']
+        header_bg = COLORS['lavender_grey'] if is_dark else COLORS['space_indigo']
+        header_text = COLORS['space_indigo'] if is_dark else COLORS['text_white']
+
+        self.batch_attr_table.setStyleSheet(f"""
+            QTableWidget {{
+                background-color: {tc['row_bg' + suffix]};
+                alternate-background-color: {tc['row_alt_bg' + suffix]};
+                color: {text_color};
+                gridline-color: {tc['border' + suffix]};
+                border: 1px solid {tc['border' + suffix]};
+                border-radius: {RADII['sm']}px;
+                font-family: {FONTS['family']};
+                font-size: {FONTS['size_body']}px;
+            }}
+            QTableWidget::item {{
+                padding: 4px 8px;
+            }}
+            QHeaderView::section {{
+                background-color: {header_bg};
+                color: {header_text};
+                font-weight: 600;
+                font-size: {FONTS['size_caption']}px;
+                padding: 6px 8px;
+                border: none;
+                border-bottom: 2px solid {tc['border' + suffix]};
+            }}
+        """)
+
     def _on_breakpoint_changed(self, breakpoint: str):
         """Respond to breakpoint changes - adjust margins and spacing."""
         # Adjust margins based on breakpoint
@@ -2433,3 +2609,4 @@ class BatchUploadScreen(ResponsiveWidget):
 
         # Update table theme
         self._update_table_theme()
+        self._update_batch_attr_theme()

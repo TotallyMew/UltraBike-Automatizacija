@@ -229,6 +229,146 @@ class FeatureSelectors:
 
 
 # ---------------------------------------------------------------------------
+# Product Attributes (pim.bo array field)
+# ---------------------------------------------------------------------------
+
+class AttributeSelectors:
+    """Selectors for the product-level Attributes section.
+
+    pim.bo flow:
+      1. Click ATTRIBUTES_TAB to reveal the attributes block.
+      2. Choose the "Dviračiai" template from the select and click Apply Template.
+      3. Each attribute row has: Attribute (react-select), Value Text, Value Number,
+         Value Boolean, Value Options (multi-select), Measurement Value/Unit.
+
+    DOM pattern:
+        id="attributes-row-{index}"
+          └── id="field-attributes__{index}__attribute"     ← React Select
+                └── div.relationship--single-value__text     ← visible name
+          └── id="field-attributes__{index}__valueText"      ← text input (localized)
+          └── id="field-attributes__{index}__valueNumber"    ← number input
+          └── id="field-attributes__{index}__valueBoolean"   ← checkbox
+          └── id="field-attributes__{index}__valueOptions"   ← React Select multi
+          └── id="field-attributes__{index}__measurementValue" ← number input
+          └── id="field-attributes__{index}__measurementUnit"  ← text input
+    """
+
+    # -- Navigation ----------------------------------------------------------
+
+    ATTRIBUTES_TAB = (By.XPATH,
+        "//button[contains(@class,'tabs-field__tab-button')"
+        " and normalize-space()='Attributes']")
+
+    # -- Template application ------------------------------------------------
+    # The template section sits just before the #field-attributes div.
+
+    TEMPLATE_SELECT = (By.XPATH,
+        "//div[@id='field-attributes']"
+        "/preceding-sibling::div[1]//select")
+
+    APPLY_TEMPLATE_BUTTON = (By.XPATH,
+        "//div[@id='field-attributes']"
+        "/preceding-sibling::div[1]"
+        "//button[.//span[normalize-space()='Apply Template']]")
+
+    # -- Detect existing rows ------------------------------------------------
+
+    FIRST_ATTRIBUTE_ROW = (By.ID, "attributes-row-0")
+
+    ALL_ATTRIBUTE_ROWS = (By.CSS_SELECTOR,
+        "div[id^='attributes-row-']")
+
+    # -- Per-row fields by index ---------------------------------------------
+
+    @staticmethod
+    def attribute_row(index: int):
+        return (By.ID, f"attributes-row-{index}")
+
+    @staticmethod
+    def attribute_name(index: int):
+        """Visible attribute name text inside the row's react-select."""
+        return (By.CSS_SELECTOR,
+            f"#attributes-row-{index} .relationship--single-value__text")
+
+    @staticmethod
+    def value_text(index: int):
+        return (By.ID, f"field-attributes__{index}__valueText")
+
+    @staticmethod
+    def value_number(index: int):
+        return (By.ID, f"field-attributes__{index}__valueNumber")
+
+    @staticmethod
+    def value_boolean(index: int):
+        return (By.ID, f"field-attributes__{index}__valueBoolean")
+
+    @staticmethod
+    def value_options_control(index: int):
+        """React-select control for multi-select Value Options."""
+        return (By.CSS_SELECTOR,
+            f"#field-attributes__{index}__valueOptions .rs__control")
+
+    @staticmethod
+    def value_options_input(index: int):
+        """Text input inside the Value Options react-select."""
+        return (By.CSS_SELECTOR,
+            f"#field-attributes__{index}__valueOptions input.rs__input")
+
+    @staticmethod
+    def measurement_value(index: int):
+        return (By.ID, f"field-attributes__{index}__measurementValue")
+
+    @staticmethod
+    def measurement_unit(index: int):
+        return (By.ID, f"field-attributes__{index}__measurementUnit")
+
+    # -- By-name lookups (find row index by attribute name) ------------------
+
+    @staticmethod
+    def value_text_by_name(attr_name: str):
+        """Locate the Value Text input for an attribute by its display name."""
+        return (By.XPATH,
+            f"//div[contains(@class,'relationship--single-value__text')"
+            f" and normalize-space()='{attr_name}']"
+            f"/ancestor::div[starts-with(@id,'attributes-row-')]"
+            f"//input[contains(@id,'__valueText')]")
+
+    @staticmethod
+    def value_options_input_by_name(attr_name: str):
+        """Locate the Value Options react-select input for an attribute by name."""
+        return (By.XPATH,
+            f"//div[contains(@class,'relationship--single-value__text')"
+            f" and normalize-space()='{attr_name}']"
+            f"/ancestor::div[starts-with(@id,'attributes-row-')]"
+            f"//div[contains(@id,'__valueOptions')]//input[contains(@class,'rs__input')]")
+
+    @staticmethod
+    def value_number_by_name(attr_name: str):
+        """Locate the Value Number input for an attribute by name."""
+        return (By.XPATH,
+            f"//div[contains(@class,'relationship--single-value__text')"
+            f" and normalize-space()='{attr_name}']"
+            f"/ancestor::div[starts-with(@id,'attributes-row-')]"
+            f"//input[contains(@id,'__valueNumber')]")
+
+    @staticmethod
+    def measurement_value_by_name(attr_name: str):
+        return (By.XPATH,
+            f"//div[contains(@class,'relationship--single-value__text')"
+            f" and normalize-space()='{attr_name}']"
+            f"/ancestor::div[starts-with(@id,'attributes-row-')]"
+            f"//input[contains(@id,'__measurementValue')]")
+
+    @staticmethod
+    def measurement_unit_by_name(attr_name: str):
+        return (By.XPATH,
+            f"//div[contains(@class,'relationship--single-value__text')"
+            f" and normalize-space()='{attr_name}']"
+            f"/ancestor::div[starts-with(@id,'attributes-row-')]"
+            f"//input[contains(@id,'__measurementUnit')]")
+
+
+# ---------------------------------------------------------------------------
 # Images
 # ---------------------------------------------------------------------------
 

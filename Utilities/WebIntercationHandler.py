@@ -25,30 +25,32 @@ class WebInteractionHandler:
         )
 
     def add_brand_name(self, brand_name):
+        """Select a manufacturer/brand from the react-select dropdown on pim.bo."""
         try:
-            add_brand = WebDriverWait(self.driver, 2).until(
-                EC.element_to_be_clickable(BrandSelectors.ADD_BRAND_BUTTON)
+            # Open the react-select dropdown
+            dropdown = WebDriverWait(self.driver, 5).until(
+                EC.element_to_be_clickable(BrandSelectors.BRAND_DROPDOWN)
             )
-            self.driver.execute_script("arguments[0].scrollIntoView();", add_brand)
-            add_brand.click()
+            self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", dropdown)
+            time.sleep(0.3)
+            dropdown.click()
+            time.sleep(0.3)
 
-            select_brand = self.driver.find_element(*BrandSelectors.BRAND_DROPDOWN)
-            self.driver.execute_script("arguments[0].scrollIntoView();", select_brand)
-            select_brand.click()
-
-            search_field = self.driver.find_element(*BrandSelectors.BRAND_SEARCH)
-            self.driver.execute_script("arguments[0].scrollIntoView();", search_field)
+            # Type the brand name into the search input
+            search_field = WebDriverWait(self.driver, 5).until(
+                EC.presence_of_element_located(BrandSelectors.BRAND_SEARCH)
+            )
             search_field.send_keys(brand_name)
+            time.sleep(0.5)
 
-            brand_match = WebDriverWait(self.driver, 2).until(
-                EC.presence_of_element_located(BrandSelectors.BRAND_RESULT)
+            # Click the matching option
+            brand_match = WebDriverWait(self.driver, 5).until(
+                EC.element_to_be_clickable(BrandSelectors.BRAND_RESULT)
             )
-            self.driver.execute_script("arguments[0].scrollIntoView();", brand_match)
             brand_match.click()
-            # GUI/log should handle success feedback
-        except:
-            # GUI/log should handle already-added feedback
-            pass
+            print(f"[WebHandler] Brand '{brand_name}' selected")
+        except Exception as e:
+            print(f"[WebHandler] Failed to select brand '{brand_name}': {e}")
 
     def save_information(self, timeout: float = 10.0):
         """Click the Save button (#action-save) and wait for the toast result.

@@ -1,5 +1,6 @@
 ﻿# Standard library
 import json
+import re
 import time
 from abc import ABC, abstractmethod
 from datetime import datetime
@@ -9,6 +10,7 @@ from Database.DatabaseManager import DatabaseManager
 from Database.SessionManager import SessionManager
 from Database.SettingsManager import SettingsManager
 from Managers.DescriptionManager import DescriptionManager
+from Managers.AttributeUploader import AttributeUploader
 from Managers.FeatureUploader.FeatureUploader import FeatureUploader
 from Managers.ImageUploader import ImageUploader
 from Managers.TranslationManager import TranslationManager
@@ -86,6 +88,7 @@ class ProductUploader(ABC):
         self.translationManager = TranslationManager(self.brandName, self.db, self.logger)
         self.imageUploader = ImageUploader(self.driver, self.brandName, self.logger, settings_manager=self.settings_manager)
         self.featureUploader = FeatureUploader(self.driver, self.logger)
+        self.attributeUploader = AttributeUploader(self.driver, self.logger)
 
         # Description handling - always initialize manager (needed for standalone disclaimer)
         self.description_manager = DescriptionManager(self.db, self.logger)
@@ -108,41 +111,49 @@ class ProductUploader(ABC):
         try:
             # Main upload workflow
             print(f"[Upload] === Starting upload for {self.ultraBikeCode} ({self.brandName}) ===")
-            print(f"[Upload] Step 1/7: Scraping...")
+            print(f"[Upload] Step 1/9: Scraping...")
             self.scrape()
-            print(f"[Upload] Step 2/7: Translating...")
+            print(f"[Upload] Step 2/9: Translating...")
             self.translate()
-            print(f"[Upload] Step 3/7: Opening product...")
+            print(f"[Upload] Step 3/9: Opening product...")
             self.openProduct()
 
             # Optional image upload
             if self.settings_manager.download_pictures_and_upload():
-                print(f"[Upload] Step 4/7: Uploading images...")
+                print(f"[Upload] Step 4/9: Uploading images...")
                 self.uploadImages()
                 self.images_uploaded = True
                 print(f"[Upload] Images uploaded")
             else:
-                print(f"[Upload] Step 4/7: Image upload disabled, skipping")
+                print(f"[Upload] Step 4/9: Image upload disabled, skipping")
 
             # Upload description (if provided)
-            print(f"[Upload] Step 5/7: Uploading description...")
+            print(f"[Upload] Step 5/9: Uploading description...")
             self.uploadDescription()
             print(f"[Upload] Description done")
 
             # Upload features
-            print(f"[Upload] Step 6/8: Uploading features...")
+            print(f"[Upload] Step 6/9: Uploading features...")
             self.uploadFeatures()
             print(f"[Upload] Features done")
 
             # Fill variant sizes into specs
-            print(f"[Upload] Step 7/8: Extracting variant sizes...")
+            print(f"[Upload] Step 7/9: Extracting variant sizes...")
             self.uploadVariantSizes()
             print(f"[Upload] Variant sizes done")
 
             # Upload brand
-            print(f"[Upload] Step 8/8: Uploading brand...")
+            print(f"[Upload] Step 8/9: Uploading brand...")
             self.uploadBrand()
             print(f"[Upload] Brand done")
+
+            # Extract wheel size from product title into attributes
+            self.extractWheelSizeFromTitle()
+
+            # Upload attributes
+            print(f"[Upload] Step 9/9: Uploading attributes...")
+            self.uploadAttributes()
+            print(f"[Upload] Attributes done")
 
             # Auto-save if enabled in settings
             if self.settings_manager.is_auto_save_enabled():
@@ -445,6 +456,7 @@ class ProductUploader(ABC):
                 self._log("No variant sizes found, skipping")
                 return
 
+            sizes = self._sort_sizes(sizes)
             sizes_str = ", ".join(sizes)
             self._log("Variant sizes found", sizes=sizes_str)
 
@@ -473,9 +485,112 @@ class ProductUploader(ABC):
         except Exception as e:
             self._log_error("Failed to extract variant sizes", exception=e)
 
+    @staticmethod
+    def _sort_sizes(sizes):
+        """Sort variant sizes: standard clothing sizes in order, numbers low-to-high, alpha fallback."""
+        SIZE_ORDER = {
+            'XXS': 0, '2XS': 0,
+            'XS': 1,
+            'S': 2,
+            'M': 3,
+            'L': 4,
+            'XL': 5,
+            'XXL': 6, '2XL': 6,
+            'XXXL': 7, '3XL': 7,
+            '4XL': 8, '5XL': 9,
+        }
+
+        def sort_key(size):
+            upper = size.strip().upper()
+            # Check standard clothing sizes
+            if upper in SIZE_ORDER:
+                return (0, SIZE_ORDER[upper], '')
+            # Try numeric (int or float, e.g. "52", "27.5")
+            try:
+                return (1, float(size.strip()), '')
+            except ValueError:
+                pass
+            # Alphabetical fallback
+            return (2, 0, size.strip().lower())
+
+        return sorted(sizes, key=sort_key)
+
+    def extractWheelSizeFromTitle(self):
+        """Extract wheel size (e.g. 28") from the product name and add to attributes."""
+        from Config.Selectors import ProductEditorSelectors
+
+        self._log("Extracting wheel size from product title")
+        try:
+            name_field = self.driver.find_element(*ProductEditorSelectors.NAME_FIELD)
+            title = name_field.get_attribute("value") or ""
+
+            if not title:
+                self._log("Product name is empty, skipping wheel size extraction")
+                return
+
+            # Match a number (int or decimal) followed by " (inch mark: &quot; or literal ")
+            match = re.search(r'(\d+(?:[.,]\d+)?)\s*(?:"|&quot;|″)', title)
+            if not match:
+                self._log("No wheel size found in title", title=title)
+                return
+
+            wheel_size = match.group(1).replace(',', '.')
+            # Normalize: drop .0 for whole numbers
+            try:
+                num = float(wheel_size)
+                wheel_size = str(int(num)) if num == int(num) else str(num)
+            except ValueError:
+                pass
+
+            wheel_value = f'{wheel_size}"'
+            self._log("Wheel size extracted from title", wheel_size=wheel_value, title=title)
+
+            # Inject into attribute_values so uploadAttributes() picks it up
+            attr_values = self.brand_options.setdefault('attribute_values', [])
+            # Don't duplicate if already set
+            if not any(a.get('name') == 'Ratų dydis' for a in attr_values):
+                attr_values.append({
+                    'name': 'Ratų dydis',
+                    'value': wheel_value,
+                    'field': 'options',
+                })
+                self._log("Wheel size added to attributes", value=wheel_value)
+            else:
+                self._log("Ratų dydis already in attributes, skipping")
+
+        except Exception as e:
+            self._log_error("Failed to extract wheel size from title", exception=e)
+
     def uploadBrand(self):
         """Add brand name to product (implemented by child classes if needed)"""
         pass
+
+    def uploadAttributes(self):
+        """Upload product-level attributes."""
+        attribute_values = self.brand_options.get('attribute_values', [])
+
+        if not attribute_values:
+            self._log("No attributes to upload, skipping")
+            return
+
+        self._log("Uploading attributes", count=len(attribute_values))
+        try:
+            skipped = self.attributeUploader.upload_attributes(
+                attribute_values=attribute_values,
+            )
+            if skipped:
+                details = {}
+                if getattr(self, "_details_json", None):
+                    try:
+                        details = json.loads(self._details_json) or {}
+                    except Exception:
+                        details = {}
+                details["skipped_attributes"] = skipped
+                self._details_json = json.dumps(details, ensure_ascii=False)
+            self._log("Attributes uploaded", skipped=len(skipped))
+        except Exception as e:
+            self._log_error("Attribute upload failed", exception=e)
+            # Don't raise - continue without attributes
 
     def saveUpdate(self):
         """Save product changes."""

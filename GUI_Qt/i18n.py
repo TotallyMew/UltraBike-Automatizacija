@@ -418,6 +418,14 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "upload.success.title": "Upload Successful",
         "upload.failed.title": "Upload Failed",
 
+        # Upload attributes
+        "upload.attr.title": "Product Attributes",
+        "upload.attr.name": "Attribute",
+        "upload.attr.value": "Value",
+        "upload.attr.value_placeholder": "Enter value to select...",
+        "upload.attr.duplicate_title": "Duplicate",
+        "upload.attr.duplicate": "{name} is already added",
+
         # Upload retry dialog
         "upload.retry.title": "Product not found",
         "upload.retry.content": "You can try again with the same or a new code.",
@@ -464,6 +472,8 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "batch.retry_failed": "Retry Failed",
         "batch.retry_failed.tip": "Retry only the failed items from the previous batch",
         "batch.clear.confirm": "Are you sure you want to clear all rows? This action cannot be undone.",
+        "batch.cancel.title": "Stopping",
+        "batch.cancel.content": "The current item will finish, then processing will stop.",
         "batch.row.remove.tip": "Remove row",
         "batch.bulk.toggle.tip": "Select/Deselect all",
         "batch.preview.title": "Preview",
@@ -1201,6 +1211,14 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "upload.success.title": "Įkelta sėkmingai",
         "upload.failed.title": "Įkėlimas nepavyko",
 
+        # Upload attributes
+        "upload.attr.title": "Prekės atributai",
+        "upload.attr.name": "Atributas",
+        "upload.attr.value": "Reikšmė",
+        "upload.attr.value_placeholder": "Įveskite reikšmę pasirinkimui...",
+        "upload.attr.duplicate_title": "Dublikatas",
+        "upload.attr.duplicate": "{name} jau pridėtas",
+
         # Upload retry dialog
         "upload.retry.title": "Nepavyko rasti prekės",
         "upload.retry.content": "Galite bandyti dar kartą su tuo pačiu arba nauju kodu.",
@@ -1247,6 +1265,8 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "batch.retry_failed": "Pakartoti nepavykusius",
         "batch.retry_failed.tip": "Pakartoti tik nepavykusius elementus iš ankstesnio masinio įkėlimo",
         "batch.clear.confirm": "Ar tikrai norite išvalyti visas eilutes? Šio veiksmo negalima atšaukti.",
+        "batch.cancel.title": "Sustabdoma",
+        "batch.cancel.content": "Dabartinis elementas bus baigtas, tada apdorojimas sustos.",
         "batch.row.remove.tip": "Pašalinti eilutę",
         "batch.bulk.toggle.tip": "Pažymėti/nuimti visus",
         "batch.preview.title": "Peržiūra",

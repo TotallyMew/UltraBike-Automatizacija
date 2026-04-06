@@ -251,6 +251,9 @@ class MainWindow(FluentWindow):
         10: Account
         11: Settings
         12: Info
+        13: Spec Checker
+        14: Name Getter
+        15: Modelis Clearer
         """
         if index == 0:  # Upload
             if not self.upload_screen:

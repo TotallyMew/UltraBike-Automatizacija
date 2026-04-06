@@ -255,6 +255,7 @@ class BatchProcessor:
                 "description_name": it.get("description_name") or None,
                 "frameset_only": bool(it.get("frameset_only")) if it.get("frameset_only") is not None else False,
                 "append_disclaimer": bool(it.get("append_disclaimer")) if it.get("append_disclaimer") is not None else False,
+                "attribute_values": it.get("attribute_values") or [],
             }
             self.add_to_queue(it.get("brand"), it.get("code"), it.get("url"), brand_options=brand_options)
 
