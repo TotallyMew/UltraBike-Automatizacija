@@ -63,7 +63,7 @@ MID_SPACING = 10
 PILL_MARGINS = (10, 8, 10, 8)
 
 # Table cell widget margins (prevents gridlines from overlapping input borders)
-TABLE_CELL_MARGINS = (SPACING["md"], SPACING["sm"], SPACING["md"], SPACING["sm"])  # 12,8,12,8
+TABLE_CELL_MARGINS = (SPACING["sm"], SPACING["xxs"], SPACING["sm"], SPACING["xxs"])  # 8,2,8,2
 
 # Reused “details” layout constants (kept exact to avoid UI regressions)
 DETAILS_MARGINS = (12, 10, 12, 10)

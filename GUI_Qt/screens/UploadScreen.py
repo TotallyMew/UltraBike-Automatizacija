@@ -5,7 +5,6 @@ Single product upload with Space Indigo/Lavender Grey color scheme
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QSizePolicy,
-    QTableWidget, QTableWidgetItem, QHeaderView,
 )
 from PySide6.QtCore import Qt, QThread, Signal, QEvent, QTimer
 from PySide6.QtGui import QFont, QStandardItemModel, QKeySequence, QShortcut
@@ -14,6 +13,9 @@ from qfluentwidgets import (
     IndeterminateProgressRing, BodyLabel, TitleLabel, CaptionLabel,
     InfoBar, InfoBarPosition, MessageBox, TransparentToolButton, FluentIcon,
     CardWidget, isDarkTheme, StrongBodyLabel, qconfig, ScrollArea
+)
+from GUI_Qt.dialogs.AttributeOptionsDialog import (
+    AttributeOptionsDialog, load_attribute_options, save_attribute_options,
 )
 from uploaderFactory import getUploaderClass
 from Managers.DescriptionManager import DescriptionManager
@@ -41,20 +43,15 @@ from GUI_Qt.styles.screen_theme import (
 # Predefined attribute names from the Dviračiai template with field types.
 # "options" = react-select dropdown; "text" = plain text input.
 ATTRIBUTE_DEFINITIONS = [
-    {"name": "Spalva", "field": "options"},
-    {"name": "Dydis", "field": "options"},
+    {"name": "Modelis", "field": "text"},
+    {"name": "Modelis (vidinis)", "field": "text"},
+    {"name": "Rėmo tipas", "field": "options"},
     {"name": "Rėmo medžiaga", "field": "options"},
-    {"name": "Šakė", "field": "options"},
-    {"name": "Stabdžių tipas", "field": "options"},
-    {"name": "Pavarų skaičius", "field": "options"},
     {"name": "Ratų dydis", "field": "options"},
-    {"name": "Tipas", "field": "options"},
-    {"name": "Lytis", "field": "options"},
-    {"name": "Amžiaus grupė", "field": "options"},
-    {"name": "Vairo tipas", "field": "options"},
-    {"name": "El. variklio pozicija", "field": "options"},
-    {"name": "Baterijos talpa", "field": "text"},
-    {"name": "Maksimalus greitis", "field": "text"},
+    {"name": "Pavarų skaičius", "field": "options"},
+    {"name": "Stabdžių tipas", "field": "options"},
+    {"name": "Komplektacija", "field": "options"},
+    {"name": "Spalva", "field": "options"},
 ]
 
 
@@ -405,72 +402,47 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
         self.attr_title = StrongBodyLabel("")
         attr_layout.addWidget(self.attr_title)
 
-        # Attribute picker row: ComboBox + "+" button
-        attr_picker_row = QHBoxLayout()
-        attr_picker_row.setSpacing(ROW_SPACING)
+        # Two-column grid of attributes: [Label | ComboBox | Edit] [Label | ComboBox | Edit]
+        self.attr_card.setUpdatesEnabled(False)
 
-        self.attr_combo = ComboBox()
-        self.attr_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        for defn in ATTRIBUTE_DEFINITIONS:
-            self.attr_combo.addItem(defn["name"])
+        self._attr_grid = QGridLayout()
+        self._attr_grid.setSpacing(ROW_SPACING)
+        self._attr_grid.setColumnStretch(0, 0)  # label left
+        self._attr_grid.setColumnStretch(1, 1)  # combo left
+        self._attr_grid.setColumnStretch(2, 0)  # edit btn left
+        self._attr_grid.setColumnStretch(3, 0)  # label right
+        self._attr_grid.setColumnStretch(4, 1)  # combo right
+        self._attr_grid.setColumnStretch(5, 0)  # edit btn right
 
-        self.attr_add_btn = PushButton("+")
-        self.attr_add_btn.setFixedWidth(40)
-        self.attr_add_btn.setFixedHeight(SIZES['button_height'])
-        self.attr_add_btn.clicked.connect(self._add_attribute)
+        self._attr_widgets = {}  # {attr_name: {"combo": ComboBox}}
+        for i, defn in enumerate(ATTRIBUTE_DEFINITIONS):
+            name = defn["name"]
+            grid_row = i // 2
+            col_offset = (i % 2) * 3  # 0 for left column, 3 for right column
 
-        attr_picker_row.addWidget(self.attr_combo)
-        attr_picker_row.addWidget(self.attr_add_btn)
-        attr_layout.addLayout(attr_picker_row)
+            label = BodyLabel(name)
+            label.setFixedWidth(140)
+            _normalize_label_widget(label)
 
-        # Attributes table: Name | Value | Remove
-        self.attr_table = QTableWidget(0, 3)
-        self.attr_table.setHorizontalHeaderLabels(["Attribute", "Value", ""])
-        self.attr_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        self.attr_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        self.attr_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
-        self.attr_table.setColumnWidth(2, 40)
-        self.attr_table.verticalHeader().setVisible(False)
-        self.attr_table.setMaximumHeight(200)
-        attr_layout.addWidget(self.attr_table)
+            combo = ComboBox()
+            combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            self._load_attr_combo_options(name, combo)
 
+            edit_btn = TransparentToolButton(FluentIcon.EDIT, self)
+            edit_btn.setFixedSize(SIZES['icon_md'], SIZES['icon_md'])
+            edit_btn.setToolTip(self.main.i18n.tr("upload.attr.edit_options"))
+            edit_btn.clicked.connect(lambda checked=False, n=name: self._open_attr_options_dialog(n))
+
+            self._attr_grid.addWidget(label, grid_row, col_offset)
+            self._attr_grid.addWidget(combo, grid_row, col_offset + 1)
+            self._attr_grid.addWidget(edit_btn, grid_row, col_offset + 2)
+
+            self._attr_widgets[name] = {"combo": combo}
+
+        attr_layout.addLayout(self._attr_grid)
+
+        self.attr_card.setUpdatesEnabled(True)
         card_layout.addWidget(self.attr_card)
-
-        # === ACTION BUTTONS ===
-        action_row = QHBoxLayout()
-        action_row.setSpacing(CONTENT_SPACING)
-
-        self.upload_button = PrimaryPushButton("")
-        self.upload_button.setIcon(FluentIcon.UP)
-        self.upload_button.setEnabled(False)
-        self.upload_button.setFixedHeight(SIZES['button_height'])
-        self.upload_button.clicked.connect(self._handle_upload)
-        # Accessibility
-        self.upload_button.setAccessibleName(self.main.i18n.tr("upload.button") + " (Ctrl+Enter)")
-        self.upload_button.setAccessibleDescription("Upload product to the website")
-
-        self.clear_button = PushButton("")
-        self.clear_button.setIcon(FluentIcon.DELETE)
-        self.clear_button.setFixedHeight(SIZES['button_height'])
-        self.clear_button.clicked.connect(self._clear_form)
-        # Accessibility
-        self.clear_button.setAccessibleName(self.main.i18n.tr("upload.clear"))
-        self.clear_button.setAccessibleDescription("Clear all form fields")
-
-        self.progress_ring = IndeterminateProgressRing()
-        self.progress_ring.setFixedSize(SIZES['progress_ring_lg'], SIZES['progress_ring_lg'])
-        self.progress_ring.setVisible(False)
-
-        self.status_label = BodyLabel("")
-        # Theme-aware label/caption colors are applied below
-
-        action_row.addWidget(self.upload_button)
-        action_row.addWidget(self.clear_button)
-        action_row.addWidget(self.progress_ring)
-        action_row.addWidget(self.status_label)
-        action_row.addStretch()
-
-        card_layout.addLayout(action_row)
 
         # Use remaining vertical space better on fullscreen by centering the card.
         content_layout = QVBoxLayout()
@@ -481,9 +453,46 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
 
         main_layout.addLayout(content_layout, 1)
 
+        # === STICKY ACTION FOOTER (outside ScrollArea) ===
+        self.action_bar = QWidget()
+        self.action_bar.setFixedHeight(SIZES['button_height'] + SPACING['lg'] * 2)
+        action_row = QHBoxLayout(self.action_bar)
+        action_row.setContentsMargins(SPACING['xxxl'], SPACING['sm'], SPACING['xxxl'], SPACING['sm'])
+        action_row.setSpacing(CONTENT_SPACING)
+
+        self.upload_button = PrimaryPushButton("")
+        self.upload_button.setIcon(FluentIcon.UP)
+        self.upload_button.setEnabled(False)
+        self.upload_button.setFixedHeight(SIZES['button_height'])
+        self.upload_button.clicked.connect(self._handle_upload)
+        self.upload_button.setAccessibleName(self.main.i18n.tr("upload.button") + " (Ctrl+Enter)")
+        self.upload_button.setAccessibleDescription("Upload product to the website")
+
+        self.clear_button = PushButton("")
+        self.clear_button.setIcon(FluentIcon.DELETE)
+        self.clear_button.setFixedHeight(SIZES['button_height'])
+        self.clear_button.clicked.connect(self._clear_form)
+        self.clear_button.setAccessibleName(self.main.i18n.tr("upload.clear"))
+        self.clear_button.setAccessibleDescription("Clear all form fields")
+
+        self.progress_ring = IndeterminateProgressRing()
+        self.progress_ring.setFixedSize(SIZES['progress_ring_lg'], SIZES['progress_ring_lg'])
+        self.progress_ring.setVisible(False)
+
+        self.status_label = BodyLabel("")
+
+        action_row.addWidget(self.upload_button)
+        action_row.addWidget(self.clear_button)
+        action_row.addWidget(self.progress_ring)
+        action_row.addWidget(self.status_label)
+        action_row.addStretch()
+
+        root_layout.addWidget(self.action_bar)
+
         self._apply_text_theme()
         self._apply_attr_card_theme()
         self._update_attr_table_theme()
+        self._apply_action_bar_theme()
 
         self.retranslate_ui()
 
@@ -569,9 +578,6 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
         self.frameset_info_btn.setToolTip(tr("upload.frameset.tip"))
 
         self.attr_title.setText(tr("upload.attr.title"))
-        self.attr_table.setHorizontalHeaderLabels([
-            tr("upload.attr.name"), tr("upload.attr.value"), ""
-        ])
         self.upload_button.setText(f"{tr('upload.button')} (Ctrl+Enter)")
         self.clear_button.setText(tr("upload.clear"))
         self.clear_button.setToolTip(tr("upload.clear.tip"))
@@ -1022,116 +1028,50 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
 
     # -- Attribute helpers ------------------------------------------------------
 
-    def _add_attribute(self):
-        """Add the currently selected attribute to the attributes table."""
-        attr_name = self.attr_combo.currentText()
-        if not attr_name:
-            return
+    def _load_attr_combo_options(self, attr_name: str, combo: ComboBox):
+        """Populate a combo box with saved options from the database."""
+        options = load_attribute_options(self.main.settings, attr_name)
+        combo.clear()
+        combo.addItem("")  # empty / no selection
+        for opt in options:
+            combo.addItem(opt)
 
-        # Prevent duplicates
-        for row in range(self.attr_table.rowCount()):
-            existing = self.attr_table.item(row, 0)
-            if existing and existing.text() == attr_name:
-                InfoBar.warning(
-                    title=self.main.i18n.tr("upload.attr.duplicate_title"),
-                    content=self.main.i18n.tr("upload.attr.duplicate", name=attr_name),
-                    parent=self,
-                    position=InfoBarPosition.TOP,
-                    duration=2000,
-                )
-                return
-
-        row = self.attr_table.rowCount()
-        self.attr_table.insertRow(row)
-
-        # Name cell (read-only)
-        name_item = QTableWidgetItem(attr_name)
-        name_item.setFlags(name_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-        self.attr_table.setItem(row, 0, name_item)
-
-        # Value cell (editable LineEdit)
-        value_edit = LineEdit()
-        value_edit.setPlaceholderText(self.main.i18n.tr("upload.attr.value_placeholder"))
-        self.attr_table.setCellWidget(row, 1, value_edit)
-
-        # Remove button
-        remove_btn = TransparentToolButton(FluentIcon.DELETE, self)
-        remove_btn.setFixedSize(SIZES['icon_md'], SIZES['icon_md'])
-        remove_btn.clicked.connect(lambda _, r=row: self._remove_attribute(r))
-        self.attr_table.setCellWidget(row, 2, remove_btn)
-
-    def _remove_attribute(self, row: int):
-        """Remove an attribute row from the table."""
-        # Re-find the actual row by checking if the button sender matches
-        # (rows shift after deletion, so use sender-based lookup)
-        sender = self.sender()
-        if sender:
-            for r in range(self.attr_table.rowCount()):
-                widget = self.attr_table.cellWidget(r, 2)
-                if widget is sender:
-                    self.attr_table.removeRow(r)
-                    return
-        # Fallback
-        if 0 <= row < self.attr_table.rowCount():
-            self.attr_table.removeRow(row)
+    def _open_attr_options_dialog(self, attr_name: str):
+        """Open the dialog to manage dropdown values for an attribute."""
+        current = load_attribute_options(self.main.settings, attr_name)
+        dlg = AttributeOptionsDialog(attr_name, current, self.main.i18n.tr, parent=self)
+        if dlg.exec():
+            new_options = dlg.get_options()
+            save_attribute_options(self.main.settings, attr_name, new_options)
+            # Refresh combo while preserving selection
+            combo = self._attr_widgets[attr_name]["combo"]
+            prev = combo.currentText()
+            self._load_attr_combo_options(attr_name, combo)
+            if prev:
+                combo.setCurrentText(prev)
+            InfoBar.success(
+                title=self.main.i18n.tr("upload.attr.saved_title"),
+                content=self.main.i18n.tr("upload.attr.saved", name=attr_name, count=len(new_options)),
+                parent=self,
+                position=InfoBarPosition.TOP,
+                duration=2000,
+            )
 
     def _get_attribute_values(self) -> list[dict]:
-        """Collect attribute values from the table for the uploader."""
+        """Collect attribute values from all attribute combos for the uploader."""
         result = []
-        for row in range(self.attr_table.rowCount()):
-            name_item = self.attr_table.item(row, 0)
-            value_widget = self.attr_table.cellWidget(row, 1)
-            if not name_item or not value_widget:
+        for defn in ATTRIBUTE_DEFINITIONS:
+            name = defn["name"]
+            combo = self._attr_widgets[name]["combo"]
+            value = combo.currentText().strip()
+            if not value:
                 continue
-            name = name_item.text().strip()
-            value = value_widget.text().strip()
-            if not name or not value:
-                continue
-
-            # Look up field type from definitions
-            field = "options"
-            for defn in ATTRIBUTE_DEFINITIONS:
-                if defn["name"] == name:
-                    field = defn["field"]
-                    break
-
-            result.append({"name": name, "value": value, "field": field})
+            result.append({"name": name, "value": value, "field": defn["field"]})
         return result
 
     def _update_attr_table_theme(self):
-        """Apply themed QSS to the attributes table."""
-        is_dark = isDarkTheme()
-        tc = COMPONENT_COLORS['table']
-        suffix = '_dark' if is_dark else '_light'
-        text_color = COLORS['text_primary_dark'] if is_dark else COLORS['text_primary_light']
-
-        header_bg = COLORS['lavender_grey'] if is_dark else COLORS['space_indigo']
-        header_text = COLORS['space_indigo'] if is_dark else COLORS['text_white']
-
-        self.attr_table.setStyleSheet(f"""
-            QTableWidget {{
-                background-color: {tc['row_bg' + suffix]};
-                alternate-background-color: {tc['row_alt_bg' + suffix]};
-                color: {text_color};
-                gridline-color: {tc['border' + suffix]};
-                border: 1px solid {tc['border' + suffix]};
-                border-radius: {RADII['sm']}px;
-                font-family: {FONTS['family']};
-                font-size: {FONTS['size_body']}px;
-            }}
-            QTableWidget::item {{
-                padding: 4px 8px;
-            }}
-            QHeaderView::section {{
-                background-color: {header_bg};
-                color: {header_text};
-                font-weight: 600;
-                font-size: {FONTS['size_caption']}px;
-                padding: 6px 8px;
-                border: none;
-                border-bottom: 2px solid {tc['border' + suffix]};
-            }}
-        """)
+        """No-op — kept for compatibility with theme change calls."""
+        pass
 
     def _clear_form(self) -> None:
         """Clear user-editable fields with confirmation dialog (keeps selected brand)."""
@@ -1147,7 +1087,8 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
             self.description_combo.setCurrentIndex(0)
             self.disclaimer_checkbox.setChecked(False)
             self.frameset_checkbox.setChecked(False)
-            self.attr_table.setRowCount(0)
+            for widgets in self._attr_widgets.values():
+                widgets["combo"].setCurrentIndex(0)
             self.status_label.setText("")
             self._check_form_valid()
 
@@ -1163,6 +1104,7 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
         self._apply_options_card_theme()
         self._apply_attr_card_theme()
         self._update_attr_table_theme()
+        self._apply_action_bar_theme()
         self._apply_text_theme()
 
     def _apply_options_card_theme(self) -> None:
@@ -1184,6 +1126,19 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
             CardWidget {{
                 background-color: {rgba_from_hex(COLORS['text_white'], 0.03) if is_dark else rgba_from_hex(COLORS['space_indigo'], 0.03)};
                 border: 1px solid {COLORS['border_dark'] if is_dark else COLORS['border_light']};
+            }}
+        """)
+
+    def _apply_action_bar_theme(self) -> None:
+        if not hasattr(self, 'action_bar') or self.action_bar is None:
+            return
+        is_dark = isDarkTheme()
+        bg = COLORS['bg_dark'] if is_dark else COLORS['bg_light']
+        border = COLORS['border_dark'] if is_dark else COLORS['border_light']
+        self.action_bar.setStyleSheet(f"""
+            QWidget {{
+                background-color: {bg};
+                border-top: 1px solid {border};
             }}
         """)
 

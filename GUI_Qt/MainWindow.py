@@ -85,13 +85,11 @@ class MainWindow(FluentWindow):
         # Cached for current run after master unlock/setup
         self._unlocked_master_password = None
         self.upload_screen = None
-        self.batch_upload_screen = None
+        self.unified_batch_screen = None
         self.history_screen = None
         self._full_history_screen = None  # Full detailed history view (accessed from Analytics)
         self.translations_screen = None
         self.descriptions_screen = None
-        self.batch_descriptions_screen = None
-        self.batch_titles_screen = None
         self.folder_creator_screen = None
         self.basso_images_screen = None
         self.pinarello_images_screen = None
@@ -212,12 +210,10 @@ class MainWindow(FluentWindow):
 
             mapping = [
                 (getattr(self, 'upload_screen', None), "nav.upload"),
-                (getattr(self, 'batch_upload_screen', None), "nav.batch"),
+                (getattr(self, 'unified_batch_screen', None), "nav.batch"),
                 (getattr(self, 'history_screen', None), "nav.analytics"),
                 (getattr(self, 'translations_screen', None), "nav.translations"),
                 (getattr(self, 'descriptions_screen', None), "nav.descriptions"),
-                (getattr(self, 'batch_descriptions_screen', None), "nav.batch_descriptions"),
-                (getattr(self, 'batch_titles_screen', None), "nav.batch_titles"),
                 (getattr(self, 'folder_creator_screen', None), "nav.folders"),
                 (getattr(self, 'basso_images_screen', None), "nav.basso_images"),
                 (getattr(self, 'pinarello_images_screen', None), "nav.pinarello_images"),
@@ -262,12 +258,12 @@ class MainWindow(FluentWindow):
             self._add_screen_to_stack(self.upload_screen, self.i18n.tr("nav.upload"))
             return self.upload_screen
 
-        if index == 1:  # Batch Upload
-            if not self.batch_upload_screen:
-                from GUI_Qt.screens.BatchUploadScreen import BatchUploadScreen
-                self.batch_upload_screen = BatchUploadScreen(self)
-            self._add_screen_to_stack(self.batch_upload_screen, self.i18n.tr("nav.batch"))
-            return self.batch_upload_screen
+        if index == 1:  # Batch Operations (unified)
+            if not self.unified_batch_screen:
+                from GUI_Qt.screens.UnifiedBatchScreen import UnifiedBatchScreen
+                self.unified_batch_screen = UnifiedBatchScreen(self)
+            self._add_screen_to_stack(self.unified_batch_screen, self.i18n.tr("nav.batch"))
+            return self.unified_batch_screen
 
         if index == 2:  # Descriptions
             if not self.descriptions_screen:
@@ -276,84 +272,70 @@ class MainWindow(FluentWindow):
             self._add_screen_to_stack(self.descriptions_screen, self.i18n.tr("nav.descriptions"))
             return self.descriptions_screen
 
-        if index == 3:  # Batch Descriptions
-            if not self.batch_descriptions_screen:
-                from GUI_Qt.screens.BatchDescriptionsScreen import BatchDescriptionsScreen
-                self.batch_descriptions_screen = BatchDescriptionsScreen(self)
-            self._add_screen_to_stack(self.batch_descriptions_screen, self.i18n.tr("nav.batch_descriptions"))
-            return self.batch_descriptions_screen
-
-        if index == 4:  # Batch Titles
-            if not self.batch_titles_screen:
-                from GUI_Qt.screens.BatchTitlesScreen import BatchTitlesScreen
-                self.batch_titles_screen = BatchTitlesScreen(self)
-            self._add_screen_to_stack(self.batch_titles_screen, self.i18n.tr("nav.batch_titles"))
-            return self.batch_titles_screen
-
-        if index == 5:  # Folder Creator
+        if index == 3:  # Folder Creator
             if not self.folder_creator_screen:
                 from GUI_Qt.screens.FolderCreatorScreen import FolderCreatorScreen
                 self.folder_creator_screen = FolderCreatorScreen(self)
             self._add_screen_to_stack(self.folder_creator_screen, self.i18n.tr("nav.folders"))
             return self.folder_creator_screen
 
-        if index == 6:  # Translations
+        if index == 4:  # Translations
             if not self.translations_screen:
                 from GUI_Qt.screens.TranslationsScreen import TranslationsScreen
                 self.translations_screen = TranslationsScreen(self)
             self._add_screen_to_stack(self.translations_screen, self.i18n.tr("nav.translations"))
             return self.translations_screen
 
-        if index == 7:  # Basso Images
+        if index == 5:  # Basso Images
             if not self.basso_images_screen:
                 from GUI_Qt.screens.BassoImageScreen import BassoImageScreen
                 self.basso_images_screen = BassoImageScreen(self)
             self._add_screen_to_stack(self.basso_images_screen, self.i18n.tr("nav.basso_images"))
             return self.basso_images_screen
 
-        if index == 8:  # Pinarello Images
+        if index == 6:  # Pinarello Images
             if not self.pinarello_images_screen:
                 from GUI_Qt.screens.PinarelloImageScreen import PinarelloImageScreen
                 self.pinarello_images_screen = PinarelloImageScreen(self)
             self._add_screen_to_stack(self.pinarello_images_screen, self.i18n.tr("nav.pinarello_images"))
             return self.pinarello_images_screen
 
-        if index == 9:  # Analytics (formerly History)
+        if index == 7:  # Analytics (formerly History)
             if not self.history_screen:
                 from GUI_Qt.screens.AnalyticsScreen import AnalyticsScreen
                 self.history_screen = AnalyticsScreen(self)
             self._add_screen_to_stack(self.history_screen, self.i18n.tr("nav.analytics"))
             return self.history_screen
 
-        if index == 10:  # Account
+        if index == 8:  # Account
             if not self.account_screen:
                 from GUI_Qt.screens.AccountScreen import AccountScreen
                 self.account_screen = AccountScreen(self)
             self._add_screen_to_stack(self.account_screen, self.i18n.tr("nav.account"))
             return self.account_screen
 
-        if index == 11:  # Settings
+        if index == 9:  # Settings
             if not self.settings_screen:
                 from GUI_Qt.screens.SettingsScreen import SettingsScreen
                 self.settings_screen = SettingsScreen(self)
             self._add_screen_to_stack(self.settings_screen, self.i18n.tr("nav.settings"))
             return self.settings_screen
 
-        if index == 12:  # Info
+        if index == 10:  # Info
             if not self.info_screen:
                 from GUI_Qt.screens.InfoScreen import InfoScreen
                 self.info_screen = InfoScreen(self)
             self._add_screen_to_stack(self.info_screen, self.i18n.tr("nav.info"))
             return self.info_screen
 
-        if index == 13:  # Spec Checker
+        if index == 11:  # Spec Checker
             if not self.spec_checker_screen:
                 from GUI_Qt.screens.SpecCheckerScreen import SpecCheckerScreen
                 self.spec_checker_screen = SpecCheckerScreen(self)
             self._add_screen_to_stack(self.spec_checker_screen, self.i18n.tr("nav.spec_checker"))
             return self.spec_checker_screen
 
-        if index == 14:  # Name Getter
+        if index == 12:  # Name Getter
             if not self.name_getter_screen:
                 from GUI_Qt.screens.NameGetterScreen import NameGetterScreen
                 self.name_getter_screen = NameGetterScreen(self)
@@ -493,28 +475,12 @@ class MainWindow(FluentWindow):
             position=NavigationItemPosition.TOP
         )
 
-        self._nav_items["batch_descriptions"] = self.navigationInterface.addItem(
-            routeKey="batch_descriptions",
-            icon=FluentIcon.TAG,
-            text=self.i18n.tr("nav.batch_descriptions"),
-            onClick=lambda: self._switch_to_screen(3),
-            position=NavigationItemPosition.TOP
-        )
-
-        self._nav_items["batch_titles"] = self.navigationInterface.addItem(
-            routeKey="batch_titles",
-            icon=FluentIcon.EDIT,
-            text=self.i18n.tr("nav.batch_titles"),
-            onClick=lambda: self._switch_to_screen(4),
-            position=NavigationItemPosition.TOP
-        )
-
         # Utilities
         self._nav_items["folders"] = self.navigationInterface.addItem(
             routeKey="folders",
             icon=FluentIcon.FOLDER,
             text=self.i18n.tr("nav.folders"),
-            onClick=lambda: self._switch_to_screen(5),
+            onClick=lambda: self._switch_to_screen(3),
             position=NavigationItemPosition.TOP
         )
 
@@ -522,7 +488,7 @@ class MainWindow(FluentWindow):
             routeKey="translations",
             icon=FluentIcon.LANGUAGE,
             text=self.i18n.tr("nav.translations"),
-            onClick=lambda: self._switch_to_screen(6),
+            onClick=lambda: self._switch_to_screen(4),
             position=NavigationItemPosition.TOP
         )
 
@@ -531,7 +497,7 @@ class MainWindow(FluentWindow):
             routeKey="basso_images",
             icon=FluentIcon.PHOTO,
             text=self.i18n.tr("nav.basso_images"),
-            onClick=lambda: self._switch_to_screen(7),
+            onClick=lambda: self._switch_to_screen(5),
             position=NavigationItemPosition.TOP
         )
 
@@ -539,7 +505,7 @@ class MainWindow(FluentWindow):
             routeKey="pinarello_images",
             icon=FluentIcon.ALBUM,
             text=self.i18n.tr("nav.pinarello_images"),
-            onClick=lambda: self._switch_to_screen(8),
+            onClick=lambda: self._switch_to_screen(6),
             position=NavigationItemPosition.TOP
         )
 
@@ -547,7 +513,7 @@ class MainWindow(FluentWindow):
             routeKey="history",
             icon=FluentIcon.PIE_SINGLE,
             text=self.i18n.tr("nav.analytics"),
-            onClick=lambda: self._switch_to_screen(9),
+            onClick=lambda: self._switch_to_screen(7),
             position=NavigationItemPosition.TOP
         )
 
@@ -555,7 +521,7 @@ class MainWindow(FluentWindow):
             routeKey="spec_checker",
             icon=FluentIcon.CHECKBOX,
             text=self.i18n.tr("nav.spec_checker"),
-            onClick=lambda: self._switch_to_screen(13),
+            onClick=lambda: self._switch_to_screen(11),
             position=NavigationItemPosition.TOP
         )
 
@@ -563,7 +529,7 @@ class MainWindow(FluentWindow):
             routeKey="name_getter",
             icon=FluentIcon.SEARCH,
             text=self.i18n.tr("nav.name_getter"),
-            onClick=lambda: self._switch_to_screen(14),
+            onClick=lambda: self._switch_to_screen(12),
             position=NavigationItemPosition.TOP
         )
 
@@ -572,7 +538,7 @@ class MainWindow(FluentWindow):
             routeKey="account",
             icon=FluentIcon.PEOPLE,
             text=self.i18n.tr("nav.account"),
-            onClick=lambda: self._switch_to_screen(10),
+            onClick=lambda: self._switch_to_screen(8),
             position=NavigationItemPosition.BOTTOM
         )
 
@@ -580,7 +546,7 @@ class MainWindow(FluentWindow):
             routeKey="settings",
             icon=FluentIcon.SETTING,
             text=self.i18n.tr("nav.settings"),
-            onClick=lambda: self._switch_to_screen(11),
+            onClick=lambda: self._switch_to_screen(9),
             position=NavigationItemPosition.BOTTOM
         )
 
@@ -588,7 +554,7 @@ class MainWindow(FluentWindow):
             routeKey="info",
             icon=FluentIcon.INFO,
             text=self.i18n.tr("nav.info"),
-            onClick=lambda: self._switch_to_screen(12),
+            onClick=lambda: self._switch_to_screen(10),
             position=NavigationItemPosition.BOTTOM
         )
 
@@ -649,7 +615,6 @@ class MainWindow(FluentWindow):
             self._set_nav_item_text("history", translate(lang_code, "nav.analytics"))
             self._set_nav_item_text("translations", translate(lang_code, "nav.translations"))
             self._set_nav_item_text("descriptions", translate(lang_code, "nav.descriptions"))
-            self._set_nav_item_text("batch_descriptions", translate(lang_code, "nav.batch_descriptions"))
             self._set_nav_item_text("folders", translate(lang_code, "nav.folders"))
             self._set_nav_item_text("basso_images", translate(lang_code, "nav.basso_images"))
             self._set_nav_item_text("pinarello_images", translate(lang_code, "nav.pinarello_images"))
@@ -734,7 +699,6 @@ class MainWindow(FluentWindow):
             self._set_nav_item_text("history", self.i18n.tr("nav.analytics"))
             self._set_nav_item_text("translations", self.i18n.tr("nav.translations"))
             self._set_nav_item_text("descriptions", self.i18n.tr("nav.descriptions"))
-            self._set_nav_item_text("batch_descriptions", self.i18n.tr("nav.batch_descriptions"))
             self._set_nav_item_text("folders", self.i18n.tr("nav.folders"))
             self._set_nav_item_text("basso_images", self.i18n.tr("nav.basso_images"))
             self._set_nav_item_text("pinarello_images", self.i18n.tr("nav.pinarello_images"))
@@ -748,12 +712,10 @@ class MainWindow(FluentWindow):
             for screen in (
                 getattr(self, "top_bar", None),
                 getattr(self, "upload_screen", None),
-                getattr(self, "batch_upload_screen", None),
+                getattr(self, "unified_batch_screen", None),
                 getattr(self, "history_screen", None),
                 getattr(self, "translations_screen", None),
                 getattr(self, "descriptions_screen", None),
-                getattr(self, "batch_descriptions_screen", None),
-                getattr(self, "batch_titles_screen", None),
                 getattr(self, "folder_creator_screen", None),
                 getattr(self, "basso_images_screen", None),
                 getattr(self, "pinarello_images_screen", None),

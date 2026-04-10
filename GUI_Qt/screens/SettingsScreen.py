@@ -149,9 +149,9 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
                 pass
 
             # Some custom widgets need manual theme refresh.
-            if getattr(self.main, "batch_upload_screen", None):
+            if getattr(self.main, "unified_batch_screen", None):
                 try:
-                    self.main.batch_upload_screen._update_table_theme()
+                    self.main.unified_batch_screen._update_table_theme()
                 except Exception:
                     pass
         except Exception:
@@ -977,9 +977,9 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
             self._preview_theme_is_dark = isDarkTheme()
 
             # Update batch upload screen table if it exists
-            if self.main.batch_upload_screen:
+            if getattr(self.main, "unified_batch_screen", None):
                 try:
-                    self.main.batch_upload_screen._update_table_theme()
+                    self.main.unified_batch_screen._update_table_theme()
                 except Exception:
                     pass
 

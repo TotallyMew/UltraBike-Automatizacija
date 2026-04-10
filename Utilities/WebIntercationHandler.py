@@ -27,14 +27,23 @@ class WebInteractionHandler:
     def add_brand_name(self, brand_name):
         """Select a manufacturer/brand from the react-select dropdown on pim.bo."""
         try:
+            # Switch to Basic Info tab — manufacturer field lives there
+            basic_tab = WebDriverWait(self.driver, 5).until(
+                EC.element_to_be_clickable(ProductEditorSelectors.BASIC_INFO_TAB)
+            )
+            basic_tab.click()
+            time.sleep(0.5)
+
             # Open the react-select dropdown
             dropdown = WebDriverWait(self.driver, 5).until(
-                EC.element_to_be_clickable(BrandSelectors.BRAND_DROPDOWN)
+                EC.presence_of_element_located(BrandSelectors.BRAND_DROPDOWN)
             )
-            self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", dropdown)
+            self.driver.execute_script(
+                "arguments[0].scrollIntoView({block: 'center'});", dropdown
+            )
             time.sleep(0.3)
-            dropdown.click()
-            time.sleep(0.3)
+            self.driver.execute_script("arguments[0].click();", dropdown)
+            time.sleep(0.5)
 
             # Type the brand name into the search input
             search_field = WebDriverWait(self.driver, 5).until(
@@ -43,11 +52,12 @@ class WebInteractionHandler:
             search_field.send_keys(brand_name)
             time.sleep(0.5)
 
-            # Click the matching option
+            # Click the matching option via JS to avoid scroll-jump issues
             brand_match = WebDriverWait(self.driver, 5).until(
-                EC.element_to_be_clickable(BrandSelectors.BRAND_RESULT)
+                EC.presence_of_element_located(BrandSelectors.BRAND_RESULT)
             )
-            brand_match.click()
+            self.driver.execute_script("arguments[0].click();", brand_match)
+            time.sleep(0.3)
             print(f"[WebHandler] Brand '{brand_name}' selected")
         except Exception as e:
             print(f"[WebHandler] Failed to select brand '{brand_name}': {e}")

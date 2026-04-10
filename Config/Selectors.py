@@ -86,6 +86,11 @@ class ProductListSelectors:
 class ProductEditorSelectors:
     """Selectors for the product detail / edit page."""
 
+    # Tab navigation — pim.bo tabs: Basic Info, Specifications, Variants, Attributes
+    BASIC_INFO_TAB = (By.XPATH,
+        "//button[contains(@class,'tabs-field__tab-button')"
+        " and normalize-space()='Basic Info']")
+
     # Language switcher — trigger button that opens the locale popup
     LANGUAGE_SWITCH = (By.CSS_SELECTOR, "button.popup-button.popup-button--background")
 
