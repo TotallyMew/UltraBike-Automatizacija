@@ -175,7 +175,7 @@ class AttributeUploader:
     def _fill_value_text(self, name: str, value: str):
         locator = AttributeSelectors.value_text_by_name(name)
         try:
-            field = WebDriverWait(self.driver, 5).until(
+            field = WebDriverWait(self.driver, 2).until(
                 EC.presence_of_element_located(locator)
             )
             self.driver.execute_script(
@@ -195,7 +195,7 @@ class AttributeUploader:
         """Type into the Value Options react-select and pick the matching option."""
         locator = AttributeSelectors.value_options_input_by_name(name)
         try:
-            inp = WebDriverWait(self.driver, 5).until(
+            inp = WebDriverWait(self.driver, 2).until(
                 EC.presence_of_element_located(locator)
             )
             self.driver.execute_script(
@@ -229,7 +229,7 @@ class AttributeUploader:
     def _fill_value_number(self, name: str, value: str):
         locator = AttributeSelectors.value_number_by_name(name)
         try:
-            field = WebDriverWait(self.driver, 5).until(
+            field = WebDriverWait(self.driver, 2).until(
                 EC.presence_of_element_located(locator)
             )
             self.driver.execute_script(
@@ -244,7 +244,7 @@ class AttributeUploader:
 
     def _fill_measurement(self, name: str, num: str, unit: str):
         try:
-            num_field = WebDriverWait(self.driver, 5).until(
+            num_field = WebDriverWait(self.driver, 2).until(
                 EC.presence_of_element_located(
                     AttributeSelectors.measurement_value_by_name(name)
                 )
@@ -274,7 +274,7 @@ class AttributeUploader:
         print(f"[AttributeUploader] Clearing Value Text for: {name}")
         locator = AttributeSelectors.value_text_by_name(name)
         try:
-            field = WebDriverWait(self.driver, 5).until(
+            field = WebDriverWait(self.driver, 2).until(
                 EC.presence_of_element_located(locator)
             )
             self.driver.execute_script(

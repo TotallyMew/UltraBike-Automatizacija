@@ -66,7 +66,11 @@ def scrapeAndTranslateToFileKROSS(bicycleUrlOrCode, outputFile, db_manager=None)
 
                     translatedKey = keyTranslations.get(key, key)
 
-                    translatedValue = valueTranslations.get(value, value)
+                    translatedValue = valueTranslations.get(value, None)
+                    if translatedValue is None:
+                        # Try full-phrase DB lookup across all categories (catches e.g. "TARCZOWY MECHANICZNY")
+                        db_result = translation_handler.get_translation(value.upper(), "PL", "LT")
+                        translatedValue = db_result if db_result != value.upper() else value
                     translatedValue = translation_handler.translate_first_word(translatedValue, valueTranslations)
 
                     tableData[translatedKey] = translatedValue
@@ -74,7 +78,7 @@ def scrapeAndTranslateToFileKROSS(bicycleUrlOrCode, outputFile, db_manager=None)
 
             allData.append(tableData)
 
-        # Extract main and secondary color if present
+        # Extract main color if present
         colorBlock = soup.select_one(".product-related-colors .block-title.title")
         if colorBlock:
             colorText = colorBlock.get_text(strip=True).replace("Kolor bazowy:", "").strip()
@@ -83,14 +87,8 @@ def scrapeAndTranslateToFileKROSS(bicycleUrlOrCode, outputFile, db_manager=None)
             if len(colors) >= 1:
                 mainColor = colors[0]
                 translated = translation_handler.translate_first_word(valueTranslations.get(mainColor, mainColor), valueTranslations)
-                allData[0]["Pagrindinė spalva"] = translated
-                uniqueKeys.add("Pagrindinė spalva")
-
-            if len(colors) >= 2:
-                secondaryColor = colors[1]
-                translated = translation_handler.translate_first_word(valueTranslations.get(secondaryColor, secondaryColor), valueTranslations)
-                allData[0]["Papildoma spalva (antra)"] = translated
-                uniqueKeys.add("Papildoma spalva (antra)")
+                allData[0]["Spalva"] = translated
+                uniqueKeys.add("Spalva")
 
         # Write result to file
         with open(outputFile, "w", encoding="utf-8") as f:

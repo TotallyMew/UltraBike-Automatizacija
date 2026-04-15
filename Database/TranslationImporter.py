@@ -45,10 +45,12 @@ class TranslationImporter:
             if keyword in term:
                 return 'material'
         
-        # Property keywords (APPROX, GLOSS, MATT, etc.)
+        # Property keywords (APPROX, GLOSS, MATT, brake types, etc.)
         property_keywords = [
             'APPROX', 'APIE', 'GLOSS', 'BLIZGUS',
-            'MATT', 'MATINIS', 'MECHANICAL', 'MECHANINIS'
+            'MATT', 'MATINIS', 'MECHANICAL', 'MECHANINIS',
+            'MECHANICZNY', 'MECHANINIAI', 'TARCZOWY', 'HYDRAULICZNY',
+            'DISKINIAI', 'HIDRAULINIAI', 'AMORTYZOWANY', 'AMORTIZATORIUMI',
         ]
         
         for keyword in property_keywords:

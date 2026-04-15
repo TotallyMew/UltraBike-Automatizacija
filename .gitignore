@@ -160,6 +160,7 @@ nul
 asdasdasdddd.xlsx
 lenteles.docx
 testas.docx
+tools/count_loc.py
 
 # Windows build artifacts
 *.exe

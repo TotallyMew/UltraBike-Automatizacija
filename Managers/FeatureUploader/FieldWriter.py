@@ -124,7 +124,7 @@ class FeatureFieldWriter:
     def _fill_spec(self, spec_name: str, value: str) -> bool:
         locator = FeatureSelectors.spec_value_by_name(spec_name)
         try:
-            field = WebDriverWait(self.driver, 5).until(
+            field = WebDriverWait(self.driver, 2).until(
                 EC.presence_of_element_located(locator)
             )
             self.driver.execute_script(

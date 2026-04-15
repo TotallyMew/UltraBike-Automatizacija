@@ -46,7 +46,7 @@ class BatchModeStrategy(ABC):
         code_w = screen._get_inner_widget(row, COL["code"])
         if not brand_w or not code_w:
             return False
-        brand = brand_w.currentText() if isinstance(brand_w, ComboBox) else ""
+        brand = brand_w.currentText() if hasattr(brand_w, "currentText") else ""
         code = code_w.text().strip() if isinstance(code_w, LineEdit) else ""
         return bool(brand and brand in screen.brands and code)
 
