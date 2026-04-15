@@ -127,9 +127,19 @@ class DatabaseManager:
             CREATE TABLE IF NOT EXISTS descriptions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL UNIQUE,
+                folder TEXT DEFAULT '',
                 description_lt TEXT,
                 description_en TEXT,
                 description_lv TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS description_folders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
@@ -145,6 +155,11 @@ class DatabaseManager:
         # Lightweight migrations for existing DBs
         try:
             self._ensure_column("processing_history", "details_json", "TEXT")
+        except Exception:
+            pass
+
+        try:
+            self._ensure_column("descriptions", "folder", "TEXT DEFAULT ''")
         except Exception:
             pass
 
@@ -181,7 +196,8 @@ class DatabaseManager:
         # Whitelist of allowed tables for extra safety
         ALLOWED_TABLES = {
             'credentials', 'external_credentials', 'processing_history',
-            'recent_products', 'translations', 'settings', 'descriptions'
+            'recent_products', 'translations', 'settings', 'descriptions',
+            'description_folders'
         }
 
         # Check for empty identifier

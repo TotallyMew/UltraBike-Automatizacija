@@ -86,13 +86,63 @@ class DescriptionManager:
         return lt_html, en_html, lv_html
 
     def save_description(
-        self, name: str, description_lt: str, description_en: str, description_lv: str
+        self,
+        name: str,
+        description_lt: str,
+        description_en: str,
+        description_lv: str,
+        original_name: str | None = None,
+        folder: str = "",
     ) -> bool:
         """Save or update description in database"""
-        self._log("Saving description", name=name)
+        self._log("Saving description", name=name, original_name=original_name, folder=folder)
 
         try:
             cursor = self.db.conn.cursor()
+
+            if folder:
+                cursor.execute(
+                    """
+                    INSERT OR IGNORE INTO description_folders (name, updated_at)
+                    VALUES (?, ?)
+                    """,
+                    (folder, datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+                )
+
+            effective_original_name = original_name or name
+
+            if effective_original_name != name:
+                name_conflict = cursor.execute(
+                    "SELECT id FROM descriptions WHERE name = ?", (name,)
+                ).fetchone()
+                if name_conflict:
+                    self._log("Description rename conflict", target_name=name)
+                    return False
+
+                renamed = cursor.execute(
+                    "SELECT id FROM descriptions WHERE name = ?", (effective_original_name,)
+                ).fetchone()
+                if renamed:
+                    cursor.execute(
+                        """
+                        UPDATE descriptions
+                        SET name = ?, folder = ?, description_lt = ?, description_en = ?, description_lv = ?,
+                            updated_at = ?
+                        WHERE name = ?
+                        """,
+                        (
+                            name,
+                            folder,
+                            description_lt,
+                            description_en,
+                            description_lv,
+                            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            effective_original_name,
+                        ),
+                    )
+                    self.db.conn.commit()
+                    self._log("Description renamed and updated", from_name=effective_original_name, to_name=name)
+                    return True
 
             existing = cursor.execute(
                 "SELECT id FROM descriptions WHERE name = ?", (name,)
@@ -102,11 +152,12 @@ class DescriptionManager:
                 cursor.execute(
                     """
                     UPDATE descriptions
-                    SET description_lt = ?, description_en = ?, description_lv = ?,
+                    SET folder = ?, description_lt = ?, description_en = ?, description_lv = ?,
                         updated_at = ?
                     WHERE name = ?
                     """,
                     (
+                        folder,
                         description_lt,
                         description_en,
                         description_lv,
@@ -119,10 +170,10 @@ class DescriptionManager:
                 cursor.execute(
                     """
                     INSERT INTO descriptions
-                    (name, description_lt, description_en, description_lv)
-                    VALUES (?, ?, ?, ?)
+                    (name, folder, description_lt, description_en, description_lv)
+                    VALUES (?, ?, ?, ?, ?)
                     """,
-                    (name, description_lt, description_en, description_lv),
+                    (name, folder, description_lt, description_en, description_lv),
                 )
                 self._log("Description created", name=name)
 
@@ -133,6 +184,43 @@ class DescriptionManager:
             self._log_error("Failed to save description", exception=e, name=name)
             return False
 
+    def list_folders(self) -> list[str]:
+        """Return all saved description folders sorted by name."""
+        try:
+            cursor = self.db.conn.cursor()
+            results = cursor.execute(
+                """
+                SELECT name
+                FROM description_folders
+                ORDER BY name COLLATE NOCASE ASC
+                """
+            ).fetchall()
+            return [r["name"] for r in results if (r["name"] or "").strip()]
+        except Exception as e:
+            self._log_error("Failed to list folders", exception=e)
+            return []
+
+    def create_folder(self, folder_name: str) -> bool:
+        """Create a reusable folder for grouping descriptions."""
+        name = (folder_name or "").strip()
+        if not name:
+            return False
+
+        try:
+            cursor = self.db.conn.cursor()
+            cursor.execute(
+                """
+                INSERT OR IGNORE INTO description_folders (name, updated_at)
+                VALUES (?, ?)
+                """,
+                (name, datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+            )
+            self.db.conn.commit()
+            return True
+        except Exception as e:
+            self._log_error("Failed to create folder", exception=e, folder_name=name)
+            return False
+
     def load_description(self, name: str) -> dict | None:
         """Load description from database"""
         self._log("Loading description", name=name)
@@ -141,7 +229,7 @@ class DescriptionManager:
             cursor = self.db.conn.cursor()
             result = cursor.execute(
                 """
-                SELECT name, description_lt, description_en, description_lv,
+                SELECT name, COALESCE(folder, '') AS folder, description_lt, description_en, description_lv,
                        created_at, updated_at
                 FROM descriptions
                 WHERE name = ?
@@ -154,6 +242,7 @@ class DescriptionManager:
 
             return {
                 "name": result["name"],
+                "folder": result["folder"] or "",
                 "description_lt": result["description_lt"] or "",
                 "description_en": result["description_en"] or "",
                 "description_lv": result["description_lv"] or "",
@@ -171,13 +260,20 @@ class DescriptionManager:
             cursor = self.db.conn.cursor()
             results = cursor.execute(
                 """
-                SELECT name, updated_at
+                SELECT name, COALESCE(folder, '') AS folder, updated_at
                 FROM descriptions
-                ORDER BY updated_at DESC
+                ORDER BY folder COLLATE NOCASE ASC, name COLLATE NOCASE ASC
                 """
             ).fetchall()
 
-            return [{"name": r["name"], "updated_at": r["updated_at"]} for r in results]
+            return [
+                {
+                    "name": r["name"],
+                    "folder": r["folder"] or "",
+                    "updated_at": r["updated_at"],
+                }
+                for r in results
+            ]
 
         except Exception as e:
             self._log_error("Failed to list descriptions", exception=e)

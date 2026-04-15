@@ -4,7 +4,7 @@ HTML description editor with list selection and tabbed editing
 """
 
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
+    QWidget, QVBoxLayout, QHBoxLayout, QToolButton, QFrame,
     QTextEdit, QTabWidget, QPushButton, QInputDialog
 )
 from PySide6.QtCore import Qt, Signal, QThread
@@ -12,7 +12,7 @@ from PySide6.QtGui import QKeySequence, QShortcut, QPalette, QColor
 from qfluentwidgets import (
     CardWidget, TransparentToolButton, FluentIcon,
     TitleLabel, BodyLabel, CaptionLabel, InfoBar, InfoBarPosition,
-    isDarkTheme, PrimaryPushButton, LineEdit, PushButton, qconfig, MessageBox,
+    isDarkTheme, PrimaryPushButton, LineEdit, PushButton, ComboBox, qconfig,
     IndeterminateProgressRing, ScrollArea
 )
 from Managers.DescriptionManager import DescriptionManager
@@ -58,6 +58,9 @@ class DescriptionsScreen(ResponsiveWidget):
         self.main = main_window
         self.desc_manager = DescriptionManager(self.main.db)
         self.current_description_name = None
+        self.current_description_folder = ""
+        self.available_folders: list[str] = []
+        self._folder_sections = {}
         self.has_unsaved_changes = False
 
         self._editor_containers = []
@@ -183,18 +186,32 @@ class DescriptionsScreen(ResponsiveWidget):
         self.refresh_btn.setFixedSize(SIZES['icon_action'], SIZES['icon_action'])
         self.refresh_btn.clicked.connect(self._load_description_list)
 
+        self.new_folder_btn = TransparentToolButton(FluentIcon.FOLDER_ADD, self)
+        self.new_folder_btn.setFixedSize(SIZES['icon_action'], SIZES['icon_action'])
+        self.new_folder_btn.clicked.connect(self._handle_create_folder)
+
         list_header.addWidget(list_title)
         list_header.addStretch()
+        list_header.addWidget(self.new_folder_btn)
         list_header.addWidget(self.refresh_btn)
 
         left_layout.addLayout(list_header)
 
-        # Description list
-        self.description_list = QListWidget()
-        self.description_list.itemClicked.connect(self._on_description_selected)
+        # Description folders + items
+        self.description_scroll = ScrollArea(self)
+        self.description_scroll.setWidgetResizable(True)
+        self.description_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.description_scroll.setFrameShape(QFrame.Shape.NoFrame)
+
+        self.description_list = QWidget()
+        self.description_list_layout = QVBoxLayout(self.description_list)
+        self.description_list_layout.setContentsMargins(0, 0, 0, 0)
+        self.description_list_layout.setSpacing(10)
+        self.description_list_layout.addStretch(1)
+        self.description_scroll.setWidget(self.description_list)
         self._style_list()
 
-        left_layout.addWidget(self.description_list)
+        left_layout.addWidget(self.description_scroll)
 
         # List buttons
         list_btn_layout = QVBoxLayout()
@@ -223,6 +240,27 @@ class DescriptionsScreen(ResponsiveWidget):
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(*PANEL_MARGINS)
         right_layout.setSpacing(CONTENT_SPACING)
+
+        # Editable description name
+        name_row = QHBoxLayout()
+        name_row.setSpacing(ICON_TEXT_GAP)
+        self.name_label = BodyLabel("")
+        self.name_input = LineEdit(self)
+        self.name_input.setClearButtonEnabled(True)
+        self.name_input.textChanged.connect(self._on_name_changed)
+        name_row.addWidget(self.name_label)
+        name_row.addWidget(self.name_input, 1)
+        right_layout.addLayout(name_row)
+
+        # Editable description folder (typing a new value creates a new folder grouping)
+        folder_row = QHBoxLayout()
+        folder_row.setSpacing(ICON_TEXT_GAP)
+        self.folder_label = BodyLabel("")
+        self.folder_input = ComboBox(self)
+        self.folder_input.currentTextChanged.connect(self._on_folder_changed)
+        folder_row.addWidget(self.folder_label)
+        folder_row.addWidget(self.folder_input, 1)
+        right_layout.addLayout(folder_row)
 
         # Editor tabs
         self.tabs = QTabWidget()
@@ -331,6 +369,7 @@ class DescriptionsScreen(ResponsiveWidget):
         self.title_label.setText(tr("descriptions.title"))
         self.list_title.setText(tr("descriptions.saved"))
         self.refresh_btn.setToolTip(tr("descriptions.refresh"))
+        self.new_folder_btn.setToolTip(tr("descriptions.folder.create.tip"))
         self.new_btn.setText(tr("descriptions.new"))
         self.new_btn.setToolTip(tr("descriptions.new.tip"))
         self.delete_btn.setText(tr("descriptions.delete"))
@@ -339,6 +378,14 @@ class DescriptionsScreen(ResponsiveWidget):
         self.translate_btn.setToolTip(tr("descriptions.translate.tip"))
         self.save_btn.setText(tr("descriptions.save"))
         self.save_btn.setToolTip(tr("descriptions.save.tip"))
+        self.name_label.setText(tr("descriptions.name.label"))
+        self.name_input.setPlaceholderText(tr("descriptions.name.placeholder"))
+        self.folder_label.setText(tr("descriptions.folder.label"))
+
+        try:
+            self.folder_input.setPlaceholderText(tr("descriptions.folder.placeholder"))
+        except Exception:
+            pass
 
         for container in getattr(self, '_editor_containers', []):
             warning_label = getattr(container, '_warning_label', None)
@@ -357,8 +404,8 @@ class DescriptionsScreen(ResponsiveWidget):
         border = COLORS['border_dark'] if is_dark else COLORS['border_light']
         text = COLORS['space_indigo'] if is_dark else COLORS['text_primary_light']
         hover_bg = rgba_from_hex(COLORS['space_indigo'], 0.12 if is_dark else 0.05)
-        self.description_list.setStyleSheet(f"""
-            QListWidget {{
+        self.description_scroll.setStyleSheet(f"""
+            ScrollArea {{
                 background-color: {bg};
                 border: 1px solid {border};
                 border-radius: {RADII['sm']}px;
@@ -367,19 +414,118 @@ class DescriptionsScreen(ResponsiveWidget):
                 font-size: {FONTS['size_body']};
                 color: {text};
             }}
-            QListWidget::item {{
-                padding: {PADDINGS['table_header']};
-                border-radius: {RADII['xs']}px;
-                margin: 2px;
+            QToolButton[role="folder"] {{
+                background: transparent;
+                border: none;
+                text-align: left;
+                padding: 5px 6px;
+                font-weight: {FONTS['weight_semibold']};
+                font-size: {FONTS['size_body']};
+                color: {text};
             }}
-            QListWidget::item:hover {{
+            QToolButton[role="folder"]:hover {{
                 background-color: {hover_bg};
+                border-radius: {RADII['xs']}px;
             }}
-            QListWidget::item:selected {{
+            QToolButton[role="folder"]:checked {{
                 background-color: {COLORS['space_indigo']};
                 color: {COLORS['text_white']};
+                border-radius: {RADII['xs']}px;
+            }}
+            QToolButton[role="description"] {{
+                background: transparent;
+                border: none;
+                text-align: left;
+                padding: 5px 6px 5px 20px;
+                margin-left: 12px;
+                color: {text};
+                border-radius: {RADII['xs']}px;
+            }}
+            QToolButton[role="description"]:hover {{
+                background-color: {hover_bg};
+            }}
+            QToolButton[role="description"]:checked {{
+                background-color: {COLORS['space_indigo']};
+                color: {COLORS['text_white']};
+                border-radius: {RADII['xs']}px;
+            }}
+            QFrame[role="folderContent"] {{
+                background: transparent;
+                margin-left: 4px;
             }}
         """)
+
+    def _clear_layout(self, layout):
+        while layout.count():
+            item = layout.takeAt(0)
+            widget = item.widget()
+            child_layout = item.layout()
+            if widget is not None:
+                widget.deleteLater()
+            elif child_layout is not None:
+                self._clear_layout(child_layout)
+
+    def _set_folder_expanded(self, folder_name: str, expanded: bool):
+        section = self._folder_sections.get(folder_name)
+        if not section:
+            return
+        section["content"].setVisible(expanded)
+        section["button"].setChecked(expanded)
+        section["button"].setArrowType(Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow)
+
+    def _toggle_folder(self, folder_name: str):
+        section = self._folder_sections.get(folder_name)
+        if not section:
+            return
+        expanded = not section["content"].isVisible()
+        self._set_folder_expanded(folder_name, expanded)
+
+    def _select_description_button(self, description_name: str):
+        for section in self._folder_sections.values():
+            for button in section.get("description_buttons", []):
+                button.setChecked(button.property("descriptionName") == description_name)
+
+    def _make_folder_button(self, folder_name: str, display_name: str, expanded: bool):
+        button = QToolButton()
+        button.setProperty("role", "folder")
+        button.setText(display_name)
+        button.setCheckable(True)
+        button.setChecked(expanded)
+        button.setArrowType(Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow)
+        button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        button.setAutoRaise(True)
+        button.clicked.connect(lambda _checked=False, name=folder_name: self._toggle_folder(name))
+        return button
+
+    def _make_description_button(self, description_name: str, display_text: str):
+        button = QToolButton()
+        button.setProperty("role", "description")
+        button.setProperty("descriptionName", description_name)
+        button.setText(display_text)
+        button.setCheckable(True)
+        button.setAutoRaise(True)
+        button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+        button.clicked.connect(lambda _checked=False, name=description_name: self._on_description_clicked(name))
+        return button
+
+    def _on_description_clicked(self, description_name: str):
+        """Select exactly one description and load it."""
+        self._select_description_button(description_name)
+        self._load_description(description_name)
+
+    def _refresh_folder_dropdown(self, selected_folder: str = ""):
+        """Refresh folder dropdown with existing folder names."""
+        current = (selected_folder or "").strip()
+        self.folder_input.blockSignals(True)
+        self.folder_input.clear()
+        self.folder_input.addItem("")
+        for folder_name in self.available_folders:
+            self.folder_input.addItem(folder_name)
+        if current and current in self.available_folders:
+            self.folder_input.setCurrentText(current)
+        else:
+            self.folder_input.setCurrentIndex(0)
+        self.folder_input.blockSignals(False)
 
     def _style_tabs(self):
         """Apply styling to tab widget"""
@@ -415,15 +561,75 @@ class DescriptionsScreen(ResponsiveWidget):
 
     def _load_description_list(self):
         """Load list of saved descriptions"""
-        self.description_list.clear()
+        expanded_folders = {
+            folder_name
+            for folder_name, section in self._folder_sections.items()
+            if section["content"].isVisible()
+        }
+
+        self._clear_layout(self.description_list_layout)
+        self._folder_sections = {}
 
         try:
             descriptions = self.desc_manager.list_descriptions()
+            folder_candidates = {folder.strip() for folder in self.desc_manager.list_folders() if folder and folder.strip()}
+            descriptions_by_folder: dict[str, list[dict]] = {}
 
             for desc in descriptions:
-                item = QListWidgetItem(desc['name'])
-                item.setData(Qt.ItemDataRole.UserRole, desc)
-                self.description_list.addItem(item)
+                folder_name = (desc.get('folder') or '').strip()
+                if folder_name:
+                    folder_candidates.add(folder_name)
+                descriptions_by_folder.setdefault(folder_name, []).append(desc)
+
+            folder_order: list[str] = []
+            if descriptions_by_folder.get("") or "" in folder_candidates:
+                folder_order.append("")
+
+            folder_order.extend(sorted(folder_candidates, key=lambda x: x.lower()))
+
+            for folder_key in folder_order:
+                folder_title = folder_key or self.main.i18n.tr("descriptions.folder.uncategorized")
+                expanded = folder_key in expanded_folders or self.current_description_folder == folder_key
+
+                folder_widget = QWidget()
+                folder_layout = QVBoxLayout(folder_widget)
+                folder_layout.setContentsMargins(0, 0, 0, 0)
+                folder_layout.setSpacing(4)
+
+                folder_button = self._make_folder_button(folder_key, folder_title, expanded)
+                folder_layout.addWidget(folder_button)
+
+                content = QFrame()
+                content.setProperty("role", "folderContent")
+                content_layout = QVBoxLayout(content)
+                content_layout.setContentsMargins(0, 0, 0, 0)
+                content_layout.setSpacing(2)
+
+                for desc in descriptions_by_folder.get(folder_key, []):
+                    desc_button = self._make_description_button(desc['name'], desc['name'])
+                    content_layout.addWidget(desc_button)
+
+                folder_layout.addWidget(content)
+                content.setVisible(expanded)
+
+                self.description_list_layout.addWidget(folder_widget)
+                self._folder_sections[folder_key] = {
+                    "button": folder_button,
+                    "content": content,
+                    "layout": content_layout,
+                    "description_buttons": [
+                        content_layout.itemAt(i).widget()
+                        for i in range(content_layout.count())
+                        if content_layout.itemAt(i).widget() is not None
+                    ],
+                }
+
+            self._select_description_button(self.current_description_name or "")
+
+            self.available_folders = sorted(folder_candidates, key=lambda x: x.lower())
+            self.description_list_layout.addStretch(1)
+            current_folder = self.current_description_folder if self.current_description_name else ""
+            self._refresh_folder_dropdown(current_folder)
 
         except Exception as ex:
             InfoBar.error(
@@ -433,9 +639,12 @@ class DescriptionsScreen(ResponsiveWidget):
                 position=InfoBarPosition.TOP
             )
 
-    def _on_description_selected(self, item):
+    def _on_description_selected(self, item, _column=0):
         """Handle description selection from list"""
-        desc_data = item.data(Qt.ItemDataRole.UserRole)
+        desc_data = item.data(0, Qt.ItemDataRole.UserRole)
+        if not isinstance(desc_data, dict):
+            return
+
         name = desc_data['name']
 
         self._load_description(name)
@@ -447,8 +656,13 @@ class DescriptionsScreen(ResponsiveWidget):
 
             if desc:
                 self.current_description_name = name
+                self.current_description_folder = desc.get('folder', '') or ''
                 self.has_unsaved_changes = False
                 self.current_name_label.setVisible(True)
+                self.name_input.blockSignals(True)
+                self.name_input.setText(name)
+                self.name_input.blockSignals(False)
+                self._refresh_folder_dropdown(self.current_description_folder)
                 self._update_title_indicator()
 
                 # Get editors from tabs
@@ -498,29 +712,59 @@ class DescriptionsScreen(ResponsiveWidget):
         self.translate_btn.setEnabled(True)
         self._update_title_indicator()
 
+    def _on_name_changed(self):
+        """Handle editable description name changes."""
+        self.has_unsaved_changes = True
+        self.save_btn.setEnabled(True)
+        self._update_title_indicator()
+
+    def _on_folder_changed(self):
+        """Handle editable description folder changes."""
+        self.has_unsaved_changes = True
+        self.save_btn.setEnabled(True)
+        self._update_title_indicator()
+
     def _update_title_indicator(self):
         """Update title label to show unsaved changes"""
         if not self.current_name_label.isVisible():
             return
 
+        entered_name = self.name_input.text().strip() if hasattr(self, "name_input") else ""
+
         if self.current_description_name:
+            display_name = entered_name or self.current_description_name
             indicator = " *" if self.has_unsaved_changes else ""
             self.current_name_label.setText(
                 self.main.i18n.tr(
                     "descriptions.editing",
-                    name=self.current_description_name,
+                    name=display_name,
                     indicator=indicator,
                 )
             )
         else:
-            self.current_name_label.setText(self.main.i18n.tr("descriptions.new_indicator"))
+            if entered_name:
+                indicator = " *" if self.has_unsaved_changes else ""
+                self.current_name_label.setText(
+                    self.main.i18n.tr(
+                        "descriptions.editing",
+                        name=entered_name,
+                        indicator=indicator,
+                    )
+                )
+            else:
+                self.current_name_label.setText(self.main.i18n.tr("descriptions.new_indicator"))
 
     def _handle_new(self):
         """Create new description"""
         self.current_description_name = None
+        self.current_description_folder = ""
         self.has_unsaved_changes = True
         self.current_name_label.setText(self.main.i18n.tr("descriptions.new_indicator"))
         self.current_name_label.setVisible(True)
+        self.name_input.blockSignals(True)
+        self.name_input.clear()
+        self.name_input.blockSignals(False)
+        self._refresh_folder_dropdown("")
 
         # Clear editors
         lt_editor = self.lt_editor.findChild(QTextEdit)
@@ -534,7 +778,7 @@ class DescriptionsScreen(ResponsiveWidget):
         self.save_btn.setEnabled(True)
         self.translate_btn.setEnabled(True)
         self.delete_btn.setEnabled(False)
-        self.description_list.clearSelection()
+        self._select_description_button("")
 
         InfoBar.success(
             title=self.main.i18n.tr("descriptions.new.title"),
@@ -555,49 +799,52 @@ class DescriptionsScreen(ResponsiveWidget):
         en_content = en_editor.toPlainText().strip()
         lv_content = lv_editor.toPlainText().strip()
 
-        # If new, ask for name
-        if not self.current_description_name:
-            dialog = MessageBox(
-                self.main.i18n.tr("descriptions.save_dialog.title"),
-                self.main.i18n.tr("descriptions.save_dialog.prompt"),
-                self
+        target_name = self.name_input.text().strip()
+        target_folder = self.folder_input.currentText().strip()
+        if not target_name:
+            InfoBar.warning(
+                title=self.main.i18n.tr("common.warning"),
+                content=self.main.i18n.tr("descriptions.name.required"),
+                parent=self,
+                position=InfoBarPosition.TOP,
+                duration=2500,
             )
+            return
 
-            # Add input field to dialog
-            input_field = LineEdit(dialog)
-            input_field.setPlaceholderText(self.main.i18n.tr("descriptions.name.placeholder"))
-            dialog.textLayout.addWidget(input_field)
-
-            # Update button text
-            dialog.yesButton.setText(self.main.i18n.tr("common.save"))
-            dialog.cancelButton.setText(self.main.i18n.tr("common.cancel"))
-
-            if not dialog.exec():
+        original_name = self.current_description_name
+        if original_name and target_name != original_name:
+            existing = self.desc_manager.load_description(target_name)
+            if existing:
+                InfoBar.error(
+                    title=self.main.i18n.tr("common.error"),
+                    content=self.main.i18n.tr("descriptions.name.exists", name=target_name),
+                    parent=self,
+                    position=InfoBarPosition.TOP,
+                    duration=3000,
+                )
                 return
-
-            name = input_field.text().strip()
-            if not name:
-                return
-
-            self.current_description_name = name
 
         # Save to database
         try:
             success = self.desc_manager.save_description(
-                self.current_description_name,
+                target_name,
                 lt_content,
                 en_content,
-                lv_content
+                lv_content,
+                original_name=original_name,
+                folder=target_folder,
             )
 
             if success:
+                self.current_description_name = target_name
+                self.current_description_folder = target_folder
                 self.has_unsaved_changes = False
                 self.delete_btn.setEnabled(True)
                 self._update_title_indicator()
 
                 InfoBar.success(
                     title=self.main.i18n.tr("descriptions.saved.title"),
-                    content=self.main.i18n.tr("descriptions.saved.content", name=self.current_description_name),
+                    content=self.main.i18n.tr("descriptions.saved.content", name=target_name),
                     parent=self,
                     position=InfoBarPosition.TOP,
                     duration=2000
@@ -613,6 +860,41 @@ class DescriptionsScreen(ResponsiveWidget):
                 parent=self,
                 position=InfoBarPosition.TOP
             )
+
+    def _handle_create_folder(self):
+        """Create a folder from the saved descriptions card."""
+        folder_name, ok = QInputDialog.getText(
+            self,
+            self.main.i18n.tr("descriptions.folder.create.title"),
+            self.main.i18n.tr("descriptions.folder.create.prompt"),
+        )
+        if not ok:
+            return
+
+        name = (folder_name or "").strip()
+        if not name:
+            return
+
+        if not self.desc_manager.create_folder(name):
+            InfoBar.error(
+                title=self.main.i18n.tr("common.error"),
+                content=self.main.i18n.tr("descriptions.folder.create.failed"),
+                parent=self,
+                position=InfoBarPosition.TOP,
+                duration=3000,
+            )
+            return
+
+        self._load_description_list()
+        self.folder_input.setCurrentText(name)
+
+        InfoBar.success(
+            title=self.main.i18n.tr("common.success"),
+            content=self.main.i18n.tr("descriptions.folder.create.success", name=name),
+            parent=self,
+            position=InfoBarPosition.TOP,
+            duration=2000,
+        )
 
     def _handle_delete(self):
         """Delete current description"""
