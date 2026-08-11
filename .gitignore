@@ -166,3 +166,10 @@ tools/count_loc.py
 *.exe
 *.msi
 *.appx
+*.png
+*.jpg
+*.jpeg
+*.xlsx
+*.cmd
+*.docx
+*.csv
