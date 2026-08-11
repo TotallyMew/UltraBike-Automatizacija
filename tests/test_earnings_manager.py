@@ -1,0 +1,191 @@
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+
+import pytest
+
+from Database.DatabaseManager import DatabaseManager
+from Database.SettingsManager import SettingsManager
+from Managers.EarningsManager import (
+    ActiveGoalError,
+    ActiveSessionError,
+    EarningsManager,
+    GoalStatus,
+    ProductType,
+)
+
+
+UTC = timezone.utc
+
+
+@pytest.fixture()
+def manager():
+    db = DatabaseManager(":memory:")
+    settings = SettingsManager(db)
+    service = EarningsManager(db, settings, local_tz=UTC)
+    try:
+        yield service
+    finally:
+        db.close()
+
+
+def at(day: int, hour: int = 9, minute: int = 0) -> datetime:
+    return datetime(2026, 8, day, hour, minute, tzinfo=UTC)
+
+
+def test_schema_seeds_scraper_brands_idempotently():
+    db = DatabaseManager(":memory:")
+    try:
+        names = [row["name"] for row in db.conn.execute("SELECT name FROM earning_brands")]
+        assert set(names) == {
+            "KROSS", "Pinarello", "Basso", "Factor", "TREK",
+            "Rondo", "Octane", "Rascal", "Lee Cougan",
+        }
+        db._initialize_schema()
+        assert db.conn.execute("SELECT COUNT(*) FROM earning_brands").fetchone()[0] == 9
+    finally:
+        db.close()
+
+
+def test_entry_uses_rate_snapshot_and_allows_optional_fields(manager):
+    first = manager.create_entry("SKU-1", ProductType.BICYCLE, now=at(1))
+    manager.set_rate_cents(ProductType.BICYCLE, 125)
+    second = manager.create_entry("SKU-2", ProductType.BICYCLE, now=at(2))
+    rows = manager.list_entries()
+    by_id = {row["id"]: row for row in rows}
+    assert by_id[first]["payout_cents"] == 100
+    assert by_id[first]["product_name"] is None
+    assert by_id[first]["brand_name"] is None
+    assert by_id[second]["payout_cents"] == 125
+
+
+def test_duplicate_sku_warns_but_is_not_a_constraint(manager):
+    manager.create_entry("same", "other", now=at(1))
+    assert manager.duplicate_sku_count("SAME") == 1
+    manager.create_entry("SAME", "other", now=at(2))
+    assert manager.duplicate_sku_count("same") == 2
+
+
+def test_custom_brand_can_be_archived_without_losing_history(manager):
+    brand_id = manager.add_brand("Custom", now=at(1))
+    manager.create_entry("SKU", "bicycle", brand_id=brand_id, now=at(1))
+    manager.archive_brand(brand_id, now=at(2))
+    assert all(row["id"] != brand_id for row in manager.list_brands())
+    assert manager.list_entries()[0]["brand_name"] == "Custom"
+    with pytest.raises(ValueError):
+        manager.create_entry("SKU-2", "bicycle", brand_id=brand_id, now=at(2))
+
+
+def test_stopwatch_excludes_pauses_and_links_entries(manager):
+    session_id = manager.start_session("stopwatch", now=at(1, 9))
+    manager.pause_session(now=at(1, 10))
+    manager.create_entry("PAUSED", "bicycle", now=at(1, 10, 30))
+    manager.resume_session(now=at(1, 11))
+    finished = manager.finish_session(now=at(1, 12, 30))
+    assert finished["elapsed_seconds"] == pytest.approx(2.5 * 3600)
+    assert finished["product_count"] == 1
+    assert manager.list_entries()[0]["session_id"] == session_id
+
+
+def test_only_one_unfinished_session_and_reset_detaches_entries(manager):
+    session_id = manager.start_session("stopwatch", now=at(1))
+    manager.create_entry("SKU", "bicycle", now=at(1))
+    with pytest.raises(ActiveSessionError):
+        manager.start_session("stopwatch", now=at(1, 10))
+    manager.reset_session()
+    entry = manager.list_entries()[0]
+    assert entry["session_id"] is None
+    assert manager.db.conn.execute("SELECT 1 FROM work_sessions WHERE id=?", (session_id,)).fetchone() is None
+
+
+def test_countdown_pauses_at_zero_and_can_resume_overtime(manager):
+    manager.start_session("countdown", 1800, now=at(1, 9))
+    snapshot = manager.timer_snapshot(now=at(1, 10))
+    assert snapshot is not None
+    assert snapshot.expired is True
+    assert snapshot.status == "paused"
+    assert snapshot.elapsed_seconds == pytest.approx(1800)
+    with pytest.raises(ValueError):
+        manager.resume_session(now=at(1, 10))
+    manager.resume_session(overtime=True, now=at(1, 10))
+    result = manager.finish_session(now=at(1, 10, 15))
+    assert result["elapsed_seconds"] == pytest.approx(2700)
+
+
+def test_goal_counts_only_entries_after_creation_and_completes(manager):
+    manager.create_entry("OLD", "bicycle", now=at(1))
+    goal_id = manager.create_goal(200, now=at(2))
+    manager.create_entry("NEW1", "bicycle", now=at(3))
+    progress = manager.goal_progress(goal_id, now=at(3, 10))
+    assert progress["earned_cents"] == 100
+    manager.create_entry("NEW2", "bicycle", now=at(4))
+    goal = manager._goal(goal_id)
+    assert goal["status"] == "completed"
+    assert goal["final_earned_cents"] == 200
+    assert goal["final_product_count"] == 2
+
+
+def test_goal_replacement_requires_explicit_archive_or_cancel(manager):
+    first = manager.create_goal(1000, now=at(1))
+    with pytest.raises(ActiveGoalError):
+        manager.create_goal(2000, now=at(2))
+    second = manager.create_goal(2000, replace_status=GoalStatus.ARCHIVED, now=at(2))
+    assert manager._goal(first)["status"] == "archived"
+    assert manager._goal(second)["status"] == "active"
+
+
+def test_forecast_uses_recent_products_and_tracked_hourly_rate(manager):
+    manager.create_goal(2000, now=at(1, 8))
+    # Five recent bicycle entries unlock the recent-product forecast.
+    for idx in range(5):
+        started = at(2 + idx, 9)
+        manager.start_session("stopwatch", now=started)
+        manager.create_entry(f"SKU-{idx}", "bicycle", now=started + timedelta(minutes=30))
+        manager.finish_session(now=started + timedelta(hours=1))
+    forecast = manager.goal_forecast(now=at(10))
+    assert forecast["earned_cents"] == 500
+    assert forecast["remaining_cents"] == 1500
+    assert forecast["likely_products"] == 15
+    assert forecast["optimistic_products"] == 15
+    assert forecast["conservative_products"] == 20
+    assert forecast["estimated_hours"] == pytest.approx(15)
+    assert forecast["product_basis"] == "last_30_days"
+    assert forecast["time_basis"] == "last_30_days"
+
+
+def test_forecast_without_history_uses_only_payout_bounds(manager):
+    manager.create_goal(1000, now=at(1))
+    forecast = manager.goal_forecast(now=at(1, 10))
+    assert forecast["likely_products"] is None
+    assert forecast["optimistic_products"] == 10
+    assert forecast["conservative_products"] == 14
+    assert forecast["estimated_hours"] is None
+    assert forecast["time_basis"] == "insufficient"
+
+
+def test_deadline_forecast_and_overdue_state(manager):
+    manager.create_goal(700, deadline_date="2026-08-07", now=at(1))
+    forecast = manager.goal_forecast(now=at(1))
+    assert forecast["deadline"]["overdue"] is False
+    assert forecast["deadline"]["cents_per_day"] == pytest.approx(100)
+    overdue = manager.goal_forecast(now=at(8))
+    assert overdue["deadline"]["overdue"] is True
+
+
+def test_processing_history_import_is_deduplicated(manager):
+    manager.create_entry("SKU", "bicycle", processing_history_id=42, now=at(1))
+    assert manager.is_processing_imported(42)
+    with pytest.raises(ValueError):
+        manager.create_entry("SKU", "bicycle", processing_history_id=42, now=at(2))
+
+
+def test_trend_windows_and_summary(manager):
+    manager.create_entry("A", "bicycle", now=at(10, 8))
+    manager.create_entry("B", "other", now=at(10, 9))
+    summary = manager.summary(now=at(10, 12))
+    assert summary["today_cents"] == 175
+    assert summary["today_count"] == 2
+    trend = manager.trend_data("hourly", now=at(10, 12))
+    assert len(trend) == 24
+    assert sum(bucket["cents"] for bucket in trend) == 175
+

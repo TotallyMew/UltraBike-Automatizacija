@@ -58,15 +58,15 @@
     <Compile Include="LentelesVertimas.py" />
     <Compile Include="main.py" />
     <Compile Include="Managers\DescriptionManager.py" />
-    <Compile Include="Managers\FeatureUploader\featureUploader.py" />
-    <Compile Include="Managers\FeatureUploader\fieldWriter.py" />
-    <Compile Include="Managers\FeatureUploader\languageSwitcher.py" />
-    <Compile Include="Managers\imageUploader.py" />
+    <Compile Include="Managers\EarningsManager.py" />
+    <Compile Include="Managers\PimboProductEditor.py" />
+    <Compile Include="GUI_Qt\screens\EarningsScreen.py" />
+    <Compile Include="tests\test_earnings_manager.py" />
+    <Compile Include="tests\test_earnings_service_unittest.py" />
     <Compile Include="Managers\translationManager.py" />
     <Compile Include="migrate_settings.py" />
     <Compile Include="Scrapers\BassoScraper.py" />
     <Compile Include="Scrapers\FactorScraper.py" />
-    <Compile Include="Scrapers\KrossFromTxtScraper.py" />
     <Compile Include="Scrapers\KROSSScraper.py" />
     <Compile Include="Scrapers\LeeCouganScraper.py" />
     <Compile Include="Scrapers\OctaneScraper.py" />
@@ -86,7 +86,6 @@
     <Compile Include="Uploaders\baseUploader.py" />
     <Compile Include="Uploaders\Basso.py" />
     <Compile Include="Uploaders\Factor.py" />
-    <Compile Include="Uploaders\KrossFromTxt.py" />
     <Compile Include="Uploaders\LeeCougan.py" />
     <Compile Include="Uploaders\Octane.py" />
     <Compile Include="Uploaders\Pinarello.py" />
@@ -104,7 +103,6 @@
     <Compile Include="Utilities\SettingsMenu.py" />
     <Compile Include="Utilities\TranslationHandler.py" />
     <Compile Include="Utilities\URLHandler.py" />
-    <Compile Include="Utilities\WebIntercationHandler.py" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Config\" />
@@ -116,7 +114,6 @@
     <Folder Include="GUI\screens\" />
     <Folder Include="Managers\" />
     <Folder Include="Assets\Translations\" />
-    <Folder Include="Managers\FeatureUploader\" />
     <Folder Include="Assets\" />
     <Folder Include="GUI\" />
     <Folder Include="Scrapers\" />

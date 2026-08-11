@@ -570,7 +570,10 @@ class AnalyticsScreen(ResponsiveWidget):
         # Overall counts + success rate (for donut)
         total_query = f"SELECT COUNT(*) FROM processing_history {date_filter}"
         total = cursor.execute(total_query, params).fetchone()[0]
-        success_query = f"SELECT COUNT(*) FROM processing_history {date_filter} {'AND' if date_filter else 'WHERE'} status = 'success'"
+        success_query = (
+            f"SELECT COUNT(*) FROM processing_history {date_filter} "
+            f"{'AND' if date_filter else 'WHERE'} status IN ('success', 'saved_manually')"
+        )
         success = cursor.execute(success_query, params).fetchone()[0]
         success_rate = (success / total * 100) if total > 0 else 0
 
@@ -693,8 +696,14 @@ class AnalyticsScreen(ResponsiveWidget):
         )
 
         # Status icon
-        status_icon = FluentIcon.ACCEPT if status == 'success' else FluentIcon.CANCEL
-        status_color = COLORS['success'] if status == 'success' else COLORS['error']
+        if status in ('success', 'saved_manually'):
+            status_icon, status_color = FluentIcon.ACCEPT, COLORS['success']
+        elif status == 'ready_for_review':
+            status_icon, status_color = FluentIcon.SYNC, COLORS['warning']
+        elif status in ('blocked_non_draft', 'discarded'):
+            status_icon, status_color = FluentIcon.INFO, COLORS['text_tertiary']
+        else:
+            status_icon, status_color = FluentIcon.CANCEL, COLORS['error']
         icon = IconWidget(status_icon)
         icon.setFixedSize(SIZES['icon_sm'], SIZES['icon_sm'])
         icon.setStyleSheet(f"color: {status_color}; background: transparent; background-color: transparent;")
@@ -808,7 +817,10 @@ class AnalyticsScreen(ResponsiveWidget):
             # Get current metrics
             cursor = self.db.conn.cursor()
             total = cursor.execute("SELECT COUNT(*) FROM processing_history").fetchone()[0]
-            success = cursor.execute("SELECT COUNT(*) FROM processing_history WHERE status = 'success'").fetchone()[0]
+            success = cursor.execute(
+                "SELECT COUNT(*) FROM processing_history "
+                "WHERE status IN ('success', 'saved_manually')"
+            ).fetchone()[0]
             success_rate = (success / total * 100) if total > 0 else 0
 
             regular = cursor.execute("SELECT COUNT(*) FROM processing_history WHERE batch_id IS NULL OR batch_id = ''").fetchone()[0]

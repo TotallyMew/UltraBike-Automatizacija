@@ -48,7 +48,7 @@ from qfluentwidgets import (
     isDarkTheme,
 )
 
-from GUI_Qt.widgets import show_file_saved_bar
+from GUI_Qt.widgets import enable_table_copy, show_file_saved_bar
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
 from GUI_Qt.styles.theme_config import (
     COLORS, COMPONENT_COLORS, FONTS, RADII, PADDINGS, SIZES, SPACING as THEME_SPACING,
@@ -59,7 +59,8 @@ from GUI_Qt.styles.screen_theme import (
     apply_screen_theme, enforce_transparent_labels,
     get_responsive_margins, get_responsive_spacing,
 )
-from Config.Selectors import FeatureSelectors, ProductListSelectors
+from Config.Selectors import ProductListSelectors
+from Managers.PimboProductEditor import PIMBO_LOGIN_URL, PimAutomationError, PimboProductEditor
 from Utilities.ProductNavigationHandler import ProductNavigationHandler
 
 
@@ -188,28 +189,16 @@ class SpecCheckerWorker(QThread):
     # -- helpers -------------------------------------------------------------
 
     @staticmethod
-    def _dismiss_leave_modal(driver) -> bool:
-        """Dismiss 'Leave without saving' modal. Returns True if it was dismissed."""
-        from selenium.webdriver.support import expected_conditions as EC
-        from selenium.webdriver.support.ui import WebDriverWait
-        from selenium.webdriver.common.by import By
-
-        try:
-            leave_btn = WebDriverWait(driver, 2).until(
-                EC.element_to_be_clickable((By.ID, "confirm-action"))
-            )
-            leave_btn.click()
-            return True
-        except Exception:
-            return False
-
-    @staticmethod
     def _ensure_products_page(driver) -> bool:
-        """Navigate to products list. Returns True if 'Leave anyway' was clicked."""
+        """Navigate read-only; never discard an already dirty product form."""
         from selenium.webdriver.support import expected_conditions as EC
         from selenium.webdriver.support.ui import WebDriverWait
 
-        clicked_leave = False
+        if "/dashboard/products/" in (driver.current_url or ""):
+            if PimboProductEditor(driver).is_dirty():
+                raise RuntimeError(
+                    "Atidaryta forma turi neišsaugotų pakeitimų; tikrinimas jos neatmes."
+                )
         try:
             products_link = WebDriverWait(driver, 10).until(
                 EC.presence_of_element_located(ProductListSelectors.NAV_PRODUCTS)
@@ -217,14 +206,18 @@ class SpecCheckerWorker(QThread):
             driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", products_link)
             products_link.click()
 
-            clicked_leave = SpecCheckerWorker._dismiss_leave_modal(driver)
-
             WebDriverWait(driver, 10).until(
                 EC.presence_of_element_located(ProductListSelectors.PRODUCT_TABLE)
             )
         except Exception:
-            pass
-        return clicked_leave
+            try:
+                driver.get(ProductListSelectors.URL)
+                WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located(ProductListSelectors.PRODUCT_TABLE)
+                )
+            except Exception:
+                pass
+        return False
 
     def _login_session(self, driver) -> bool:
         """Log a bare browser session into pim.bo."""
@@ -306,14 +299,11 @@ class SpecCheckerWorker(QThread):
                 self._emit_progress()
                 return
 
-            # 3. Click Specifications tab
+            # 3. Open the current Specifications section semantically.
             try:
-                specs_tab = WebDriverWait(driver, 5).until(
-                    EC.element_to_be_clickable(FeatureSelectors.SPECS_TAB)
-                )
-                specs_tab.click()
-                time.sleep(1)
-            except TimeoutException:
+                editor = PimboProductEditor(driver, self.main.logger)
+                editor.open_section("specifications")
+            except (PimAutomationError, TimeoutException):
                 status = tr("speccheck.status.no_specs_tab")
                 notes = " / ".join(notes_parts) if notes_parts else ""
                 with self._lock:
@@ -328,15 +318,12 @@ class SpecCheckerWorker(QThread):
                 self._emit_progress()
                 return
 
-            # 4. Check if template is applied
-            try:
-                WebDriverWait(driver, 8).until(
-                    EC.presence_of_element_located(FeatureSelectors.FIRST_SPEC_VALUE)
-                )
+            # 4. Read existing Family-provided rows.  No templates are applied.
+            if editor.specification_field_count() > 0:
                 status = tr("speccheck.status.has_specs")
                 with self._lock:
                     self._has_specs += 1
-            except TimeoutException:
+            else:
                 status = tr("speccheck.status.no_specs")
                 with self._lock:
                     self._no_specs += 1
@@ -414,7 +401,7 @@ class SpecCheckerWorker(QThread):
                     if self._stop:
                         break
                     self.log.emit(f"Logging in browser {session.session_id + 2}...")
-                    session.driver.get("https://pim.bo.ultrabike.lt/admin/login")
+                    session.driver.get(PIMBO_LOGIN_URL)
                     if self._login_session(session.driver):
                         extra_drivers.append(session.driver)
                         self.log.emit(f"Browser {session.session_id + 2} logged in")
@@ -577,6 +564,7 @@ class SpecCheckerScreen(ResponsiveWidget):
         self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._table.verticalHeader().setVisible(False)
         self._table.setMinimumHeight(200)
+        enable_table_copy(self._table)
         self._layout.addWidget(self._table, 1)
 
         self._update_table_theme()

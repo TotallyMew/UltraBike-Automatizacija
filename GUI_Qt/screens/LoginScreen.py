@@ -4,7 +4,7 @@ Email, password, and browser selection with Selenium integration
 """
 
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout
-from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtCore import Qt, QThread, Signal, QTimer
 from qfluentwidgets import (
     LineEdit, PasswordLineEdit, ComboBox, PrimaryPushButton,
     IndeterminateProgressRing, BodyLabel, TitleLabel, InfoBar, InfoBarPosition, CardWidget, isDarkTheme
@@ -216,6 +216,31 @@ class LoginScreen(QWidget):
 
         valid = len(email) > 0 and len(password) > 0
         self.login_button.setEnabled(valid)
+
+    def prefill_credentials(self, email: str = "", password: str = ""):
+        """Prefill login fields for credential recovery or first-run setup."""
+        if email:
+            self.email_field.setText(email)
+        if password:
+            self.password_field.setText(password)
+        else:
+            self.password_field.clear()
+        self._check_form_valid()
+
+    def show_saved_login_failed_message(self):
+        """Tell the user they can enter a new password to update stored creds."""
+        def _show():
+            InfoBar.warning(
+                title=self.main.i18n.tr("login.saved_failed.title"),
+                content=self.main.i18n.tr("login.saved_failed.content"),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=7000,
+                parent=self
+            )
+
+        QTimer.singleShot(0, _show)
 
     def _handle_login(self):
         """Handle login button click"""

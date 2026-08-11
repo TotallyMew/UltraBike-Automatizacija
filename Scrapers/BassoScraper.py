@@ -6,8 +6,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, StaleElementReferenceException
 from bs4 import BeautifulSoup
 import re
-from Utilities.WebIntercationHandler import WebInteractionHandler
-from Utilities.TranslationHandler import TranslationHandler, load_translations, load_value_translations
+from Utilities.TranslationHandler import TranslationHandler
 
 internalCounter = 0
 

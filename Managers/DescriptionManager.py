@@ -1,19 +1,11 @@
 ﻿"""
 Managers/DescriptionManager.py
-Handles description CRUD operations and editor upload
+Handles saved description CRUD and reusable description content preparation.
 """
 
 # Standard library
-import time
 from datetime import datetime
 
-# Third-party
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.common.exceptions import TimeoutException
-
-# Local
-from Config.Selectors import ProductEditorSelectors
 from Utilities.ErrorManager import ErrorManager
 
 
@@ -294,136 +286,41 @@ class DescriptionManager:
             self._log_error("Failed to delete description", exception=e, name=name)
             return False
 
-    def upload_description(
-        self, driver, product_code: str, name: str, append_disclaimer: bool = False
-    ) -> bool:
-        """Upload description to product editor from database."""
-
-        self._log("Uploading description", product_code=product_code, name=name,
-                  append_disclaimer=append_disclaimer)
-
+    def prepare_description(
+        self,
+        name: str,
+        *,
+        append_disclaimer: bool = False,
+        only_lt: bool = False,
+    ) -> dict[str, str] | None:
+        """Return saved HTML keyed by PIMBO locale, without browser interaction."""
         desc = self.load_description(name)
         if not desc:
             self._log_error("Description not found", name=name)
-            return False
+            return None
+        return self.prepare_raw_description(
+            desc["description_lt"],
+            desc["description_en"],
+            desc["description_lv"],
+            append_disclaimer=append_disclaimer,
+            only_lt=only_lt,
+        )
 
-        lt_html = desc["description_lt"]
-        en_html = desc["description_en"]
-
-        if append_disclaimer:
-            lt_html, en_html, _ = self.append_disclaimer_if_missing(
-                lt_html, en_html, ""
-            )
-
-        return self._upload_html(driver, product_code, lt_html, en_html)
-
-    def upload_description_raw(
+    def prepare_raw_description(
         self,
-        driver,
-        product_code: str,
         lt_html: str,
         en_html: str,
         lv_html: str = "",
+        *,
         append_disclaimer: bool = False,
-    ) -> bool:
-        """Upload raw HTML content to product editor."""
-
-        self._log("Uploading raw HTML", product_code=product_code,
-                  append_disclaimer=append_disclaimer)
-
+        only_lt: bool = False,
+    ) -> dict[str, str]:
+        """Prepare raw HTML keyed by locale; PIMBO writes belong to its editor."""
         if append_disclaimer:
-            lt_html, en_html, _ = self.append_disclaimer_if_missing(
-                lt_html, en_html, ""
+            lt_html, en_html, lv_html = self.append_disclaimer_if_missing(
+                lt_html, en_html, lv_html
             )
-
-        return self._upload_html(driver, product_code, lt_html, en_html)
-
-    def _switch_language(self, driver, wait, lang_code: str):
-        """Switch locale via the popup language switcher."""
-        trigger = wait.until(
-            EC.element_to_be_clickable(ProductEditorSelectors.LANGUAGE_SWITCH)
-        )
-        driver.execute_script("arguments[0].click();", trigger)
-
-        option = WebDriverWait(driver, 5).until(
-            EC.element_to_be_clickable(ProductEditorSelectors.language_option(lang_code))
-        )
-        option.click()
-
-        # Wait for the name field to settle after locale switch
-        wait.until(EC.presence_of_element_located(ProductEditorSelectors.NAME_FIELD))
-        time.sleep(0.3)
-
-    def _set_editor_content(self, driver, wait, html_content: str):
-        """Inject HTML into the HugeRTE description editor."""
-        # 1. Set iframe body innerHTML
-        wait.until(EC.frame_to_be_available_and_switch_to_it(
-            ProductEditorSelectors.DESCRIPTION_IFRAME
-        ))
-        editor_body = wait.until(
-            EC.presence_of_element_located(ProductEditorSelectors.TINYMCE_BODY)
-        )
-        driver.execute_script(
-            "arguments[0].innerHTML = arguments[1];"
-            "arguments[0].dispatchEvent(new Event('input', {bubbles:true}));"
-            "arguments[0].dispatchEvent(new Event('change', {bubbles:true}));",
-            editor_body,
-            html_content,
-        )
-        driver.switch_to.default_content()
-        time.sleep(0.2)
-
-        # 2. Also set hidden textarea (best-effort)
-        try:
-            textarea = wait.until(EC.presence_of_element_located(
-                ProductEditorSelectors.DESCRIPTION_TEXTAREA
-            ))
-            driver.execute_script(
-                "const el = arguments[0];"
-                "el.value = arguments[1];"
-                "el.dispatchEvent(new Event('input', {bubbles:true}));"
-                "el.dispatchEvent(new Event('change', {bubbles:true}));",
-                textarea,
-                html_content,
-            )
-        except Exception:
-            pass
-        time.sleep(0.2)
-
-    def _upload_html(
-        self,
-        driver,
-        product_code: str,
-        lt_html: str,
-        en_html: str,
-    ) -> bool:
-        """Upload description HTML for LT and EN via browser automation."""
-
-        try:
-            wait = WebDriverWait(driver, 10)
-
-            languages = [("lt", lt_html), ("en", en_html)]
-
-            for lang_code, html_content in languages:
-                if not html_content:
-                    continue
-
-                self._log("Uploading language", lang=lang_code)
-                self._switch_language(driver, wait, lang_code)
-                self._set_editor_content(driver, wait, html_content)
-
-            # Switch back to LT after uploading
-            self._switch_language(driver, wait, "lt")
-
-            self._log("HTML uploaded successfully", product_code=product_code)
-            return True
-
-        except Exception as e:
-            self._log_error(
-                "Failed to upload HTML", exception=e, product_code=product_code
-            )
-            try:
-                driver.switch_to.default_content()
-            except Exception:
-                pass
-            return False
+        prepared = {"lt": lt_html or ""}
+        if not only_lt:
+            prepared.update({"en": en_html or "", "lv": lv_html or ""})
+        return {locale: value for locale, value in prepared.items() if value.strip()}

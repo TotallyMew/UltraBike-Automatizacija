@@ -13,6 +13,3 @@ class Rascal(ProductUploader):
             url=self.bicycleUrlOrCode,  # ← Fixed: removed double self
             variant_index=variant_index
         )
-
-    def uploadBrand(self):
-        self.web_handler.add_brand_name(self.brandName)

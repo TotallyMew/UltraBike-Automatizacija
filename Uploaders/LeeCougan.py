@@ -19,6 +19,3 @@ class LeeCougan(ProductUploader):
             credentials=credentials
         )
 
-    def uploadBrand(self):
-        self.web_handler.add_brand_name(self.brandName)
-

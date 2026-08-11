@@ -209,9 +209,9 @@ def get_text_color(is_dark: bool, role: str = 'primary') -> str:
 def get_status_text_color(status: str) -> str:
     """Return a semantic status color for foreground text (theme-independent)."""
     status = (status or '').strip().lower()
-    if status in ('success', 'ok', 'valid'):
+    if status in ('success', 'saved_manually', 'ok', 'valid'):
         return COLORS['success']
-    if status in ('warning', 'warn', 'mixed'):
+    if status in ('ready_for_review', 'warning', 'warn', 'mixed'):
         return COLORS['warning']
     if status in ('error', 'danger', 'invalid'):
         return COLORS['error']
@@ -222,9 +222,9 @@ def get_status_row_style(is_dark: bool, status: str) -> str:
     """QSS for row validation highlighting used in batch Excel preview."""
     status = (status or '').strip().lower()
 
-    if status in ('success', 'ok', 'valid'):
+    if status in ('success', 'saved_manually', 'ok', 'valid'):
         bg = COLORS['status_success_bg_dark'] if is_dark else COLORS['status_success_bg_light']
-    elif status in ('error', 'danger', 'invalid'):
+    elif status in ('error', 'failed', 'danger', 'invalid'):
         bg = COLORS['status_error_bg_dark'] if is_dark else COLORS['status_error_bg_light']
     else:
         bg = 'transparent'

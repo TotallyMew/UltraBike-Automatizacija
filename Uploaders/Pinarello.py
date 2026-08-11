@@ -13,6 +13,3 @@ class Pinarello(ProductUploader):
             url=self.bicycleUrlOrCode,
             frameset_only=frameset_only  # ← Pass to scraper
         )
-
-    def uploadBrand(self):
-        self.web_handler.add_brand_name(self.brandName)

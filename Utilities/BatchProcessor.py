@@ -24,6 +24,10 @@ class BatchProcessor:
         self.batch_id = None
         self.is_processing = False
         self.should_stop = False
+        self.progress_callback = None
+
+    def set_progress_callback(self, callback):
+        self.progress_callback = callback
     
     def _log(self, message, **context):
         if self.logger:
@@ -169,21 +173,32 @@ class BatchProcessor:
                     item.get('brand_options', {})
                 )
 
-                uploader.run()
+                preparation = uploader.run()
 
                 duration_seconds = time.perf_counter() - started
 
                 self.current_index = idx + 1
 
+                preparation_data = (
+                    preparation.to_dict()
+                    if hasattr(preparation, "to_dict")
+                    else {}
+                )
+                preparation_status = preparation_data.get("status", "failed")
                 self.results.append({
                     'code': item['product_code'],
                     'brand': item['brand'],
-                    'status': 'success',
-                    'error': None,
+                    'status': preparation_status,
+                    'error': preparation_data.get("error") or None,
                     'duration_seconds': duration_seconds,
                     'traceback': None,
+                    'preparation': preparation_data,
                 })
-                self._log("Item succeeded", code=item['product_code'])
+                self._log(
+                    "Item prepared",
+                    code=item['product_code'],
+                    status=preparation_status,
+                )
 
             except Exception as e:
                 duration_seconds = None
@@ -217,21 +232,30 @@ class BatchProcessor:
         self.current_index = len(self.queue)
         self.is_processing = False
 
-        success_count = sum(1 for r in self.results if r['status'] == 'success')
+        success_count = sum(1 for r in self.results if r['status'] == 'saved_manually')
+        ready_count = sum(1 for r in self.results if r['status'] == 'ready_for_review')
         failed_count = sum(1 for r in self.results if r['status'] == 'failed')
+        blocked_count = sum(1 for r in self.results if r['status'] == 'blocked_non_draft')
+        discarded_count = sum(1 for r in self.results if r['status'] == 'discarded')
 
         self._log(
             "Batch complete",
             batch_id=self.batch_id,
             success=success_count,
-            failed=failed_count
+            ready_for_review=ready_count,
+            failed=failed_count,
+            blocked_non_draft=blocked_count,
+            discarded=discarded_count,
         )
 
         return {
             'batch_id': self.batch_id,
             'total': len(self.queue),
             'success': success_count,
+            'ready_for_review': ready_count,
             'failed': failed_count,
+            'blocked_non_draft': blocked_count,
+            'discarded': discarded_count,
             'results': self.results
         }
 
@@ -266,7 +290,7 @@ class BatchProcessor:
 
         def uploader_factory(driver, brand, code, url_or_code, db, batch_id, brand_options):
             uploader_class = getUploaderClass(brand)
-            return uploader_class(
+            uploader = uploader_class(
                 driver=driver,
                 brand_name=brand,
                 product_code=code,
@@ -277,6 +301,9 @@ class BatchProcessor:
                 batch_id=batch_id,
                 master_password=master_password,
             )
+            if self.progress_callback and hasattr(uploader, "set_progress_callback"):
+                uploader.set_progress_callback(self.progress_callback)
+            return uploader
 
         return self.start_batch(uploader_factory)
     

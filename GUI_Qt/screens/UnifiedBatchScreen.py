@@ -63,6 +63,7 @@ from GUI_Qt.widgets.DragFillHandle import DragFillHandle
 from GUI_Qt.widgets.TieredHeaderWidget import TieredHeaderWidget
 from GUI_Qt.widgets.FrozenColumnTableWidget import FrozenColumnOverlay
 from GUI_Qt.widgets.FilterableComboBox import FilterableComboBox
+from GUI_Qt.widgets import enable_table_copy
 from GUI_Qt.screens.batch_inspector import BatchInspectorPanel
 from GUI_Qt.styles.theme_config import (
     COLORS,
@@ -326,9 +327,13 @@ class UnifiedBatchScreen(ResponsiveWidget):
         self._base_table_rows = 3
         self._current_processing_row = None
         self._is_busy = False
+        self._pending_reviews: list[tuple[str, int, str, str, str]] = []
+        self._active_review: tuple[str, int, str, str, str] | None = None
         self._show_status_cols = False
         self._visible_columns: set[str] = set()
         self._density: str = "standard"  # "compact" or "standard"
+        self._earning_batch_candidates: list[dict] = []
+        self._earning_batch_started_at: str | None = None
 
         self.brands = [
             "KROSS", "Pinarello", "Basso", "Factor",
@@ -452,6 +457,18 @@ class UnifiedBatchScreen(ResponsiveWidget):
         self.retry_btn.hide()
         self.retry_btn.clicked.connect(self._retry_failed)
         top_row.addWidget(self.retry_btn)
+
+        self.review_saved_btn = PrimaryPushButton("Išsaugota — tęsti")
+        self.review_saved_btn.setIcon(FluentIcon.ACCEPT)
+        self.review_saved_btn.clicked.connect(self._confirm_review_saved)
+        self.review_saved_btn.hide()
+        top_row.addWidget(self.review_saved_btn)
+
+        self.review_discard_btn = PushButton("Atmesti pakeitimus")
+        self.review_discard_btn.setIcon(FluentIcon.CANCEL)
+        self.review_discard_btn.clicked.connect(self._confirm_review_discard)
+        self.review_discard_btn.hide()
+        top_row.addWidget(self.review_discard_btn)
 
         outer.addLayout(top_row)
 
@@ -595,6 +612,7 @@ class UnifiedBatchScreen(ResponsiveWidget):
         self.table.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.table.setCornerButtonEnabled(False)
+        enable_table_copy(self.table)
 
         try:
             self.table.verticalScrollBar().setSingleStep(12)
@@ -1806,6 +1824,16 @@ class UnifiedBatchScreen(ResponsiveWidget):
         if not items:
             return
 
+        if isinstance(strategy, type(STRATEGIES["upload"])):
+            self._earning_batch_started_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            self._earning_batch_candidates = [
+                {**item, "table_row": table_row}
+                for item, table_row in zip(items, valid_rows)
+            ]
+        else:
+            self._earning_batch_candidates = []
+            self._earning_batch_started_at = None
+
         # Master password check for upload mode with external brands
         if isinstance(strategy, type(STRATEGIES["upload"])):
             master_password = getattr(self.main, "_unlocked_master_password", None)
@@ -1852,13 +1880,30 @@ class UnifiedBatchScreen(ResponsiveWidget):
         if multi_session:
             if self.session_manager is None or not self.session_manager.is_ready():
                 try:
-                    from Utilities.BrowserSessionManager import BrowserSessionManager
+                    from Config.LoginConfig.LoginHandler import LoginHandler
+                    from Config.Selectors import LoginSelectors
+                    from Managers.BrowserSessionManager import BrowserSessionManager
                     browser_count = self.main.settings.get("browser_count", 2)
                     browser_type = self.main.settings.get("browser_choice", "chrome")
                     self.session_manager = BrowserSessionManager(
                         browser_type, browser_count, self.main.logger
                     )
-                    self.session_manager.initialize_pool()
+                    email, password = self.main.credential_manager.get_saved_credentials()
+
+                    def initialize_session(driver):
+                        if not email or not password:
+                            return False
+                        driver.get(LoginSelectors.URL)
+                        handler = LoginHandler(
+                            driver,
+                            self.main.credential_manager,
+                            logger=self.main.logger,
+                        )
+                        return handler.attempt_login(email, password)
+
+                    self.session_manager.set_session_initializer(initialize_session)
+                    if not self.session_manager.initialize_pool():
+                        self.session_manager = None
                 except Exception:
                     self.session_manager = None
             session_mgr = self.session_manager if self.session_manager and self.session_manager.is_ready() else None
@@ -1879,9 +1924,81 @@ class UnifiedBatchScreen(ResponsiveWidget):
             self.worker.log.connect(self._on_log)
         if hasattr(self.worker, "session_status"):
             self.worker.session_status.connect(self._on_session_status)
+        if hasattr(self.worker, "review_required"):
+            self.worker.review_required.connect(self._on_review_required)
 
         self._set_busy(True)
         self.worker.start()
+
+    def _on_review_required(
+        self,
+        token: str,
+        row: int,
+        code: str,
+        url: str,
+        mode: str,
+    ):
+        request = (token, row, code, url, mode)
+        if token not in {item[0] for item in self._pending_reviews} and (
+            self._active_review is None or self._active_review[0] != token
+        ):
+            self._pending_reviews.append(request)
+        self._show_next_review()
+
+    def _show_next_review(self):
+        if self._active_review is None and self._pending_reviews:
+            self._active_review = self._pending_reviews.pop(0)
+        active = self._active_review
+        visible = active is not None
+        self.review_saved_btn.setVisible(
+            visible and active is not None and active[4] == "review"
+        )
+        self.review_discard_btn.setVisible(visible)
+        if active:
+            _token, row, code, _url, mode = active
+            if mode == "discard_only":
+                self.status_label.setText(
+                    f"{code}: paruošimas nepavyko. Patvirtinkite pakeitimų atmetimą."
+                )
+                self._on_row_update(
+                    row,
+                    "Nepavyko — laukiama atmetimo",
+                    "PIMBO forma nebus uždaroma be jūsų patvirtinimo",
+                )
+            else:
+                self.status_label.setText(
+                    f"{code}: paruošta peržiūrai. PIMBO lange spauskite Save."
+                )
+                self._on_row_update(row, "Paruošta peržiūrai", "Laukiama rankinio Save")
+
+    def _send_review_action(self, action: str):
+        if self._active_review is None or self.worker is None:
+            return
+        token, _row, _code, _url, _mode = self._active_review
+        self._active_review = None
+        self.review_saved_btn.hide()
+        self.review_discard_btn.hide()
+        self.worker.review_response.emit(token, action)
+        self._show_next_review()
+
+    def _confirm_review_saved(self):
+        if self._active_review is None or self._active_review[4] != "review":
+            return
+        self._send_review_action("saved")
+
+    def _confirm_review_discard(self):
+        if self._active_review is None:
+            return
+        _token, _row, code, _url, _mode = self._active_review
+        dialog = MessageBox(
+            "Atmesti neišsaugotus pakeitimus?",
+            f"{code} forma bus perkrauta, o neišsaugoti pakeitimai bus prarasti.",
+            self,
+        )
+        dialog.yesButton.setText("Atmesti ir tęsti")
+        dialog.cancelButton.setText("Grįžti į peržiūrą")
+        if dialog.exec():
+            self._send_review_action("discard")
 
     def _set_busy(self, busy: bool):
         self._is_busy = busy
@@ -1905,6 +2022,9 @@ class UnifiedBatchScreen(ResponsiveWidget):
             if hasattr(self, "_elapsed_timer"):
                 self._elapsed_timer.stop()
             self.elapsed_label.hide()
+            if not self._pending_reviews and self._active_review is None:
+                self.review_saved_btn.hide()
+                self.review_discard_btn.hide()
 
     def _update_elapsed(self):
         if not hasattr(self, "_start_time"):
@@ -1922,9 +2042,16 @@ class UnifiedBatchScreen(ResponsiveWidget):
         if "Processing" in status_text:
             bg = QColor(255, 182, 193, 100)
             self._current_processing_row = row
+        elif "Paruošta peržiūrai" in status_text:
+            bg = QColor(255, 215, 0, 90)
+            self._current_processing_row = row
+        elif "Išsaugota rankiniu" in status_text:
+            bg = QColor(144, 238, 144, 120)
+        elif "Atmesta" in status_text or "Ne Draft" in status_text:
+            bg = QColor(211, 211, 211, 100)
         elif "Success" in status_text or "✓" in status_text or "ok" in status_text.lower():
             bg = QColor(144, 238, 144, 120)
-        elif "Failed" in status_text or "✗" in status_text:
+        elif "Failed" in status_text or "Nepavyko" in status_text or "✗" in status_text:
             bg = QColor(255, 99, 71, 100)
         else:
             bg = QColor(0, 0, 0, 0)
@@ -1977,6 +2104,39 @@ class UnifiedBatchScreen(ResponsiveWidget):
                 parent=self,
             )
         self._validate()
+        if self._earning_batch_candidates:
+            QTimer.singleShot(0, self._prompt_completed_batch_earnings)
+
+    def _prompt_completed_batch_earnings(self):
+        """Offer one review list containing only products verified as saved."""
+        candidates = self._earning_batch_candidates
+        started_at = self._earning_batch_started_at
+        self._earning_batch_candidates = []
+        self._earning_batch_started_at = None
+        if not candidates or not started_at:
+            return
+        saved_items = []
+        for candidate in candidates:
+            row = self.main.db.conn.execute(
+                """
+                SELECT id FROM processing_history
+                WHERE brand=? AND product_code=? AND status='saved_manually'
+                  AND processed_at>=?
+                ORDER BY id DESC LIMIT 1
+                """,
+                (candidate.get("brand", ""), candidate.get("code", ""), started_at),
+            ).fetchone()
+            if row is None:
+                continue
+            saved_items.append({
+                "sku": candidate.get("code", ""),
+                "brand": candidate.get("brand", ""),
+                "product_type": "frameset" if candidate.get("frameset_only") else "bicycle",
+                "source": "batch_upload",
+                "processing_history_id": int(row["id"]),
+            })
+        if saved_items:
+            self.main.prompt_earning_items(saved_items, parent=self)
 
     def _on_progress_update(self, current, total, speed, eta_seconds):
         mins, secs = divmod(int(eta_seconds), 60)
@@ -2009,6 +2169,16 @@ class UnifiedBatchScreen(ResponsiveWidget):
         if not items:
             return
 
+        if isinstance(strategy, type(STRATEGIES["upload"])):
+            self._earning_batch_started_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            self._earning_batch_candidates = [
+                {**item, "table_row": table_row}
+                for item, table_row in zip(items, failed_rows)
+            ]
+        else:
+            self._earning_batch_candidates = []
+            self._earning_batch_started_at = None
+
         # Reset failed row statuses
         for row in failed_rows:
             status_w = self._get_inner_widget(row, COL["status"])
@@ -2038,6 +2208,8 @@ class UnifiedBatchScreen(ResponsiveWidget):
             self.worker.log.connect(self._on_log)
         if hasattr(self.worker, "session_status"):
             self.worker.session_status.connect(self._on_session_status)
+        if hasattr(self.worker, "review_required"):
+            self.worker.review_required.connect(self._on_review_required)
 
         self._set_busy(True)
         self.worker.start()
@@ -2049,6 +2221,17 @@ class UnifiedBatchScreen(ResponsiveWidget):
         QShortcut(QKeySequence("Escape"), self, self._handle_cancel)
 
     def _handle_cancel(self):
+        if self._active_review is not None:
+            InfoBar.warning(
+                title="Reikia užbaigti peržiūrą",
+                content="Pirmiausia išsaugokite arba atmeskite atidaryto produkto pakeitimus.",
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=3500,
+                parent=self,
+            )
+            return
         if self.worker and self.worker.isRunning():
             self.worker.stop()
             InfoBar.warning(

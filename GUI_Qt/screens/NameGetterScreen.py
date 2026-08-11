@@ -49,7 +49,7 @@ from qfluentwidgets import (
     isDarkTheme,
 )
 
-from GUI_Qt.widgets import show_file_saved_bar
+from GUI_Qt.widgets import enable_table_copy, show_file_saved_bar
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
 from GUI_Qt.styles.theme_config import (
     COLORS, COMPONENT_COLORS, FONTS, RADII, PADDINGS, SIZES, SPACING as THEME_SPACING,
@@ -60,6 +60,7 @@ from GUI_Qt.styles.screen_theme import (
     apply_screen_theme, enforce_transparent_labels,
 )
 from Config.Selectors import ProductListSelectors
+from Managers.PimboProductEditor import PIMBO_LOGIN_URL, PimboProductEditor
 
 
 # ---------------------------------------------------------------------------
@@ -187,38 +188,33 @@ class NameGetterWorker(QThread):
     # -- helpers -------------------------------------------------------------
 
     @staticmethod
-    def _dismiss_leave_modal(driver) -> bool:
-        from selenium.webdriver.support import expected_conditions as EC
-        from selenium.webdriver.support.ui import WebDriverWait
-        from selenium.webdriver.common.by import By
-        try:
-            leave_btn = WebDriverWait(driver, 2).until(
-                EC.element_to_be_clickable((By.ID, "confirm-action"))
-            )
-            leave_btn.click()
-            return True
-        except Exception:
-            return False
-
-    @staticmethod
     def _ensure_products_page(driver) -> bool:
         from selenium.webdriver.support import expected_conditions as EC
         from selenium.webdriver.support.ui import WebDriverWait
 
-        clicked_leave = False
+        if "/dashboard/products/" in (driver.current_url or ""):
+            if PimboProductEditor(driver).is_dirty():
+                raise RuntimeError(
+                    "Atidaryta forma turi neišsaugotų pakeitimų; vardų tikrinimas jos neatmes."
+                )
         try:
             products_link = WebDriverWait(driver, 10).until(
                 EC.presence_of_element_located(ProductListSelectors.NAV_PRODUCTS)
             )
             driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", products_link)
             products_link.click()
-            clicked_leave = NameGetterWorker._dismiss_leave_modal(driver)
             WebDriverWait(driver, 10).until(
                 EC.presence_of_element_located(ProductListSelectors.PRODUCT_TABLE)
             )
         except Exception:
-            pass
-        return clicked_leave
+            try:
+                driver.get(ProductListSelectors.URL)
+                WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located(ProductListSelectors.PRODUCT_TABLE)
+                )
+            except Exception:
+                pass
+        return False
 
     def _login_session(self, driver) -> bool:
         from Config.LoginConfig.LoginHandler import LoginHandler
@@ -246,69 +242,51 @@ class NameGetterWorker(QThread):
     # -- search & extract name -----------------------------------------------
 
     def _setup_filter(self, driver) -> None:
-        """Open the filter panel and add a filter row (once per session)."""
+        """Wait until the dashboard product search field is ready."""
         from selenium.webdriver.support import expected_conditions as EC
         from selenium.webdriver.support.ui import WebDriverWait
-        from selenium.common.exceptions import TimeoutException
 
         driver.execute_script("window.scrollTo(0, 0);")
-        time.sleep(0.3)
-
-        toggle = WebDriverWait(driver, 5).until(
-            EC.element_to_be_clickable(ProductListSelectors.TOGGLE_FILTERS)
+        WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable(ProductListSelectors.SEARCH_NAME)
         )
-        toggle.click()
-        time.sleep(0.3)
-
-        try:
-            add_btn = WebDriverWait(driver, 3).until(
-                EC.element_to_be_clickable(ProductListSelectors.ADD_FILTER_BUTTON)
-            )
-            add_btn.click()
-            time.sleep(0.3)
-        except TimeoutException:
-            pass
 
     def _search_and_get_name(self, code: str, driver) -> str | None:
-        """Search for a code using the External ID filter and return the name.
+        """Search for a code using the dashboard search and return the name.
 
         Returns the product name string, or None if not found.
         """
-        from selenium.webdriver.common.by import By
         from selenium.webdriver.common.keys import Keys
         from selenium.webdriver.support import expected_conditions as EC
         from selenium.webdriver.support.ui import WebDriverWait
         from selenium.common.exceptions import TimeoutException
 
-        # Type code into the already-open filter value input
-        value_input = WebDriverWait(driver, 5).until(
-            EC.element_to_be_clickable(ProductListSelectors.FILTER_VALUE)
+        search_input = WebDriverWait(driver, 5).until(
+            EC.element_to_be_clickable(ProductListSelectors.SEARCH_NAME)
         )
-        value_input.clear()
-        value_input.send_keys(code + Keys.ENTER)
+        previous_rows = tuple(
+            row.text for row in driver.find_elements(*ProductListSelectors.PRODUCT_ROWS)
+        )
+        search_input.send_keys(Keys.CONTROL, "a")
+        search_input.send_keys(code)
+        search_input.send_keys(Keys.ENTER)
 
-        # Wait for results to load
-        time.sleep(1.5)
+        def exact_result_loaded(current_driver):
+            exact = current_driver.find_elements(*ProductListSelectors.product_row_by_code(code))
+            current_rows = tuple(
+                row.text for row in current_driver.find_elements(*ProductListSelectors.PRODUCT_ROWS)
+            )
+            return exact[0] if exact else (False if current_rows == previous_rows else False)
 
         # Try to find the product row matching this code
         try:
-            code_cell = WebDriverWait(driver, 5).until(
-                EC.presence_of_element_located(
-                    ProductListSelectors.product_row_by_code(code)
-                )
-            )
+            row = WebDriverWait(driver, 8).until(exact_result_loaded)
         except TimeoutException:
             return None
 
-        # Get the parent <tr> and extract name from td.cell-name > a
         try:
-            row = code_cell.find_element(
-                By.XPATH,
-                "ancestor::tr[contains(@class, 'row-')]"
-            )
             name_element = row.find_element(
-                By.CSS_SELECTOR,
-                "td.cell-name a"
+                *ProductListSelectors.product_link_by_brand("")
             )
             return name_element.text.strip()
         except Exception:
@@ -420,7 +398,7 @@ class NameGetterWorker(QThread):
                     if self._stop:
                         break
                     self.log.emit(f"Logging in browser {session.session_id + 2}...")
-                    session.driver.get("https://pim.bo.ultrabike.lt/admin/login")
+                    session.driver.get(PIMBO_LOGIN_URL)
                     if self._login_session(session.driver):
                         extra_drivers.append(session.driver)
                         self.log.emit(f"Browser {session.session_id + 2} logged in")
@@ -580,6 +558,7 @@ class NameGetterScreen(ResponsiveWidget):
         self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._table.verticalHeader().setVisible(False)
         self._table.setMinimumHeight(200)
+        enable_table_copy(self._table)
         self._layout.addWidget(self._table, 1)
 
         self._update_table_theme()

@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QIcon, QColor, QBrush
 
 from ..validation.validators import BaseValidator, ValidationResult
+from GUI_Qt.widgets import enable_table_copy
 
 
 class EditableTableWidget(QTableWidget):
@@ -68,6 +69,7 @@ class EditableTableWidget(QTableWidget):
         self.setAlternatingRowColors(True)
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        enable_table_copy(self)
 
         # Header settings
         header = self.horizontalHeader()

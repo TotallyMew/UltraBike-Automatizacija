@@ -3,6 +3,8 @@ Upload Screen - Fluent Design System
 Single product upload with Space Indigo/Lavender Grey color scheme
 """
 
+import json
+
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QSizePolicy,
 )
@@ -19,6 +21,7 @@ from GUI_Qt.dialogs.AttributeOptionsDialog import (
 )
 from uploaderFactory import getUploaderClass
 from Managers.DescriptionManager import DescriptionManager
+from Managers.PimboProductEditor import PimboProductEditor, PimPreparationResult, PimPreparationStatus
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
 from GUI_Qt.components.validation import RequiredValidator, URLValidator
 from GUI_Qt.components.accessibility import KeyboardNavigationMixin
@@ -57,7 +60,7 @@ ATTRIBUTE_DEFINITIONS = [
 
 class UploadWorker(QThread):
     """Background worker for upload process with non-blocking retry support"""
-    finished = Signal(bool, str)  # success, message
+    completed = Signal(object)  # PimPreparationResult
     progress = Signal(str)  # status updates
     retry_request = Signal(str)  # operation_name
     retry_response = Signal(object)  # result from dialog (True, False, or new code)
@@ -76,10 +79,23 @@ class UploadWorker(QThread):
             self.progress.emit(self.tr("upload.status.starting"))
             # Patch uploader and navigation handler to use our non-blocking retry
             self.uploader.set_retry_callback(self._request_retry)
-            self.uploader.run()
-            self.finished.emit(True, self.tr("upload.done"))
+            self.uploader.set_progress_callback(self.progress.emit)
+            result = self.uploader.run()
+            if not isinstance(result, PimPreparationResult):
+                result = PimPreparationResult(
+                    product_code=str(getattr(self.uploader, "ultraBikeCode", "") or ""),
+                    status=PimPreparationStatus.FAILED,
+                    error="Įkėlėjas negrąžino struktūrinio PIMBO rezultato",
+                )
+            self.completed.emit(result)
         except Exception as e:
-            self.finished.emit(False, self.tr("upload.failed", error=str(e)))
+            self.completed.emit(
+                PimPreparationResult(
+                    product_code=str(getattr(self.uploader, "ultraBikeCode", "") or ""),
+                    status=PimPreparationStatus.FAILED,
+                    error=self.tr("upload.failed", error=str(e)),
+                )
+            )
 
     def _request_retry(self, operation_name):
         """Called by uploader/navigation handler when a retry is needed."""
@@ -930,7 +946,7 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
         # Start upload in background
         self.upload_worker = UploadWorker(uploader, self.main.i18n.tr)
         self.upload_worker.progress.connect(self._on_upload_progress)
-        self.upload_worker.finished.connect(self._on_upload_finished)
+        self.upload_worker.completed.connect(self._on_upload_finished)
         self.upload_worker.retry_request.connect(self._on_retry_request)
 
         # UI updates
@@ -994,18 +1010,19 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
         """Handle upload progress updates"""
         self.status_label.setText(message)
 
-    def _on_upload_finished(self, success, message):
+    def _on_upload_finished(self, result: PimPreparationResult):
         """Handle upload completion"""
         self.progress_ring.setVisible(False)
         self.upload_button.setEnabled(True)
         self.clear_button.setEnabled(True)
 
-        if success:
+        if result.status == PimPreparationStatus.READY_FOR_REVIEW:
+            message = "Paruošta peržiūrai — išsaugokite PIMBO lange."
             self.status_label.setText(message)
-            self.status_label.setStyleSheet(f"color: {COLORS['success']}; background: transparent; background-color: transparent;")
+            self.status_label.setStyleSheet(f"color: {COLORS['warning']}; background: transparent; background-color: transparent;")
 
-            InfoBar.success(
-                title=self.main.i18n.tr("upload.success.title"),
+            InfoBar.info(
+                title="Paruošta peržiūrai",
                 content=message,
                 parent=self,
                 position=InfoBarPosition.TOP,
@@ -1013,8 +1030,21 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
             )
 
             # Keep form values after successful upload
+            QTimer.singleShot(0, lambda saved_result=result: self._confirm_regular_save(saved_result))
 
+        elif result.status == PimPreparationStatus.BLOCKED_NON_DRAFT:
+            message = result.error or "Produktas nėra Draft — forma nepakeista."
+            self.status_label.setText(message)
+            self.status_label.setStyleSheet(f"color: {COLORS['warning']}; background: transparent; background-color: transparent;")
+            InfoBar.warning(
+                title="Produktas praleistas",
+                content=message,
+                parent=self,
+                position=InfoBarPosition.TOP,
+                duration=4000,
+            )
         else:
+            message = result.error or "Paruošimas nepavyko"
             self.status_label.setText(message)
             self.status_label.setStyleSheet(f"color: {COLORS['error']}; background: transparent; background-color: transparent;")
 
@@ -1024,6 +1054,83 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
                 parent=self,
                 position=InfoBarPosition.TOP,
                 duration=5000
+            )
+
+    def _confirm_regular_save(self, result: PimPreparationResult) -> None:
+        """Verify the human PIMBO save before offering an earning entry."""
+        dialog = MessageBox(
+            "Confirm the PIMBO save",
+            "Review the product in PIMBO and click Save there. Then return here and confirm. "
+            "Only a verified save can be added to earnings.",
+            self,
+        )
+        dialog.yesButton.setText("I saved it")
+        dialog.cancelButton.setText("Skip for now")
+        if not dialog.exec():
+            return
+        try:
+            verified = PimboProductEditor(
+                self.main.driver,
+                getattr(self.main, "logger", None),
+            ).verify_manual_save(result)
+            if verified.status != PimPreparationStatus.SAVED_MANUALLY:
+                InfoBar.warning(
+                    title="Save could not be verified",
+                    content=verified.error or "PIMBO still reports unsaved changes.",
+                    parent=self,
+                    position=InfoBarPosition.TOP,
+                    duration=6000,
+                )
+                return
+
+            row = self.main.db.conn.execute(
+                """
+                SELECT id, details_json FROM processing_history
+                WHERE product_code=? AND status='ready_for_review'
+                ORDER BY id DESC LIMIT 1
+                """,
+                (result.product_code,),
+            ).fetchone()
+            history_id = None
+            if row is not None:
+                history_id = int(row["id"])
+                try:
+                    details = json.loads(row["details_json"] or "{}") or {}
+                except Exception:
+                    details = {}
+                details["pim_preparation"] = verified.to_dict()
+                self.main.db.conn.execute(
+                    "UPDATE processing_history SET status='saved_manually', details_json=? WHERE id=?",
+                    (json.dumps(details, ensure_ascii=False), history_id),
+                )
+                self.main.db.conn.commit()
+
+            self.status_label.setText("Saved manually")
+            self.status_label.setStyleSheet(
+                f"color: {COLORS['success']}; background: transparent; background-color: transparent;"
+            )
+            product_type = (
+                "frameset"
+                if self.brand_combo.currentText() == "Pinarello" and self.frameset_checkbox.isChecked()
+                else "bicycle"
+            )
+            self.main.prompt_earning_items(
+                [{
+                    "sku": result.product_code,
+                    "brand": self.brand_combo.currentText(),
+                    "product_type": product_type,
+                    "source": "regular_upload",
+                    "processing_history_id": history_id,
+                }],
+                parent=self,
+            )
+        except Exception as error:
+            InfoBar.error(
+                title="Could not verify the save",
+                content=str(error),
+                parent=self,
+                position=InfoBarPosition.TOP,
+                duration=6000,
             )
 
     # -- Attribute helpers ------------------------------------------------------

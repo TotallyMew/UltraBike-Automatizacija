@@ -20,6 +20,7 @@ from qfluentwidgets import (
     PrimaryPushButton, MessageBox, Dialog, IconWidget, qconfig, ScrollArea
 )
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
+from GUI_Qt.widgets import enable_table_copy
 from GUI_Qt.styles.theme_config import COLORS, FONTS, RADII, PADDINGS, SIZES, rgba_from_hex
 from GUI_Qt.styles.screen_theme import (
     PAGE_MARGINS,
@@ -308,6 +309,7 @@ class TranslationsScreen(ResponsiveWidget):
         self.table.verticalHeader().setVisible(False)
         self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.table.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        enable_table_copy(self.table)
 
         # Apply table styling
         self._update_table_theme()

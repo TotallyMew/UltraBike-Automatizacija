@@ -3,9 +3,9 @@ Top Bar Widget
 Displays user information and logout button
 """
 
-from PySide6.QtWidgets import QWidget, QHBoxLayout
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QMenu
 from PySide6.QtCore import Qt
-from qfluentwidgets import BodyLabel, TransparentToolButton, PushButton, FluentIcon, isDarkTheme, qconfig
+from qfluentwidgets import TransparentToolButton, PushButton, FluentIcon, isDarkTheme, qconfig
 from GUI_Qt.styles.theme_config import COLORS, SPACING
 
 
@@ -30,11 +30,7 @@ class TopBar(QWidget):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(SPACING["xl"], SPACING["md"], SPACING["xl"], SPACING["md"])
 
-        # User email label
-        self.user_label = BodyLabel("")
-        layout.addWidget(self.user_label)
-
-        # Spacer
+        # Secondary app controls stay together on the right.
         layout.addStretch()
 
         # Reconnect browser button
@@ -43,14 +39,13 @@ class TopBar(QWidget):
         self.reconnect_button.clicked.connect(self.on_reconnect_callback)
         layout.addWidget(self.reconnect_button)
 
-        # Logout button (more emphasized)
-        self.logout_button = PushButton("")
-        try:
-            self.logout_button.setIcon(FluentIcon.CANCEL)
-        except Exception:
-            pass
-        self.logout_button.clicked.connect(self.on_logout_callback)
-        layout.addWidget(self.logout_button)
+        self.user_button = PushButton("")
+        self.user_button.setObjectName("accountMenu")
+        self.user_menu = QMenu(self.user_button)
+        self.logout_action = self.user_menu.addAction("")
+        self.logout_action.triggered.connect(self.on_logout_callback)
+        self.user_button.setMenu(self.user_menu)
+        layout.addWidget(self.user_button)
 
         self.setLayout(layout)
 
@@ -71,8 +66,15 @@ class TopBar(QWidget):
             #TopBar {{
                 background-color: {bg_color};
             }}
-            #TopBar BodyLabel {{
+            #TopBar PushButton#accountMenu {{
                 color: {text_primary};
+                background: transparent;
+                border: 1px solid {COLORS['border_dark'] if is_dark else COLORS['border_light']};
+                border-radius: 7px;
+                padding: 6px 12px;
+            }}
+            #TopBar PushButton#accountMenu:hover {{
+                background-color: {'#303447' if is_dark else '#FFFFFF'};
             }}
             #TopBar TransparentToolButton {{
                 color: {text_secondary};
@@ -81,11 +83,11 @@ class TopBar(QWidget):
         )
 
     def retranslate_ui(self):
-        self.user_label.setText(self.tr("topbar.logged_in", user=self.user_text))
+        self.user_button.setText(self.tr("topbar.logged_in", user=self.user_text))
         self.reconnect_button.setToolTip(self.tr("topbar.reconnect"))
-        self.logout_button.setText(self.tr("topbar.logout"))
+        self.logout_action.setText(self.tr("topbar.logout"))
 
     def update_user(self, user_text):
         """Update displayed user text"""
         self.user_text = user_text
-        self.user_label.setText(self.tr("topbar.logged_in", user=user_text))
+        self.user_button.setText(self.tr("topbar.logged_in", user=user_text))

@@ -394,23 +394,39 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
         download_images_layout.addWidget(self.download_images_switch)
         features_layout.addLayout(download_images_layout)
 
-        # Auto-save toggle
-        auto_save_layout = QHBoxLayout()
-        auto_save_info = QVBoxLayout()
-        auto_save_label = BodyLabel(translate(self._preview_lang_code, "settings.features.autosave.title"))
-        self._ui["auto_save_label"] = auto_save_label
-        auto_save_label.setStyleSheet("font-weight: 500;")
-        auto_save_sublabel = CaptionLabel(translate(self._preview_lang_code, "settings.features.autosave.desc"))
-        self._ui["auto_save_sublabel"] = auto_save_sublabel
-        auto_save_info.addWidget(auto_save_label)
-        auto_save_info.addWidget(auto_save_sublabel)
+        # Product-page MagicAI templates are configurable here.  The desktop
+        # app never opens or changes PIMBO's template administration page.
+        magic_title_layout = QHBoxLayout()
+        magic_title_info = QVBoxLayout()
+        magic_title_label = BodyLabel(translate(self._preview_lang_code, "settings.features.magic_title.title"))
+        self._ui["magic_title_label"] = magic_title_label
+        magic_title_label.setStyleSheet("font-weight: 500;")
+        magic_title_caption = CaptionLabel(translate(self._preview_lang_code, "settings.features.magic_title.desc"))
+        self._ui["magic_title_caption"] = magic_title_caption
+        magic_title_info.addWidget(magic_title_label)
+        magic_title_info.addWidget(magic_title_caption)
+        self.magic_title_template_field = LineEdit()
+        self.magic_title_template_field.setMinimumWidth(SIZES['field_min_width_md'])
+        magic_title_layout.addLayout(magic_title_info)
+        magic_title_layout.addStretch()
+        magic_title_layout.addWidget(self.magic_title_template_field)
+        features_layout.addLayout(magic_title_layout)
 
-        self.auto_save_switch = SwitchButton()
-
-        auto_save_layout.addLayout(auto_save_info)
-        auto_save_layout.addStretch()
-        auto_save_layout.addWidget(self.auto_save_switch)
-        features_layout.addLayout(auto_save_layout)
+        magic_description_layout = QHBoxLayout()
+        magic_description_info = QVBoxLayout()
+        magic_description_label = BodyLabel(translate(self._preview_lang_code, "settings.features.magic_description.title"))
+        self._ui["magic_description_label"] = magic_description_label
+        magic_description_label.setStyleSheet("font-weight: 500;")
+        magic_description_caption = CaptionLabel(translate(self._preview_lang_code, "settings.features.magic_description.desc"))
+        self._ui["magic_description_caption"] = magic_description_caption
+        magic_description_info.addWidget(magic_description_label)
+        magic_description_info.addWidget(magic_description_caption)
+        self.magic_description_template_field = LineEdit()
+        self.magic_description_template_field.setMinimumWidth(SIZES['field_min_width_md'])
+        magic_description_layout.addLayout(magic_description_info)
+        magic_description_layout.addStretch()
+        magic_description_layout.addWidget(self.magic_description_template_field)
+        features_layout.addLayout(magic_description_layout)
 
         # Auto-delete pabaigta*.txt toggle
         auto_delete_layout = QHBoxLayout()
@@ -674,13 +690,14 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
 
         # Switches
         self.download_images_switch.checkedChanged.connect(lambda: self._mark_dirty())
-        self.auto_save_switch.checkedChanged.connect(lambda: self._mark_dirty())
         self.auto_delete_pabaigta_switch.checkedChanged.connect(lambda: self._mark_dirty())
         if hasattr(self, 'multi_session_switch'):
             self.multi_session_switch.checkedChanged.connect(lambda: self._mark_dirty())
         # Text fields
         self.kross_path_field.textChanged.connect(lambda: self._mark_dirty())
         self.repo_path_field.textChanged.connect(lambda: self._mark_dirty())
+        self.magic_title_template_field.textChanged.connect(lambda: self._mark_dirty())
+        self.magic_description_template_field.textChanged.connect(lambda: self._mark_dirty())
 
     def _load_settings(self):
         """Load current settings from database"""
@@ -706,8 +723,13 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
 
         # Load feature toggles
         self.download_images_switch.setChecked(self.main.settings.get('download_images', False))
-        self.auto_save_switch.setChecked(self.main.settings.get('auto_save', True))
         self.auto_delete_pabaigta_switch.setChecked(self.main.settings.get('auto_delete_pabaigta_files', False))
+        self.magic_title_template_field.setText(
+            self.main.settings.get('magicai_title_template', 'Prekės pavadinimas')
+        )
+        self.magic_description_template_field.setText(
+            self.main.settings.get('magicai_description_template', 'Aprašymas LT')
+        )
 
         # Load multi-session + browser count
         if hasattr(self, 'multi_session_switch'):
@@ -823,10 +845,14 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
             self._ui["download_images_label"].setText(tr("settings.features.download.title"))
         if "download_images_sublabel" in self._ui:
             self._ui["download_images_sublabel"].setText(tr("settings.features.download.desc"))
-        if "auto_save_label" in self._ui:
-            self._ui["auto_save_label"].setText(tr("settings.features.autosave.title"))
-        if "auto_save_sublabel" in self._ui:
-            self._ui["auto_save_sublabel"].setText(tr("settings.features.autosave.desc"))
+        if "magic_title_label" in self._ui:
+            self._ui["magic_title_label"].setText(tr("settings.features.magic_title.title"))
+        if "magic_title_caption" in self._ui:
+            self._ui["magic_title_caption"].setText(tr("settings.features.magic_title.desc"))
+        if "magic_description_label" in self._ui:
+            self._ui["magic_description_label"].setText(tr("settings.features.magic_description.title"))
+        if "magic_description_caption" in self._ui:
+            self._ui["magic_description_caption"].setText(tr("settings.features.magic_description.desc"))
         if "auto_delete_label" in self._ui:
             self._ui["auto_delete_label"].setText(tr("settings.features.auto_delete_pabaigta.title"))
         if "auto_delete_sublabel" in self._ui:
@@ -939,8 +965,11 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
             language = self.language_combo.currentText() or self._get_saved_language_display()
             browser = self.browser_combo.currentText()
             download_images = self.download_images_switch.isChecked()
-            auto_save = self.auto_save_switch.isChecked()
             auto_delete_pabaigta = self.auto_delete_pabaigta_switch.isChecked()
+            magic_title_template = self.magic_title_template_field.text().strip()
+            magic_description_template = self.magic_description_template_field.text().strip()
+            if not magic_title_template or not magic_description_template:
+                raise ValueError("MagicAI template names cannot be empty")
             multi_session_enabled = self.multi_session_switch.isChecked() if hasattr(self, 'multi_session_switch') else False
             try:
                 browser_count = int(self.browser_count_combo.currentText().strip()) if hasattr(self, 'browser_count_combo') else 2
@@ -955,8 +984,9 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
             self.main.settings.set('language', language)
             self.main.settings.set('browser_choice', browser)
             self.main.settings.set('download_images', download_images)
-            self.main.settings.set('auto_save', auto_save)
             self.main.settings.set('auto_delete_pabaigta_files', auto_delete_pabaigta)
+            self.main.settings.set('magicai_title_template', magic_title_template)
+            self.main.settings.set('magicai_description_template', magic_description_template)
             self.main.settings.set('multi_session_enabled', bool(multi_session_enabled))
             self.main.settings.set('browser_count', int(browser_count))
             self.main.settings.set('theme', theme_name)

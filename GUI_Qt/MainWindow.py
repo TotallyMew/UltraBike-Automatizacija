@@ -3,18 +3,20 @@ Main Application Window
 Manages navigation, state, and screen switching
 """
 
-from PySide6.QtWidgets import QWidget, QStackedWidget, QHBoxLayout, QApplication, QLineEdit
+from PySide6.QtWidgets import QWidget, QStackedWidget, QHBoxLayout, QApplication, QLineEdit, QMessageBox
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFont, QColor
 from qfluentwidgets import FluentWindow, NavigationItemPosition, FluentIcon, MessageBox, InfoBar, InfoBarPosition
 
 import queue
+import threading
 from Utilities.ErrorManager import ErrorManager
 
 from Config.BrowserConfig.BrowserManager import BrowserManager
 from Config.LoginConfig.CredentialManager import CredentialManager
 from Database.DatabaseManager import DatabaseManager
 from Database.SettingsManager import SettingsManager
+from Managers.EarningsManager import EarningsManager
 from Utilities.Logger import Logger
 from Utilities.Version import get_app_version
 from Utilities.Updater import fetch_update_manifest, is_newer_version, download_to_temp, sha256_file, run_installer
@@ -39,6 +41,11 @@ class MainWindow(FluentWindow):
         self.driver = None
         self.current_user = None
         self.logger = Logger()
+        # Selenium's shared authenticated driver is single-owner. Long-running
+        # tools (notably Orbea automation) use this cooperative lease so two
+        # screens cannot navigate Pimbo at the same time.
+        self._browser_lease_lock = threading.Lock()
+        self._browser_lease_owner = None
 
         # Database setup
         first_run = False
@@ -49,6 +56,7 @@ class MainWindow(FluentWindow):
 
         self.db = DatabaseManager()
         self.settings = SettingsManager(self.db)
+        self.earnings_manager = EarningsManager(self.db, self.settings)
         self.credential_manager = CredentialManager(self.db)
 
         # If installed via Inno Setup and this is a fresh install, start the app
@@ -87,6 +95,7 @@ class MainWindow(FluentWindow):
         self.upload_screen = None
         self.unified_batch_screen = None
         self.history_screen = None
+        self.earnings_screen = None
         self._full_history_screen = None  # Full detailed history view (accessed from Analytics)
         self.translations_screen = None
         self.descriptions_screen = None
@@ -98,6 +107,13 @@ class MainWindow(FluentWindow):
         self.info_screen = None
         self.spec_checker_screen = None
         self.name_getter_screen = None
+        self.code_getter_screen = None
+        self.product_name_getter_screen = None
+        self.castelli_url_getter_screen = None
+        self.castelli_image_downloader_screen = None
+        self.abus_url_getter_screen = None
+        self.oakley_url_getter_screen = None
+        self.orbea_screen = None
 
         # Top bar reference
         self.top_bar = None
@@ -212,6 +228,7 @@ class MainWindow(FluentWindow):
                 (getattr(self, 'upload_screen', None), "nav.upload"),
                 (getattr(self, 'unified_batch_screen', None), "nav.batch"),
                 (getattr(self, 'history_screen', None), "nav.analytics"),
+                (getattr(self, 'earnings_screen', None), "nav.earnings"),
                 (getattr(self, 'translations_screen', None), "nav.translations"),
                 (getattr(self, 'descriptions_screen', None), "nav.descriptions"),
                 (getattr(self, 'folder_creator_screen', None), "nav.folders"),
@@ -222,6 +239,13 @@ class MainWindow(FluentWindow):
                 (getattr(self, 'info_screen', None), "nav.info"),
                 (getattr(self, 'spec_checker_screen', None), "nav.spec_checker"),
                 (getattr(self, 'name_getter_screen', None), "nav.name_getter"),
+                (getattr(self, 'code_getter_screen', None), "nav.code_getter"),
+                (getattr(self, 'product_name_getter_screen', None), "nav.product_name_getter"),
+                (getattr(self, 'castelli_url_getter_screen', None), "nav.castelli_url_getter"),
+                (getattr(self, 'castelli_image_downloader_screen', None), "nav.castelli_images"),
+                (getattr(self, 'abus_url_getter_screen', None), "nav.abus_url_getter"),
+                (getattr(self, 'oakley_url_getter_screen', None), "nav.oakley_url_getter"),
+                (getattr(self, 'orbea_screen', None), "nav.orbea"),
             ]
 
             for screen, key in mapping:
@@ -235,21 +259,26 @@ class MainWindow(FluentWindow):
 
         Screen mapping (reorganized):
         0: Upload
-        1: Batch Upload
+        1: Batch Operations
         2: Descriptions
-        3: Batch Descriptions
-        4: Batch Titles
-        5: Folder Creator
-        6: Translations
-        7: Basso Images
-        8: Pinarello Images
-        9: History
-        10: Account
-        11: Settings
-        12: Info
-        13: Spec Checker
-        14: Name Getter
-        15: Modelis Clearer
+        3: Folder Creator
+        4: Translations
+        5: Basso Images
+        6: Pinarello Images
+        7: Analytics
+        8: Account
+        9: Settings
+        10: Info
+        11: Spec Checker
+        12: Name Getter
+        13: Code Getter
+        14: Castelli URL Getter
+        15: Castelli Image Downloader
+        16: ABUS URL Getter
+        17: Oakley URL Getter
+        18: Product Name Getter
+        19: Orbea Automation
+        20: Earnings
         """
         if index == 0:  # Upload
             if not self.upload_screen:
@@ -341,6 +370,65 @@ class MainWindow(FluentWindow):
                 self.name_getter_screen = NameGetterScreen(self)
             self._add_screen_to_stack(self.name_getter_screen, self.i18n.tr("nav.name_getter"))
             return self.name_getter_screen
+
+        if index == 13:  # Code Getter
+            if not self.code_getter_screen:
+                from GUI_Qt.screens.CodeGetterScreen import CodeGetterScreen
+                self.code_getter_screen = CodeGetterScreen(self)
+            self._add_screen_to_stack(self.code_getter_screen, self.i18n.tr("nav.code_getter"))
+            return self.code_getter_screen
+
+        if index == 14:  # Castelli URL Getter
+            if not self.castelli_url_getter_screen:
+                from GUI_Qt.screens.CastelliUrlGetterScreen import CastelliUrlGetterScreen
+                self.castelli_url_getter_screen = CastelliUrlGetterScreen(self)
+            self._add_screen_to_stack(self.castelli_url_getter_screen, self.i18n.tr("nav.castelli_url_getter"))
+            return self.castelli_url_getter_screen
+
+        if index == 15:  # Castelli Image Downloader
+            if not self.castelli_image_downloader_screen:
+                from GUI_Qt.screens.CastelliImageDownloaderScreen import CastelliImageDownloaderScreen
+                self.castelli_image_downloader_screen = CastelliImageDownloaderScreen(self)
+            self._add_screen_to_stack(self.castelli_image_downloader_screen, self.i18n.tr("nav.castelli_images"))
+            return self.castelli_image_downloader_screen
+
+        if index == 16:  # ABUS URL Getter
+            if not self.abus_url_getter_screen:
+                from GUI_Qt.screens.AbusUrlGetterScreen import AbusUrlGetterScreen
+                self.abus_url_getter_screen = AbusUrlGetterScreen(self)
+            self._add_screen_to_stack(self.abus_url_getter_screen, self.i18n.tr("nav.abus_url_getter"))
+            return self.abus_url_getter_screen
+
+        if index == 17:  # Oakley URL Getter
+            if not self.oakley_url_getter_screen:
+                from GUI_Qt.screens.OakleyUrlGetterScreen import OakleyUrlGetterScreen
+                self.oakley_url_getter_screen = OakleyUrlGetterScreen(self)
+            self._add_screen_to_stack(self.oakley_url_getter_screen, self.i18n.tr("nav.oakley_url_getter"))
+            return self.oakley_url_getter_screen
+
+        if index == 18:  # Product Name Getter
+            if not self.product_name_getter_screen:
+                from GUI_Qt.screens.ProductNameGetterScreen import ProductNameGetterScreen
+                self.product_name_getter_screen = ProductNameGetterScreen(self)
+            self._add_screen_to_stack(
+                self.product_name_getter_screen,
+                self.i18n.tr("nav.product_name_getter"),
+            )
+            return self.product_name_getter_screen
+
+        if index == 19:  # Orbea Automation
+            if not self.orbea_screen:
+                from GUI_Qt.screens.OrbeaScreen import OrbeaScreen
+                self.orbea_screen = OrbeaScreen(self)
+            self._add_screen_to_stack(self.orbea_screen, self.i18n.tr("nav.orbea"))
+            return self.orbea_screen
+
+        if index == 20:  # Earnings
+            if not self.earnings_screen:
+                from GUI_Qt.screens.EarningsScreen import EarningsScreen
+                self.earnings_screen = EarningsScreen(self)
+            self._add_screen_to_stack(self.earnings_screen, self.i18n.tr("nav.earnings"))
+            return self.earnings_screen
 
         return None
 
@@ -442,121 +530,112 @@ class MainWindow(FluentWindow):
         y = (screen.height() - self.height()) // 2
         self.move(x, y)
 
+    def try_acquire_browser_lease(self, owner) -> bool:
+        """Return True when *owner* may exclusively use the shared driver."""
+        with self._browser_lease_lock:
+            if self._browser_lease_owner in (None, owner):
+                self._browser_lease_owner = owner
+                return True
+            return False
+
+    def release_browser_lease(self, owner) -> None:
+        """Release a lease held by *owner* without disturbing another tool."""
+        with self._browser_lease_lock:
+            if self._browser_lease_owner == owner:
+                self._browser_lease_owner = None
+
+    def browser_lease_owner(self):
+        with self._browser_lease_lock:
+            return self._browser_lease_owner
+
     def _init_navigation(self):
         """Initialize navigation sidebar"""
 
         # Keep references to nav items so we can update text when language changes
         self._nav_items = {}
 
-        # === TOP SECTION - Primary Operations ===
-        # Upload operations
-        self._nav_items["upload"] = self.navigationInterface.addItem(
-            routeKey="upload",
-            icon=FluentIcon.CLOUD_DOWNLOAD,
-            text=self.i18n.tr("nav.upload"),
-            onClick=lambda: self._switch_to_screen(0),
-            position=NavigationItemPosition.TOP
-        )
+        def _set_route_emphasis(item, selected: bool) -> None:
+            """Give the active route a strong accent and mute inactive routes."""
+            if item is None:
+                return
+            try:
+                if selected:
+                    item.setTextColor("#183B8C", "#FFFFFF")
+                else:
+                    item.setTextColor("#4B5563", "#B7C0CD")
+                item.setIndicatorColor("#2854C5", "#83A5FF")
+                font = item.font()
+                font.setWeight(QFont.Weight.DemiBold if selected else QFont.Weight.Normal)
+                item.setFont(font)
+                item.update()
+            except Exception:
+                pass
 
-        self._nav_items["batch"] = self.navigationInterface.addItem(
-            routeKey="batch",
-            icon=FluentIcon.SYNC,
-            text=self.i18n.tr("nav.batch"),
-            onClick=lambda: self._switch_to_screen(1),
-            position=NavigationItemPosition.TOP
-        )
+        def _add_group(route_key: str, icon, text_key: str, position=NavigationItemPosition.TOP):
+            item = self.navigationInterface.addItem(
+                routeKey=route_key,
+                icon=icon,
+                text=self.i18n.tr(text_key),
+                selectable=False,
+                position=position,
+            )
+            self._nav_items[route_key] = item
+            try:
+                item.setTextColor("#344054", "#D0D5DD")
+                font = item.font()
+                font.setWeight(QFont.Weight.DemiBold)
+                item.setFont(font)
+            except Exception:
+                pass
 
-        # Content management
-        self._nav_items["descriptions"] = self.navigationInterface.addItem(
-            routeKey="descriptions",
-            icon=FluentIcon.EDIT,
-            text=self.i18n.tr("nav.descriptions"),
-            onClick=lambda: self._switch_to_screen(2),
-            position=NavigationItemPosition.TOP
-        )
+        def _add_item(route_key: str, icon, text_key: str, screen_index: int, parent_key: str, position=NavigationItemPosition.TOP):
+            item = self.navigationInterface.addItem(
+                routeKey=route_key,
+                icon=icon,
+                text=self.i18n.tr(text_key),
+                onClick=lambda: self._switch_to_screen(screen_index),
+                position=position,
+                parentRouteKey=parent_key,
+            )
+            self._nav_items[route_key] = item
+            _set_route_emphasis(item, bool(getattr(item, "isSelected", False)))
+            try:
+                item.selectedChanged.connect(
+                    lambda selected, nav_item=item: _set_route_emphasis(nav_item, bool(selected))
+                )
+            except Exception:
+                pass
 
-        # Utilities
-        self._nav_items["folders"] = self.navigationInterface.addItem(
-            routeKey="folders",
-            icon=FluentIcon.FOLDER,
-            text=self.i18n.tr("nav.folders"),
-            onClick=lambda: self._switch_to_screen(3),
-            position=NavigationItemPosition.TOP
-        )
+        _add_group("nav_group_operations", FluentIcon.CLOUD_DOWNLOAD, "nav.group.operations")
+        _add_item("upload", FluentIcon.CLOUD_DOWNLOAD, "nav.upload", 0, "nav_group_operations")
+        _add_item("batch", FluentIcon.SYNC, "nav.batch", 1, "nav_group_operations")
+        _add_item("descriptions", FluentIcon.EDIT, "nav.descriptions", 2, "nav_group_operations")
+        _add_item("folders", FluentIcon.FOLDER, "nav.folders", 3, "nav_group_operations")
+        _add_item("translations", FluentIcon.LANGUAGE, "nav.translations", 4, "nav_group_operations")
 
-        self._nav_items["translations"] = self.navigationInterface.addItem(
-            routeKey="translations",
-            icon=FluentIcon.LANGUAGE,
-            text=self.i18n.tr("nav.translations"),
-            onClick=lambda: self._switch_to_screen(4),
-            position=NavigationItemPosition.TOP
-        )
+        _add_group("nav_group_review", FluentIcon.PIE_SINGLE, "nav.group.review")
+        _add_item("history", FluentIcon.PIE_SINGLE, "nav.analytics", 7, "nav_group_review")
+        _add_item("earnings", FluentIcon.DOCUMENT, "nav.earnings", 20, "nav_group_review")
+        _add_item("spec_checker", FluentIcon.CHECKBOX, "nav.spec_checker", 11, "nav_group_review")
 
-        # Brand-specific tools
-        self._nav_items["basso_images"] = self.navigationInterface.addItem(
-            routeKey="basso_images",
-            icon=FluentIcon.PHOTO,
-            text=self.i18n.tr("nav.basso_images"),
-            onClick=lambda: self._switch_to_screen(5),
-            position=NavigationItemPosition.TOP
-        )
+        _add_group("nav_group_product_tools", FluentIcon.SEARCH, "nav.group.product_tools")
+        _add_item("name_getter", FluentIcon.SEARCH, "nav.name_getter", 12, "nav_group_product_tools")
+        _add_item("code_getter", FluentIcon.DOCUMENT, "nav.code_getter", 13, "nav_group_product_tools")
+        _add_item("product_name_getter", FluentIcon.SEARCH, "nav.product_name_getter", 18, "nav_group_product_tools")
 
-        self._nav_items["pinarello_images"] = self.navigationInterface.addItem(
-            routeKey="pinarello_images",
-            icon=FluentIcon.ALBUM,
-            text=self.i18n.tr("nav.pinarello_images"),
-            onClick=lambda: self._switch_to_screen(6),
-            position=NavigationItemPosition.TOP
-        )
+        _add_group("nav_group_brand_tools", FluentIcon.PHOTO, "nav.group.brand_tools")
+        _add_item("basso_images", FluentIcon.PHOTO, "nav.basso_images", 5, "nav_group_brand_tools")
+        _add_item("pinarello_images", FluentIcon.ALBUM, "nav.pinarello_images", 6, "nav_group_brand_tools")
+        _add_item("castelli_url_getter", FluentIcon.DOCUMENT, "nav.castelli_url_getter", 14, "nav_group_brand_tools")
+        _add_item("castelli_images", FluentIcon.PHOTO, "nav.castelli_images", 15, "nav_group_brand_tools")
+        _add_item("abus_url_getter", FluentIcon.DOCUMENT, "nav.abus_url_getter", 16, "nav_group_brand_tools")
+        _add_item("oakley_url_getter", FluentIcon.DOCUMENT, "nav.oakley_url_getter", 17, "nav_group_brand_tools")
+        _add_item("orbea", FluentIcon.SYNC, "nav.orbea", 19, "nav_group_brand_tools")
 
-        self._nav_items["history"] = self.navigationInterface.addItem(
-            routeKey="history",
-            icon=FluentIcon.PIE_SINGLE,
-            text=self.i18n.tr("nav.analytics"),
-            onClick=lambda: self._switch_to_screen(7),
-            position=NavigationItemPosition.TOP
-        )
-
-        self._nav_items["spec_checker"] = self.navigationInterface.addItem(
-            routeKey="spec_checker",
-            icon=FluentIcon.CHECKBOX,
-            text=self.i18n.tr("nav.spec_checker"),
-            onClick=lambda: self._switch_to_screen(11),
-            position=NavigationItemPosition.TOP
-        )
-
-        self._nav_items["name_getter"] = self.navigationInterface.addItem(
-            routeKey="name_getter",
-            icon=FluentIcon.SEARCH,
-            text=self.i18n.tr("nav.name_getter"),
-            onClick=lambda: self._switch_to_screen(12),
-            position=NavigationItemPosition.TOP
-        )
-
-        # === BOTTOM SECTION - System ===
-        self._nav_items["account"] = self.navigationInterface.addItem(
-            routeKey="account",
-            icon=FluentIcon.PEOPLE,
-            text=self.i18n.tr("nav.account"),
-            onClick=lambda: self._switch_to_screen(8),
-            position=NavigationItemPosition.BOTTOM
-        )
-
-        self._nav_items["settings"] = self.navigationInterface.addItem(
-            routeKey="settings",
-            icon=FluentIcon.SETTING,
-            text=self.i18n.tr("nav.settings"),
-            onClick=lambda: self._switch_to_screen(9),
-            position=NavigationItemPosition.BOTTOM
-        )
-
-        self._nav_items["info"] = self.navigationInterface.addItem(
-            routeKey="info",
-            icon=FluentIcon.INFO,
-            text=self.i18n.tr("nav.info"),
-            onClick=lambda: self._switch_to_screen(10),
-            position=NavigationItemPosition.BOTTOM
-        )
+        _add_group("nav_group_system", FluentIcon.PEOPLE, "nav.group.system", position=NavigationItemPosition.BOTTOM)
+        _add_item("account", FluentIcon.PEOPLE, "nav.account", 8, "nav_group_system", position=NavigationItemPosition.BOTTOM)
+        _add_item("settings", FluentIcon.SETTING, "nav.settings", 9, "nav_group_system", position=NavigationItemPosition.BOTTOM)
+        _add_item("info", FluentIcon.INFO, "nav.info", 10, "nav_group_system", position=NavigationItemPosition.BOTTOM)
 
         # Version label in navigation footer (under everything)
         try:
@@ -610,9 +689,15 @@ class MainWindow(FluentWindow):
         """
         try:
             self.setWindowTitle(translate(lang_code, "app.title"))
+            self._set_nav_item_text("nav_group_operations", translate(lang_code, "nav.group.operations"))
+            self._set_nav_item_text("nav_group_review", translate(lang_code, "nav.group.review"))
+            self._set_nav_item_text("nav_group_product_tools", translate(lang_code, "nav.group.product_tools"))
+            self._set_nav_item_text("nav_group_brand_tools", translate(lang_code, "nav.group.brand_tools"))
+            self._set_nav_item_text("nav_group_system", translate(lang_code, "nav.group.system"))
             self._set_nav_item_text("upload", translate(lang_code, "nav.upload"))
             self._set_nav_item_text("batch", translate(lang_code, "nav.batch"))
             self._set_nav_item_text("history", translate(lang_code, "nav.analytics"))
+            self._set_nav_item_text("earnings", translate(lang_code, "nav.earnings"))
             self._set_nav_item_text("translations", translate(lang_code, "nav.translations"))
             self._set_nav_item_text("descriptions", translate(lang_code, "nav.descriptions"))
             self._set_nav_item_text("folders", translate(lang_code, "nav.folders"))
@@ -621,6 +706,13 @@ class MainWindow(FluentWindow):
             self._set_nav_item_text("account", translate(lang_code, "nav.account"))
             self._set_nav_item_text("settings", translate(lang_code, "nav.settings"))
             self._set_nav_item_text("info", translate(lang_code, "nav.info"))
+            self._set_nav_item_text("code_getter", translate(lang_code, "nav.code_getter"))
+            self._set_nav_item_text("product_name_getter", translate(lang_code, "nav.product_name_getter"))
+            self._set_nav_item_text("castelli_url_getter", translate(lang_code, "nav.castelli_url_getter"))
+            self._set_nav_item_text("castelli_images", translate(lang_code, "nav.castelli_images"))
+            self._set_nav_item_text("abus_url_getter", translate(lang_code, "nav.abus_url_getter"))
+            self._set_nav_item_text("oakley_url_getter", translate(lang_code, "nav.oakley_url_getter"))
+            self._set_nav_item_text("orbea", translate(lang_code, "nav.orbea"))
         except Exception:
             pass
 
@@ -694,9 +786,16 @@ class MainWindow(FluentWindow):
         try:
             self.setWindowTitle(self.i18n.tr("app.title"))
 
+            self._set_nav_item_text("nav_group_operations", self.i18n.tr("nav.group.operations"))
+            self._set_nav_item_text("nav_group_review", self.i18n.tr("nav.group.review"))
+            self._set_nav_item_text("nav_group_product_tools", self.i18n.tr("nav.group.product_tools"))
+            self._set_nav_item_text("nav_group_brand_tools", self.i18n.tr("nav.group.brand_tools"))
+            self._set_nav_item_text("nav_group_system", self.i18n.tr("nav.group.system"))
+
             self._set_nav_item_text("upload", self.i18n.tr("nav.upload"))
             self._set_nav_item_text("batch", self.i18n.tr("nav.batch"))
             self._set_nav_item_text("history", self.i18n.tr("nav.analytics"))
+            self._set_nav_item_text("earnings", self.i18n.tr("nav.earnings"))
             self._set_nav_item_text("translations", self.i18n.tr("nav.translations"))
             self._set_nav_item_text("descriptions", self.i18n.tr("nav.descriptions"))
             self._set_nav_item_text("folders", self.i18n.tr("nav.folders"))
@@ -707,6 +806,13 @@ class MainWindow(FluentWindow):
             self._set_nav_item_text("info", self.i18n.tr("nav.info"))
             self._set_nav_item_text("spec_checker", self.i18n.tr("nav.spec_checker"))
             self._set_nav_item_text("name_getter", self.i18n.tr("nav.name_getter"))
+            self._set_nav_item_text("code_getter", self.i18n.tr("nav.code_getter"))
+            self._set_nav_item_text("product_name_getter", self.i18n.tr("nav.product_name_getter"))
+            self._set_nav_item_text("castelli_url_getter", self.i18n.tr("nav.castelli_url_getter"))
+            self._set_nav_item_text("castelli_images", self.i18n.tr("nav.castelli_images"))
+            self._set_nav_item_text("abus_url_getter", self.i18n.tr("nav.abus_url_getter"))
+            self._set_nav_item_text("oakley_url_getter", self.i18n.tr("nav.oakley_url_getter"))
+            self._set_nav_item_text("orbea", self.i18n.tr("nav.orbea"))
 
             # Notify screens if they implement live retranslation
             for screen in (
@@ -714,6 +820,7 @@ class MainWindow(FluentWindow):
                 getattr(self, "upload_screen", None),
                 getattr(self, "unified_batch_screen", None),
                 getattr(self, "history_screen", None),
+                getattr(self, "earnings_screen", None),
                 getattr(self, "translations_screen", None),
                 getattr(self, "descriptions_screen", None),
                 getattr(self, "folder_creator_screen", None),
@@ -724,6 +831,13 @@ class MainWindow(FluentWindow):
                 getattr(self, "info_screen", None),
                 getattr(self, "spec_checker_screen", None),
                 getattr(self, "name_getter_screen", None),
+                getattr(self, "code_getter_screen", None),
+                getattr(self, "product_name_getter_screen", None),
+                getattr(self, "castelli_url_getter_screen", None),
+                getattr(self, "castelli_image_downloader_screen", None),
+                getattr(self, "abus_url_getter_screen", None),
+                getattr(self, "oakley_url_getter_screen", None),
+                getattr(self, "orbea_screen", None),
             ):
                 if screen is not None and hasattr(screen, "retranslate_ui"):
                     try:
@@ -942,8 +1056,11 @@ class MainWindow(FluentWindow):
                     pass
             except Exception:
                 pass
-            # Master password verified, auto-login
-            self._auto_login(email, password)
+            if email and password:
+                # Master password verified, auto-login
+                self._auto_login(email, password)
+            else:
+                self.show_login(prefill_email=email or "")
 
         prompt_screen = MasterPasswordPromptDialog(self, on_success)
         self.stackedWidget.addWidget(prompt_screen)
@@ -1016,13 +1133,20 @@ class MainWindow(FluentWindow):
                 self.credential_manager.create_session(email, password)
                 self.show_main()
             else:
-                self.show_login()
+                try:
+                    self.cancel_screen_preload()
+                except Exception:
+                    pass
+                self.show_login(
+                    prefill_email=email,
+                    saved_login_failed=True,
+                )
 
         worker.finished.connect(on_complete)
         worker.start()
         self._auto_login_worker = worker  # Keep reference
 
-    def show_login(self):
+    def show_login(self, prefill_email: str = "", prefill_password: str = "", saved_login_failed: bool = False):
         """Show login screen"""
         from GUI_Qt.screens.LoginScreen import LoginScreen
 
@@ -1031,6 +1155,12 @@ class MainWindow(FluentWindow):
 
         self.stackedWidget.addWidget(self.login_screen)
         self.stackedWidget.setCurrentWidget(self.login_screen)
+        try:
+            self.login_screen.prefill_credentials(prefill_email, prefill_password)
+            if saved_login_failed:
+                self.login_screen.show_saved_login_failed_message()
+        except Exception:
+            pass
 
     def show_main(self):
         """Show main application with navigation"""
@@ -1419,6 +1549,17 @@ class MainWindow(FluentWindow):
 
     def logout(self):
         """Logout and return to login"""
+        if not self._stop_orbea_automation_for_shutdown():
+            InfoBar.warning(
+                title=self.i18n.tr("orbea.shutdown.title"),
+                content=self.i18n.tr("orbea.shutdown.wait"),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=5000,
+                parent=self,
+            )
+            return
         if self.driver:
             self.driver.quit()
             self.driver = None
@@ -1428,6 +1569,106 @@ class MainWindow(FluentWindow):
         self.navigationInterface.setVisible(False)
 
         self.show_login()
+
+    def _stop_orbea_automation_for_shutdown(self, wait_ms: int = 5000) -> bool:
+        """Ask the Orbea worker to checkpoint before its shared driver is closed."""
+        screen = getattr(self, "orbea_screen", None)
+        if screen is None or not hasattr(screen, "shutdown"):
+            return True
+        try:
+            return bool(screen.shutdown(wait_ms=wait_ms))
+        except Exception as error:
+            try:
+                self.logger.error(
+                    "OrbeaAutomation",
+                    "Could not stop Orbea automation cleanly",
+                    exception=error,
+                )
+            except Exception:
+                pass
+            return False
+
+    def closeEvent(self, event):
+        """Checkpoint long-running automation before closing application resources."""
+        try:
+            snapshot = self.earnings_manager.timer_snapshot()
+        except Exception:
+            snapshot = None
+        if snapshot is not None and snapshot.status == "running":
+            dialog = QMessageBox(self)
+            dialog.setWindowTitle(self.i18n.tr("earnings.exit.title"))
+            dialog.setText(self.i18n.tr("earnings.exit.body"))
+            keep_button = dialog.addButton(
+                self.i18n.tr("earnings.exit.keep"), QMessageBox.ButtonRole.AcceptRole
+            )
+            pause_button = dialog.addButton(
+                self.i18n.tr("earnings.exit.pause"), QMessageBox.ButtonRole.DestructiveRole
+            )
+            cancel_button = dialog.addButton(
+                self.i18n.tr("common.cancel"), QMessageBox.ButtonRole.RejectRole
+            )
+            dialog.setDefaultButton(pause_button)
+            dialog.exec()
+            clicked = dialog.clickedButton()
+            if clicked is cancel_button:
+                event.ignore()
+                return
+            if clicked is pause_button:
+                try:
+                    self.earnings_manager.pause_session()
+                except Exception:
+                    event.ignore()
+                    return
+            # Keep-running deliberately leaves the persisted segment open.  On
+            # next launch elapsed wall time is recovered from its UTC timestamp.
+            _ = keep_button
+        if not self._stop_orbea_automation_for_shutdown():
+            event.ignore()
+            return
+        try:
+            if self.driver:
+                self.driver.quit()
+                self.driver = None
+        except Exception:
+            pass
+        try:
+            self.db.close()
+        except Exception:
+            pass
+        super().closeEvent(event)
+
+    def prompt_earning_items(self, items, parent=None) -> int:
+        """Show one review dialog for verified saved products."""
+        try:
+            from GUI_Qt.screens.EarningsScreen import UploadEarningsDialog
+
+            dialog_parent = parent if parent is not None else self
+            dialog = UploadEarningsDialog(self.earnings_manager, list(items or []), dialog_parent)
+            if not dialog.items or not dialog.exec():
+                return 0
+            count = dialog.save_entries()
+            if self.earnings_screen is not None:
+                self.earnings_screen.refresh_all()
+            InfoBar.success(
+                title=self.i18n.tr("earnings.upload.added.title"),
+                content=self.i18n.tr("earnings.upload.added.body", count=count),
+                parent=dialog_parent,
+                position=InfoBarPosition.TOP,
+                duration=3500,
+            )
+            return count
+        except Exception as error:
+            try:
+                InfoBar.error(
+                    title=self.i18n.tr("earnings.upload.error.title"),
+                    content=str(error),
+                    parent=parent if parent is not None else self,
+                    position=InfoBarPosition.TOP,
+                    duration=5000,
+                )
+            except Exception:
+                pass
+            return 0
 
     def start_batch_processing(self, items):
         """

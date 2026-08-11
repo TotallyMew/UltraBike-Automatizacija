@@ -45,8 +45,9 @@ class LoginHandler:
 
             self._log("Login form submitted")
 
-            WebDriverWait(self.driver, 10).until(
-                lambda d: "/login" not in d.current_url
+            WebDriverWait(self.driver, 15).until(
+                lambda d: "/dashboard/login" not in d.current_url
+                or len(d.find_elements(*LoginSelectors.EMAIL)) == 0
             )
             
             self._log("Login successful", email=email)

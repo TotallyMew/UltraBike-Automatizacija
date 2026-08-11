@@ -40,8 +40,14 @@ class SettingsManager:
             ('extended_mode', 'true', 'bool', 'processing',
              'Enable extended mode (folder creator, scraper menu)', 'false'),
 
-            ('auto_save', 'true', 'bool', 'processing',
-             'Automatically save product updates after upload', 'true'),
+            ('auto_save', 'false', 'bool', 'processing',
+             'Legacy setting; PIMBO changes always require manual review', 'false'),
+
+            ('magicai_title_template', 'Prekės pavadinimas', 'string', 'processing',
+             'PIMBO MagicAI template used for Lithuanian product names', 'Prekės pavadinimas'),
+
+            ('magicai_description_template', 'Aprašymas LT', 'string', 'processing',
+             'PIMBO MagicAI template used for Lithuanian descriptions', 'Aprašymas LT'),
 
             ('auto_delete_pabaigta_files', 'false', 'bool', 'processing',
              'Automatically delete generated pabaigta*.txt files after successful run', 'false'),
@@ -59,6 +65,19 @@ class SettingsManager:
             
             ('last_brand', '', 'string', 'processing', 
              'Last used brand', ''),
+
+            # Orbea automation
+            ('orbea_catalogue_path', '', 'path', 'orbea',
+             'Last Orbea catalogue workbook used by the automation tab', ''),
+
+            ('orbea_output_root', '', 'path', 'orbea',
+             'Base folder for timestamped Orbea automation runs', ''),
+
+            ('orbea_filter_preset', '', 'string', 'orbea',
+             'Last Pimbo filter preset used by the Orbea automation tab', ''),
+
+            ('orbea_description_output', '', 'path', 'orbea',
+             'Output folder for Orbea model-page description text files', ''),
             
             # UI
             ('window_width', '1200', 'int', 'ui',
@@ -73,8 +92,36 @@ class SettingsManager:
             ('language', 'English', 'string', 'ui',
              'Application language (English/Lithuanian)', 'English'),
 
-              ('display_name', '', 'string', 'ui',
+            ('display_name', '', 'string', 'ui',
                'Display name shown in the top bar', ''),
+
+             # Earnings tracker
+             ('earning_rate_bicycle_cents', '100', 'int', 'earnings',
+              'Payout in cents for a bicycle', '100'),
+
+             ('earning_rate_frameset_cents', '100', 'int', 'earnings',
+              'Payout in cents for a frameset', '100'),
+
+             ('earning_rate_other_cents', '75', 'int', 'earnings',
+              'Payout in cents for another product type', '75'),
+
+             ('daily_earning_goal_cents', '0', 'int', 'earnings',
+              'Optional daily earnings target in cents; zero disables it', '0'),
+
+             ('weekly_earning_goal_cents', '0', 'int', 'earnings',
+              'Optional weekly earnings target in cents; zero disables it', '0'),
+
+             ('daily_work_goal_minutes', '0', 'int', 'earnings',
+              'Optional daily tracked-time target in minutes; zero disables it', '0'),
+
+             ('weekly_work_goal_minutes', '0', 'int', 'earnings',
+              'Optional weekly tracked-time target in minutes; zero disables it', '0'),
+
+             ('standard_workday_minutes', '480', 'int', 'earnings',
+              'Normal workday length used for income projections', '480'),
+
+             ('standard_workdays_per_week', '5', 'int', 'earnings',
+              'Normal workdays per week used for income projections', '5'),
 
              # Updates
              ('update_check_enabled', 'true', 'bool', 'updates',
@@ -237,7 +284,14 @@ class SettingsManager:
         return self.get('browser_choice', 'Chrome')
 
     def is_auto_save_enabled(self) -> bool:
-        return self.get('auto_save', True)
+        """Automatic PIMBO Save is permanently disabled by workflow policy."""
+        return False
+
+    def get_magicai_title_template(self) -> str:
+        return str(self.get('magicai_title_template', 'Prekės pavadinimas')).strip()
+
+    def get_magicai_description_template(self) -> str:
+        return str(self.get('magicai_description_template', 'Aprašymas LT')).strip()
 
     def is_auto_delete_pabaigta_files_enabled(self) -> bool:
         return self.get('auto_delete_pabaigta_files', False)

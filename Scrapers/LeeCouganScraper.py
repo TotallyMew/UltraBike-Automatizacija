@@ -5,8 +5,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, StaleElementReferenceException
 from bs4 import BeautifulSoup
-from Utilities.TranslationHandler import TranslationHandler, load_translations, load_value_translations
-from Utilities.WebIntercationHandler import WebInteractionHandler
+from Utilities.TranslationHandler import TranslationHandler
 
 def scrapeAndTranslateToFileLeeCougan(target_code, outputFile, driver, db_manager=None, credentials=None):
     translation_handler = TranslationHandler(db_manager)

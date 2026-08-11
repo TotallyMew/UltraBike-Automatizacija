@@ -35,7 +35,21 @@ a = Analysis(
     pathex=[str(ROOT)],
     binaries=[],
     datas=_datas,
-    hiddenimports=[],
+    hiddenimports=[
+        # The Orbea screen loads these services lazily after login. Keep them
+        # explicit so frozen builds include the complete workflow.
+        "GUI_Qt.screens.OrbeaScreen",
+        "tools.orbea_automation",
+        "tools.orbea_automation.catalogue",
+        "tools.orbea_automation.checkpoint",
+        "tools.orbea_automation.descriptions",
+        "tools.orbea_automation.models",
+        "tools.orbea_automation.pimbo",
+        "tools.orbea_automation.report",
+        "tools.orbea_automation.service",
+        "tools.orbea_automation.utils",
+        "tools.orbea_table_image_downloader",
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

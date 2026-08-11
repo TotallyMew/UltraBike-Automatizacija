@@ -18,6 +18,7 @@ class TranslationManager:
         self.translation_handler = TranslationHandler(db_manager)
         self.file_handler = FileHandler()
         self.db = db_manager
+        self.raw_source_text = ""
     
     def _log(self, message, **context):
         if self.logger:
@@ -57,6 +58,10 @@ class TranslationManager:
 
         try:
             scrape_func(**args)
+            self.raw_source_text = Path(self.ltPath).read_text(
+                encoding="utf-8",
+                errors="replace",
+            )
             self._log("Scraping completed", output_file=self.ltPath)
 
             # Translate using database-powered translations (preferred)

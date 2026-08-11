@@ -18,6 +18,7 @@ from datetime import datetime, timedelta
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
+from GUI_Qt.widgets import enable_table_copy
 from GUI_Qt.styles.theme_config import COLORS, FONTS, RADII, SPACING, SIZES, rgba_from_hex, get_text_color
 from GUI_Qt.styles.theme_config import COMPONENT_COLORS, PADDINGS, get_selection_bg
 from GUI_Qt.styles.screen_theme import (
@@ -227,6 +228,7 @@ class FullHistoryScreen(ResponsiveWidget):
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.table.setAlternatingRowColors(True)
         self.table.setSortingEnabled(True)
+        enable_table_copy(self.table)
         # Smooth scrolling (avoid snapping to grid/rows)
         self.table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.table.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
@@ -575,6 +577,10 @@ class FullHistoryScreen(ResponsiveWidget):
         self.status_filter.clear()
         self.status_filter.addItem("All Statuses", self._FILTER_ALL)
         self.status_filter.addItem("✓ Success", "success")
+        self.status_filter.addItem("✓ Saved manually", "saved_manually")
+        self.status_filter.addItem("◷ Ready for review", "ready_for_review")
+        self.status_filter.addItem("— Blocked non-Draft", "blocked_non_draft")
+        self.status_filter.addItem("— Discarded", "discarded")
         self.status_filter.addItem("✗ Failed", "failed")
 
         # Type filter
@@ -685,10 +691,22 @@ class FullHistoryScreen(ResponsiveWidget):
 
             # Column 4: Status
             status = record['status']
-            item = QTableWidgetItem("✓ Success" if status == 'success' else "✗ Failed")
+            status_labels = {
+                'success': "✓ Success",
+                'saved_manually': "✓ Saved manually",
+                'ready_for_review': "◷ Ready for review",
+                'blocked_non_draft': "— Blocked non-Draft",
+                'discarded': "— Discarded",
+                'failed': "✗ Failed",
+            }
+            item = QTableWidgetItem(status_labels.get(status, str(status or '')))
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            if status == 'success':
+            if status in ('success', 'saved_manually'):
                 item.setForeground(QColor(COLORS['success']))
+            elif status == 'ready_for_review':
+                item.setForeground(QColor(COLORS['warning']))
+            elif status in ('blocked_non_draft', 'discarded'):
+                item.setForeground(QColor(COLORS['text_tertiary']))
             else:
                 item.setForeground(QColor(COLORS['error']))
             self.table.setItem(row_idx, 4, item)
@@ -835,8 +853,12 @@ class FullHistoryScreen(ResponsiveWidget):
 
                 # Color-code status
                 status_cell = ws.cell(ws.max_row, 4)
-                if record['status'] == 'success':
+                if record['status'] in ('success', 'saved_manually'):
                     status_cell.font = Font(color="10B981", bold=True)
+                elif record['status'] == 'ready_for_review':
+                    status_cell.font = Font(color="F59E0B", bold=True)
+                elif record['status'] in ('blocked_non_draft', 'discarded'):
+                    status_cell.font = Font(color="8D99AE", bold=True)
                 else:
                     status_cell.font = Font(color="C81D25", bold=True)
 

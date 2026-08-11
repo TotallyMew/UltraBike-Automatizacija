@@ -1,0 +1,5867 @@
+{
+  "version": 1,
+  "created_at": "2026-08-05T08:43:43+00:00",
+  "updated_at": "2026-08-05T09:12:05+00:00",
+  "completed": false,
+  "pages": {
+    "https://cms.orbea.com/en-au/kemen-adv-20-2026": {
+      "url": "https://cms.orbea.com/en-au/kemen-adv-20-2026",
+      "canonical_url": "https://cms.orbea.com/en-au/kemen-adv-20-2026",
+      "folder": "images\\kemen-adv-20-2026",
+      "geometry_image": "images\\kemen-adv-20-2026\\geometry.png",
+      "size_guide_cm_image": "images\\kemen-adv-20-2026\\size-guide-cm.png",
+      "models": [
+        "KEMEN ADV 20 2026"
+      ],
+      "variant_skus": [
+        "T35909VU",
+        "T35909W6"
+      ],
+      "source_rows": [
+        2,
+        40
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:43:50+00:00"
+    },
+    "https://cms.orbea.com/en-au/kemen-tour-20-2026": {
+      "url": "https://cms.orbea.com/en-au/kemen-tour-20-2026",
+      "canonical_url": "https://cms.orbea.com/en-au/kemen-tour-20-2026",
+      "folder": "images\\kemen-tour-20-2026",
+      "geometry_image": "images\\kemen-tour-20-2026\\geometry.png",
+      "size_guide_cm_image": "images\\kemen-tour-20-2026\\size-guide-cm.png",
+      "models": [
+        "KEMEN TOUR 20 2026"
+      ],
+      "variant_skus": [
+        "T36603W7",
+        "T36605W9",
+        "T36605W8"
+      ],
+      "source_rows": [
+        3,
+        12,
+        27
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:43:54+00:00"
+    },
+    "https://cms.orbea.com/en-be/rise-lt-m-team": {
+      "url": "https://cms.orbea.com/en-be/rise-lt-m-team",
+      "canonical_url": "https://cms.orbea.com/en-be/rise-lt-m-team",
+      "folder": "images\\rise-lt-m-team",
+      "geometry_image": "images\\rise-lt-m-team\\geometry.png",
+      "size_guide_cm_image": "images\\rise-lt-m-team\\size-guide-cm.png",
+      "models": [
+        "Rise LT M-TEAM"
+      ],
+      "variant_skus": [
+        "T33405SY",
+        "T33409SZ",
+        "T33403UE",
+        "T33407SW",
+        "T33405CM"
+      ],
+      "source_rows": [
+        4,
+        28,
+        193,
+        347,
+        467
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1155
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "Low",
+      "geometry_position_supported": true,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:44:01+00:00"
+    },
+    "https://cms.orbea.com/en-au/kemen-tour-10-mid-2026": {
+      "url": "https://cms.orbea.com/en-au/kemen-tour-10-mid-2026",
+      "canonical_url": "https://cms.orbea.com/en-au/kemen-tour-10-mid-2026",
+      "folder": "images\\kemen-tour-10-mid-2026",
+      "geometry_image": "images\\kemen-tour-10-mid-2026\\geometry.png",
+      "size_guide_cm_image": "images\\kemen-tour-10-mid-2026\\size-guide-cm.png",
+      "models": [
+        "KEMEN TOUR 10 MID 2026"
+      ],
+      "variant_skus": [
+        "T37005W8",
+        "T37005W9",
+        "T37003W7"
+      ],
+      "source_rows": [
+        5,
+        10,
+        22
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        344
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:44:05+00:00"
+    },
+    "https://cms.orbea.com/en-at/alma-m-ltd": {
+      "url": "https://cms.orbea.com/en-at/alma-m-ltd",
+      "canonical_url": "https://cms.orbea.com/en-at/alma-m-ltd",
+      "folder": "images\\alma-m-ltd",
+      "geometry_image": "images\\alma-m-ltd\\geometry.png",
+      "size_guide_cm_image": "images\\alma-m-ltd\\size-guide-cm.png",
+      "models": [
+        "Alma M-LTD"
+      ],
+      "variant_skus": [
+        "T21805FB",
+        "T21807FA",
+        "T21805F9",
+        "T21805F8"
+      ],
+      "source_rows": [
+        6,
+        7,
+        8,
+        19
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:44:20+00:00"
+    },
+    "https://cms.orbea.com/en-be/rise-sl-m10": {
+      "url": "https://cms.orbea.com/en-be/rise-sl-m10",
+      "canonical_url": "https://cms.orbea.com/en-be/rise-sl-m10",
+      "folder": "images\\rise-sl-m10",
+      "geometry_image": "images\\rise-sl-m10\\geometry.png",
+      "size_guide_cm_image": "images\\rise-sl-m10\\size-guide-cm.png",
+      "models": [
+        "Rise SL M10"
+      ],
+      "variant_skus": [
+        "T32307CM",
+        "T32305SZ",
+        "T32309SY",
+        "T32303UE"
+      ],
+      "source_rows": [
+        9,
+        35,
+        39,
+        189
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:44:31+00:00"
+    },
+    "https://cms.orbea.com/en-au/kemen-adv-10-mid-2026": {
+      "url": "https://cms.orbea.com/en-au/kemen-adv-10-mid-2026",
+      "canonical_url": "https://cms.orbea.com/en-au/kemen-adv-10-mid-2026",
+      "folder": "images\\kemen-adv-10-mid-2026",
+      "geometry_image": "images\\kemen-adv-10-mid-2026\\geometry.png",
+      "size_guide_cm_image": "images\\kemen-adv-10-mid-2026\\size-guide-cm.png",
+      "models": [
+        "KEMEN ADV 10 MID 2026"
+      ],
+      "variant_skus": [
+        "T36303VT",
+        "T36307W6",
+        "T36305VU"
+      ],
+      "source_rows": [
+        11,
+        13,
+        362
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        344
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:44:35+00:00"
+    },
+    "https://cms.orbea.com/en-au/kemen-adv-30-2026": {
+      "url": "https://cms.orbea.com/en-au/kemen-adv-30-2026",
+      "canonical_url": "https://cms.orbea.com/en-au/kemen-adv-30-2026",
+      "folder": "images\\kemen-adv-30-2026",
+      "geometry_image": "images\\kemen-adv-30-2026\\geometry.png",
+      "size_guide_cm_image": "images\\kemen-adv-30-2026\\size-guide-cm.png",
+      "models": [
+        "KEMEN ADV 30 2026"
+      ],
+      "variant_skus": [
+        "T35809W6",
+        "T35803VT",
+        "T35805VU"
+      ],
+      "source_rows": [
+        14,
+        20,
+        34
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:44:39+00:00"
+    },
+    "https://cms.orbea.com/en-au/kemen-tour-30-2026": {
+      "url": "https://cms.orbea.com/en-au/kemen-tour-30-2026",
+      "canonical_url": "https://cms.orbea.com/en-au/kemen-tour-30-2026",
+      "folder": "images\\kemen-tour-30-2026",
+      "geometry_image": "images\\kemen-tour-30-2026\\geometry.png",
+      "size_guide_cm_image": "images\\kemen-tour-30-2026\\size-guide-cm.png",
+      "models": [
+        "KEMEN TOUR 30 2026"
+      ],
+      "variant_skus": [
+        "T36509W9",
+        "T36505W8",
+        "T36505W7"
+      ],
+      "source_rows": [
+        15,
+        31,
+        50
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:44:43+00:00"
+    },
+    "https://cms.orbea.com/en-au/kemen-tour-10-2026": {
+      "url": "https://cms.orbea.com/en-au/kemen-tour-10-2026",
+      "canonical_url": "https://cms.orbea.com/en-au/kemen-tour-10-2026",
+      "folder": "images\\kemen-tour-10-2026",
+      "geometry_image": "images\\kemen-tour-10-2026\\geometry.png",
+      "size_guide_cm_image": "images\\kemen-tour-10-2026\\size-guide-cm.png",
+      "models": [
+        "KEMEN TOUR 10 2026"
+      ],
+      "variant_skus": [
+        "T36709W9",
+        "T36705W7",
+        "T36709W8"
+      ],
+      "source_rows": [
+        16,
+        33,
+        36
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:44:47+00:00"
+    },
+    "https://cms.orbea.com/en-au/kemen-adv-20-mid-2026": {
+      "url": "https://cms.orbea.com/en-au/kemen-adv-20-mid-2026",
+      "canonical_url": "https://cms.orbea.com/en-au/kemen-adv-20-mid-2026",
+      "folder": "images\\kemen-adv-20-mid-2026",
+      "geometry_image": "images\\kemen-adv-20-mid-2026\\geometry.png",
+      "size_guide_cm_image": "images\\kemen-adv-20-mid-2026\\size-guide-cm.png",
+      "models": [
+        "KEMEN ADV 20 MID 2026"
+      ],
+      "variant_skus": [
+        "T36207VT"
+      ],
+      "source_rows": [
+        17
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        344
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:44:51+00:00"
+    },
+    "https://cms.orbea.com/en-au/kemen-adv-30-mid-2026": {
+      "url": "https://cms.orbea.com/en-au/kemen-adv-30-mid-2026",
+      "canonical_url": "https://cms.orbea.com/en-au/kemen-adv-30-mid-2026",
+      "folder": "images\\kemen-adv-30-mid-2026",
+      "geometry_image": "images\\kemen-adv-30-mid-2026\\geometry.png",
+      "size_guide_cm_image": "images\\kemen-adv-30-mid-2026\\size-guide-cm.png",
+      "models": [
+        "KEMEN ADV 30 MID 2026"
+      ],
+      "variant_skus": [
+        "T36105VU",
+        "T36107W6",
+        "T36105VT"
+      ],
+      "source_rows": [
+        18,
+        25,
+        47
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        344
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:44:55+00:00"
+    },
+    "https://cms.orbea.com/en-be/rise-lt-h10": {
+      "url": "https://cms.orbea.com/en-be/rise-lt-h10",
+      "canonical_url": "https://cms.orbea.com/en-be/rise-lt-h10",
+      "folder": "images\\rise-lt-h10",
+      "geometry_image": "images\\rise-lt-h10\\geometry.png",
+      "size_guide_cm_image": "images\\rise-lt-h10\\size-guide-cm.png",
+      "models": [
+        "Rise LT H10"
+      ],
+      "variant_skus": [
+        "T33007SU",
+        "T33005ST"
+      ],
+      "source_rows": [
+        21,
+        23
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1155
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "Low",
+      "geometry_position_supported": true,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:45:00+00:00"
+    },
+    "https://cms.orbea.com/en-be/kemen-adv-10-2026": {
+      "url": "https://cms.orbea.com/en-be/kemen-adv-10-2026",
+      "canonical_url": "https://cms.orbea.com/en-be/kemen-adv-10-2026",
+      "folder": "images\\kemen-adv-10-2026",
+      "geometry_image": "images\\kemen-adv-10-2026\\geometry.png",
+      "size_guide_cm_image": "images\\kemen-adv-10-2026\\size-guide-cm.png",
+      "models": [
+        "KEMEN ADV 10 2026"
+      ],
+      "variant_skus": [
+        "T36003W6",
+        "T36007VU"
+      ],
+      "source_rows": [
+        24,
+        29
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:45:04+00:00"
+    },
+    "https://cms.orbea.com/en-be/rise-lt-m20": {
+      "url": "https://cms.orbea.com/en-be/rise-lt-m20",
+      "canonical_url": "https://cms.orbea.com/en-be/rise-lt-m20",
+      "folder": "images\\rise-lt-m20",
+      "geometry_image": "images\\rise-lt-m20\\geometry.png",
+      "size_guide_cm_image": "images\\rise-lt-m20\\size-guide-cm.png",
+      "models": [
+        "Rise LT M20"
+      ],
+      "variant_skus": [
+        "T33209SZ",
+        "T33209SY",
+        "T33209UE",
+        "T33205CM"
+      ],
+      "source_rows": [
+        26,
+        49,
+        190,
+        336
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1155
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "Low",
+      "geometry_position_supported": true,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:45:13+00:00"
+    },
+    "https://cms.orbea.com/en-be/denna-m40": {
+      "url": "https://cms.orbea.com/en-be/denna-m40",
+      "canonical_url": "https://cms.orbea.com/en-be/denna-m40",
+      "folder": "images\\denna-m40",
+      "geometry_image": "images\\denna-m40\\geometry.png",
+      "size_guide_cm_image": "images\\denna-m40\\size-guide-cm.png",
+      "models": [
+        "Denna M40"
+      ],
+      "variant_skus": [
+        "T30605RZ",
+        "T30607RE",
+        "T30607RC"
+      ],
+      "source_rows": [
+        30,
+        41,
+        46
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        563
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:45:20+00:00"
+    },
+    "https://cms.orbea.com/en-au/kemen-tour-30-mid-2026": {
+      "url": "https://cms.orbea.com/en-au/kemen-tour-30-mid-2026",
+      "canonical_url": "https://cms.orbea.com/en-au/kemen-tour-30-mid-2026",
+      "folder": "images\\kemen-tour-30-mid-2026",
+      "geometry_image": "images\\kemen-tour-30-mid-2026\\geometry.png",
+      "size_guide_cm_image": "images\\kemen-tour-30-mid-2026\\size-guide-cm.png",
+      "models": [
+        "KEMEN TOUR 30 MID 2026"
+      ],
+      "variant_skus": [
+        "T36805W9",
+        "T36803W7",
+        "T36803W8"
+      ],
+      "source_rows": [
+        32,
+        43,
+        45
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        344
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:45:24+00:00"
+    },
+    "https://cms.orbea.com/en-be/avant-h40": {
+      "url": "https://cms.orbea.com/en-be/avant-h40",
+      "canonical_url": "https://cms.orbea.com/en-be/avant-h40",
+      "folder": "images\\avant-h40",
+      "geometry_image": "images\\avant-h40\\geometry.png",
+      "size_guide_cm_image": "images\\avant-h40\\size-guide-cm.png",
+      "models": [
+        "Avant H40"
+      ],
+      "variant_skus": [
+        "T10255BD",
+        "T10255BN"
+      ],
+      "source_rows": [
+        37,
+        38
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        636
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:45:28+00:00"
+    },
+    "https://cms.orbea.com/en-au/kemen-tour-20-mid-2026": {
+      "url": "https://cms.orbea.com/en-au/kemen-tour-20-mid-2026",
+      "canonical_url": "https://cms.orbea.com/en-au/kemen-tour-20-mid-2026",
+      "folder": "images\\kemen-tour-20-mid-2026",
+      "geometry_image": "images\\kemen-tour-20-mid-2026\\geometry.png",
+      "size_guide_cm_image": "images\\kemen-tour-20-mid-2026\\size-guide-cm.png",
+      "models": [
+        "KEMEN TOUR 20 MID 2026"
+      ],
+      "variant_skus": [
+        "T36905W7",
+        "T36905W8",
+        "T36907W9"
+      ],
+      "source_rows": [
+        42,
+        44,
+        59
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        344
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:45:32+00:00"
+    },
+    "https://cms.orbea.com/en-be/rise-lt-m10": {
+      "url": "https://cms.orbea.com/en-be/rise-lt-m10",
+      "canonical_url": "https://cms.orbea.com/en-be/rise-lt-m10",
+      "folder": "images\\rise-lt-m10",
+      "geometry_image": "images\\rise-lt-m10\\geometry.png",
+      "size_guide_cm_image": "images\\rise-lt-m10\\size-guide-cm.png",
+      "models": [
+        "Rise LT M10"
+      ],
+      "variant_skus": [
+        "T33305SZ",
+        "T33307UE",
+        "T33307CM"
+      ],
+      "source_rows": [
+        48,
+        194,
+        446
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1155
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "Low",
+      "geometry_position_supported": true,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:45:40+00:00"
+    },
+    "https://cms.orbea.com/en-be/diem-10": {
+      "url": "https://cms.orbea.com/en-be/diem-10",
+      "canonical_url": "https://cms.orbea.com/en-be/diem-10",
+      "folder": "images\\diem-10",
+      "geometry_image": "images\\diem-10\\geometry.png",
+      "size_guide_cm_image": "images\\diem-10\\size-guide-cm.png",
+      "models": [
+        "Diem 10"
+      ],
+      "variant_skus": [
+        "U37609WL",
+        "U37603WM",
+        "U37603WR"
+      ],
+      "source_rows": [
+        51,
+        56,
+        168
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:45:45+00:00"
+    },
+    "https://cms.orbea.com/en-be/diem-20": {
+      "url": "https://cms.orbea.com/en-be/diem-20",
+      "canonical_url": "https://cms.orbea.com/en-be/diem-20",
+      "folder": "images\\diem-20",
+      "geometry_image": "images\\diem-20\\geometry.png",
+      "size_guide_cm_image": "images\\diem-20\\size-guide-cm.png",
+      "models": [
+        "Diem 20"
+      ],
+      "variant_skus": [
+        "U37507WL",
+        "U37503WM",
+        "U37505WR"
+      ],
+      "source_rows": [
+        52,
+        53,
+        165
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:45:49+00:00"
+    },
+    "https://cms.orbea.com/en-be/diem-30": {
+      "url": "https://cms.orbea.com/en-be/diem-30",
+      "canonical_url": "https://cms.orbea.com/en-be/diem-30",
+      "folder": "images\\diem-30",
+      "geometry_image": "images\\diem-30\\geometry.png",
+      "size_guide_cm_image": "images\\diem-30\\size-guide-cm.png",
+      "models": [
+        "Diem 30"
+      ],
+      "variant_skus": [
+        "U37405WM",
+        "U37403WL"
+      ],
+      "source_rows": [
+        54,
+        55
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:45:52+00:00"
+    },
+    "https://cms.orbea.com/en-be/urrun-20": {
+      "url": "https://cms.orbea.com/en-be/urrun-20",
+      "canonical_url": "https://cms.orbea.com/en-be/urrun-20",
+      "folder": "images\\urrun-20",
+      "geometry_image": "images\\urrun-20\\geometry.png",
+      "size_guide_cm_image": "images\\urrun-20\\size-guide-cm.png",
+      "models": [
+        "Urrun 20"
+      ],
+      "variant_skus": [
+        "U35405Y9",
+        "U35403XY",
+        "U35407XZ"
+      ],
+      "source_rows": [
+        57,
+        62,
+        70
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:45:57+00:00"
+    },
+    "https://cms.orbea.com/en-be/urrun-10": {
+      "url": "https://cms.orbea.com/en-be/urrun-10",
+      "canonical_url": "https://cms.orbea.com/en-be/urrun-10",
+      "folder": "images\\urrun-10",
+      "geometry_image": "images\\urrun-10\\geometry.png",
+      "size_guide_cm_image": "images\\urrun-10\\size-guide-cm.png",
+      "models": [
+        "Urrun 10"
+      ],
+      "variant_skus": [
+        "U35509Y9",
+        "U35505XZ",
+        "U35503XY"
+      ],
+      "source_rows": [
+        58,
+        71,
+        97
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:46:01+00:00"
+    },
+    "https://cms.orbea.com/en-be/urrun-30": {
+      "url": "https://cms.orbea.com/en-be/urrun-30",
+      "canonical_url": "https://cms.orbea.com/en-be/urrun-30",
+      "folder": "images\\urrun-30",
+      "geometry_image": "images\\urrun-30\\geometry.png",
+      "size_guide_cm_image": "images\\urrun-30\\size-guide-cm.png",
+      "models": [
+        "Urrun 30"
+      ],
+      "variant_skus": [
+        "U35303XZ",
+        "U35305Y9",
+        "U35303XY"
+      ],
+      "source_rows": [
+        60,
+        74,
+        90
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:46:05+00:00"
+    },
+    "https://cms.orbea.com/en-au/oiz-h30": {
+      "url": "https://cms.orbea.com/en-au/oiz-h30",
+      "canonical_url": "https://cms.orbea.com/en-au/oiz-h30",
+      "folder": "images\\oiz-h30",
+      "geometry_image": "images\\oiz-h30\\geometry.png",
+      "size_guide_cm_image": "images\\oiz-h30\\size-guide-cm.png",
+      "models": [
+        "Oiz H30"
+      ],
+      "variant_skus": [
+        "U21907KY",
+        "U21905KX"
+      ],
+      "source_rows": [
+        61,
+        87
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:46:09+00:00"
+    },
+    "https://cms.orbea.com/en-au/orca-m30i": {
+      "url": "https://cms.orbea.com/en-au/orca-m30i",
+      "canonical_url": "https://cms.orbea.com/en-au/orca-m30i",
+      "folder": "images\\orca-m30i",
+      "geometry_image": "images\\orca-m30i\\geometry.png",
+      "size_guide_cm_image": "images\\orca-m30i\\size-guide-cm.png",
+      "models": [
+        "Orca M30i"
+      ],
+      "variant_skus": [
+        "U10753A4",
+        "U10751A5",
+        "U10757A6"
+      ],
+      "source_rows": [
+        63,
+        94,
+        246
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        636
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:46:13+00:00"
+    },
+    "https://cms.orbea.com/en-au/terra-race-m31eltd-1x": {
+      "url": "https://cms.orbea.com/en-au/terra-race-m31eltd-1x",
+      "canonical_url": "https://cms.orbea.com/en-au/terra-race-m31eltd-1x",
+      "folder": "images\\terra-race-m31eltd-1x",
+      "geometry_image": "images\\terra-race-m31eltd-1x\\geometry.png",
+      "size_guide_cm_image": "images\\terra-race-m31eltd-1x\\size-guide-cm.png",
+      "models": [
+        "Terra Race M31eLTD 1X"
+      ],
+      "variant_skus": [
+        "U15007ID",
+        "U15007IE",
+        "U15003IF",
+        "U15007CM"
+      ],
+      "source_rows": [
+        64,
+        77,
+        88,
+        104
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        563
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:46:20+00:00"
+    },
+    "https://cms.orbea.com/en-au/orca-m30": {
+      "url": "https://cms.orbea.com/en-au/orca-m30",
+      "canonical_url": "https://cms.orbea.com/en-au/orca-m30",
+      "folder": "images\\orca-m30",
+      "geometry_image": "images\\orca-m30\\geometry.png",
+      "size_guide_cm_image": "images\\orca-m30\\size-guide-cm.png",
+      "models": [
+        "Orca M30"
+      ],
+      "variant_skus": [
+        "U10653A5",
+        "U10657A4",
+        "U10649A6"
+      ],
+      "source_rows": [
+        65,
+        93,
+        256
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        636
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:46:25+00:00"
+    },
+    "https://cms.orbea.com/en-au/terra-m30team": {
+      "url": "https://cms.orbea.com/en-au/terra-m30team",
+      "canonical_url": "https://cms.orbea.com/en-au/terra-m30team",
+      "folder": "images\\terra-m30team",
+      "geometry_image": "images\\terra-m30team\\geometry.png",
+      "size_guide_cm_image": "images\\terra-m30team\\size-guide-cm.png",
+      "models": [
+        "Terra M30TEAM"
+      ],
+      "variant_skus": [
+        "U14202GT",
+        "U14210GQ",
+        "U14202CM",
+        "U14207GP"
+      ],
+      "source_rows": [
+        66,
+        79,
+        109,
+        255
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        563
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:46:31+00:00"
+    },
+    "https://cms.orbea.com/en-au/terra-m21eteam-1x": {
+      "url": "https://cms.orbea.com/en-au/terra-m21eteam-1x",
+      "canonical_url": "https://cms.orbea.com/en-au/terra-m21eteam-1x",
+      "folder": "images\\terra-m21eteam-1x",
+      "geometry_image": "images\\terra-m21eteam-1x\\geometry.png",
+      "size_guide_cm_image": "images\\terra-m21eteam-1x\\size-guide-cm.png",
+      "models": [
+        "Terra M21eTEAM 1X"
+      ],
+      "variant_skus": [
+        "U14703GT",
+        "U14710GQ",
+        "U14703CM",
+        "U14705GP"
+      ],
+      "source_rows": [
+        67,
+        85,
+        107,
+        234
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        563
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:46:37+00:00"
+    },
+    "https://cms.orbea.com/en-au/terra-race-m20iltd": {
+      "url": "https://cms.orbea.com/en-au/terra-race-m20iltd",
+      "canonical_url": "https://cms.orbea.com/en-au/terra-race-m20iltd",
+      "folder": "images\\terra-race-m20iltd",
+      "geometry_image": "images\\terra-race-m20iltd\\geometry.png",
+      "size_guide_cm_image": "images\\terra-race-m20iltd\\size-guide-cm.png",
+      "models": [
+        "Terra Race M20iLTD"
+      ],
+      "variant_skus": [
+        "U15103IE",
+        "U15107IF",
+        "U15107ID",
+        "U15103CM"
+      ],
+      "source_rows": [
+        68,
+        82,
+        83,
+        112
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        563
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:46:48+00:00"
+    },
+    "https://cms.orbea.com/en-au/orca-m35i": {
+      "url": "https://cms.orbea.com/en-au/orca-m35i",
+      "canonical_url": "https://cms.orbea.com/en-au/orca-m35i",
+      "folder": "images\\orca-m35i",
+      "geometry_image": "images\\orca-m35i\\geometry.png",
+      "size_guide_cm_image": "images\\orca-m35i\\size-guide-cm.png",
+      "models": [
+        "Orca M35i"
+      ],
+      "variant_skus": [
+        "U10949A5",
+        "U10953AT",
+        "U10955A4",
+        "U10955CM",
+        "U10953A6"
+      ],
+      "source_rows": [
+        69,
+        95,
+        98,
+        102,
+        228
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        636
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:46:55+00:00"
+    },
+    "https://cms.orbea.com/en-au/terra-race-m20ltd": {
+      "url": "https://cms.orbea.com/en-au/terra-race-m20ltd",
+      "canonical_url": "https://cms.orbea.com/en-au/terra-race-m20ltd",
+      "folder": "images\\terra-race-m20ltd",
+      "geometry_image": "images\\terra-race-m20ltd\\geometry.png",
+      "size_guide_cm_image": "images\\terra-race-m20ltd\\size-guide-cm.png",
+      "models": [
+        "Terra Race M20LTD"
+      ],
+      "variant_skus": [
+        "U14909IE",
+        "U14910IF",
+        "U14903ID",
+        "U14902CM"
+      ],
+      "source_rows": [
+        72,
+        81,
+        100,
+        108
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        563
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:47:02+00:00"
+    },
+    "https://cms.orbea.com/en-au/terra-m20team": {
+      "url": "https://cms.orbea.com/en-au/terra-m20team",
+      "canonical_url": "https://cms.orbea.com/en-au/terra-m20team",
+      "folder": "images\\terra-m20team",
+      "geometry_image": "images\\terra-m20team\\geometry.png",
+      "size_guide_cm_image": "images\\terra-m20team\\size-guide-cm.png",
+      "models": [
+        "Terra M20TEAM"
+      ],
+      "variant_skus": [
+        "U14403GT",
+        "U14405GQ",
+        "U14410CM"
+      ],
+      "source_rows": [
+        73,
+        75,
+        105
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        563
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:47:10+00:00"
+    },
+    "https://cms.orbea.com/en-au/terra-m31eteam-1x": {
+      "url": "https://cms.orbea.com/en-au/terra-m31eteam-1x",
+      "canonical_url": "https://cms.orbea.com/en-au/terra-m31eteam-1x",
+      "folder": "images\\terra-m31eteam-1x",
+      "geometry_image": "images\\terra-m31eteam-1x\\geometry.png",
+      "size_guide_cm_image": "images\\terra-m31eteam-1x\\size-guide-cm.png",
+      "models": [
+        "Terra M31eTEAM 1X"
+      ],
+      "variant_skus": [
+        "U14507GT",
+        "U14510GQ",
+        "U14510CM"
+      ],
+      "source_rows": [
+        76,
+        86,
+        110
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        563
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:47:17+00:00"
+    },
+    "https://cms.orbea.com/en-au/terra-race-m21eltd-1x": {
+      "url": "https://cms.orbea.com/en-au/terra-race-m21eltd-1x",
+      "canonical_url": "https://cms.orbea.com/en-au/terra-race-m21eltd-1x",
+      "folder": "images\\terra-race-m21eltd-1x",
+      "geometry_image": "images\\terra-race-m21eltd-1x\\geometry.png",
+      "size_guide_cm_image": "images\\terra-race-m21eltd-1x\\size-guide-cm.png",
+      "models": [
+        "Terra Race M21eLTD 1X"
+      ],
+      "variant_skus": [
+        "U15202ID",
+        "U15210IE",
+        "U15207IF",
+        "U15205CM"
+      ],
+      "source_rows": [
+        78,
+        80,
+        92,
+        111
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        563
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:47:25+00:00"
+    },
+    "https://cms.orbea.com/en-au/terra-m35team": {
+      "url": "https://cms.orbea.com/en-au/terra-m35team",
+      "canonical_url": "https://cms.orbea.com/en-au/terra-m35team",
+      "folder": "images\\terra-m35team",
+      "geometry_image": "images\\terra-m35team\\geometry.png",
+      "size_guide_cm_image": "images\\terra-m35team\\size-guide-cm.png",
+      "models": [
+        "Terra M35TEAM"
+      ],
+      "variant_skus": [
+        "U14305GT",
+        "U14303GQ",
+        "U14303GP"
+      ],
+      "source_rows": [
+        84,
+        91,
+        197
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        563
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:47:35+00:00"
+    },
+    "https://cms.orbea.com/en-au/terra-m30team-1x": {
+      "url": "https://cms.orbea.com/en-au/terra-m30team-1x",
+      "canonical_url": "https://cms.orbea.com/en-au/terra-m30team-1x",
+      "folder": "images\\terra-m30team-1x",
+      "geometry_image": "images\\terra-m30team-1x\\geometry.png",
+      "size_guide_cm_image": "images\\terra-m30team-1x\\size-guide-cm.png",
+      "models": [
+        "Terra M30TEAM 1X"
+      ],
+      "variant_skus": [
+        "U14103GT",
+        "U14109GQ",
+        "U14103CM",
+        "U14103GP"
+      ],
+      "source_rows": [
+        89,
+        96,
+        103,
+        280
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        974
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        563
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:47:42+00:00"
+    },
+    "https://cms.orbea.com/en-au/terra-m20iteam": {
+      "url": "https://cms.orbea.com/en-au/terra-m20iteam",
+      "canonical_url": "https://cms.orbea.com/en-au/terra-m20iteam",
+      "folder": "images\\terra-m20iteam",
+      "geometry_image": "images\\terra-m20iteam\\geometry.png",
+      "size_guide_cm_image": "images\\terra-m20iteam\\size-guide-cm.png",
+      "models": [
+        "Terra M20iTEAM"
+      ],
+      "variant_skus": [
+        "U14602GQ",
+        "U14602GT",
+        "U14602CM",
+        "U14602GP"
+      ],
+      "source_rows": [
+        99,
+        101,
+        106,
+        293
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        563
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:47:50+00:00"
+    },
+    "https://cms.orbea.com/en-be/onna-40": {
+      "url": "https://cms.orbea.com/en-be/onna-40",
+      "canonical_url": "https://cms.orbea.com/en-be/onna-40",
+      "folder": "images\\onna-40",
+      "geometry_image": "images\\onna-40\\geometry.png",
+      "size_guide_cm_image": "images\\onna-40\\size-guide-cm.png",
+      "models": [
+        "Onna 40"
+      ],
+      "variant_skus": [
+        "U20215RF",
+        "U20214RD",
+        "U20214RA"
+      ],
+      "source_rows": [
+        113,
+        116,
+        118
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        563
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:47:54+00:00"
+    },
+    "https://cms.orbea.com/en-be/onna-50": {
+      "url": "https://cms.orbea.com/en-be/onna-50",
+      "canonical_url": "https://cms.orbea.com/en-be/onna-50",
+      "folder": "images\\onna-50",
+      "geometry_image": "images\\onna-50\\geometry.png",
+      "size_guide_cm_image": "images\\onna-50\\size-guide-cm.png",
+      "models": [
+        "Onna 50"
+      ],
+      "variant_skus": [
+        "U20115RF",
+        "U20115RA",
+        "U20114RD"
+      ],
+      "source_rows": [
+        114,
+        115,
+        117
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        563
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:47:58+00:00"
+    },
+    "https://cms.orbea.com/en-au/ordu-omx": {
+      "url": "https://cms.orbea.com/en-au/ordu-omx",
+      "canonical_url": "https://cms.orbea.com/en-au/ordu-omx",
+      "folder": "images\\ordu-omx",
+      "geometry_image": "images\\ordu-omx\\geometry.png",
+      "size_guide_cm_image": "images\\ordu-omx\\size-guide-cm.png",
+      "models": [
+        "Ordu OMX"
+      ],
+      "variant_skus": [
+        "U90405CM",
+        "U90403GD",
+        "U90409GE"
+      ],
+      "source_rows": [
+        119,
+        120,
+        454
+      ],
+      "status": "error",
+      "attempts": 2,
+      "errors": [
+        "geometry: TimeoutException: Message: Timed out waiting for 'View geometry'",
+        "size guide: TimeoutException: Message: Timed out waiting for 'View size guide'"
+      ],
+      "geometry_ok": false,
+      "size_guide_cm_ok": false,
+      "geometry_dimensions": null,
+      "size_guide_cm_dimensions": null,
+      "last_attempt_at": "2026-08-05T08:49:43+00:00"
+    },
+    "https://cms.orbea.com/en-au/orca-omr": {
+      "url": "https://cms.orbea.com/en-au/orca-omr",
+      "canonical_url": "https://cms.orbea.com/en-au/orca-omr",
+      "folder": "images\\orca-omr",
+      "geometry_image": "images\\orca-omr\\geometry.png",
+      "size_guide_cm_image": "images\\orca-omr\\size-guide-cm.png",
+      "models": [
+        "Orca OMR"
+      ],
+      "variant_skus": [
+        "U90153AT",
+        "U90155CM",
+        "U90149A4",
+        "U90155A5",
+        "U90153A6"
+      ],
+      "source_rows": [
+        121,
+        122,
+        123,
+        125,
+        451
+      ],
+      "status": "error",
+      "attempts": 2,
+      "errors": [
+        "geometry: TimeoutException: Message: Timed out waiting for 'View geometry'",
+        "size guide: TimeoutException: Message: Timed out waiting for 'View size guide'"
+      ],
+      "geometry_ok": false,
+      "size_guide_cm_ok": false,
+      "geometry_dimensions": null,
+      "size_guide_cm_dimensions": null,
+      "last_attempt_at": "2026-08-05T08:51:30+00:00"
+    },
+    "https://cms.orbea.com/en-au/orca-omx": {
+      "url": "https://cms.orbea.com/en-au/orca-omx",
+      "canonical_url": "https://cms.orbea.com/en-au/orca-omx",
+      "folder": "images\\orca-omx",
+      "geometry_image": "images\\orca-omx\\geometry.png",
+      "size_guide_cm_image": "images\\orca-omx\\size-guide-cm.png",
+      "models": [
+        "Orca OMX"
+      ],
+      "variant_skus": [
+        "U90253CM",
+        "U90247AU",
+        "U90257A7",
+        "U90260A8"
+      ],
+      "source_rows": [
+        124,
+        129,
+        455,
+        462
+      ],
+      "status": "error",
+      "attempts": 2,
+      "errors": [
+        "geometry: TimeoutException: Message: Timed out waiting for 'View geometry'",
+        "size guide: TimeoutException: Message: Timed out waiting for 'View size guide'"
+      ],
+      "geometry_ok": false,
+      "size_guide_cm_ok": false,
+      "geometry_dimensions": null,
+      "size_guide_cm_dimensions": null,
+      "last_attempt_at": "2026-08-05T08:53:16+00:00"
+    },
+    "https://cms.orbea.com/en-au/terra-omr": {
+      "url": "https://cms.orbea.com/en-au/terra-omr",
+      "canonical_url": "https://cms.orbea.com/en-au/terra-omr",
+      "folder": "images\\terra-omr",
+      "geometry_image": "images\\terra-omr\\geometry.png",
+      "size_guide_cm_image": "images\\terra-omr\\size-guide-cm.png",
+      "models": [
+        "Terra OMR"
+      ],
+      "variant_skus": [
+        "U90510GT",
+        "U90505CM",
+        "U90510GQ",
+        "U90503GP"
+      ],
+      "source_rows": [
+        126,
+        127,
+        128,
+        459
+      ],
+      "status": "error",
+      "attempts": 2,
+      "errors": [
+        "geometry: TimeoutException: Message: Timed out waiting for 'View geometry'",
+        "size guide: TimeoutException: Message: Timed out waiting for 'View size guide'"
+      ],
+      "geometry_ok": false,
+      "size_guide_cm_ok": false,
+      "geometry_dimensions": null,
+      "size_guide_cm_dimensions": null,
+      "last_attempt_at": "2026-08-05T08:55:01+00:00"
+    },
+    "https://cms.orbea.com/en-au/orca-aero-omx": {
+      "url": "https://cms.orbea.com/en-au/orca-aero-omx",
+      "canonical_url": "https://cms.orbea.com/en-au/orca-aero-omx",
+      "folder": "images\\orca-aero-omx",
+      "geometry_image": "images\\orca-aero-omx\\geometry.png",
+      "size_guide_cm_image": "images\\orca-aero-omx\\size-guide-cm.png",
+      "models": [
+        "Orca Aero OMX"
+      ],
+      "variant_skus": [
+        "U90355CM",
+        "U90347AX",
+        "U90347AW",
+        "U90360AV",
+        "U90357AY"
+      ],
+      "source_rows": [
+        130,
+        463,
+        464,
+        465,
+        466
+      ],
+      "status": "error",
+      "attempts": 2,
+      "errors": [
+        "geometry: TimeoutException: Message: Timed out waiting for 'View geometry'",
+        "size guide: TimeoutException: Message: Timed out waiting for 'View size guide'"
+      ],
+      "geometry_ok": false,
+      "size_guide_cm_ok": false,
+      "geometry_dimensions": null,
+      "size_guide_cm_dimensions": null,
+      "last_attempt_at": "2026-08-05T08:56:47+00:00"
+    },
+    "https://cms.orbea.com/en-au/terra-race-omx": {
+      "url": "https://cms.orbea.com/en-au/terra-race-omx",
+      "canonical_url": "https://cms.orbea.com/en-au/terra-race-omx",
+      "folder": "images\\terra-race-omx",
+      "geometry_image": "images\\terra-race-omx\\geometry.png",
+      "size_guide_cm_image": "images\\terra-race-omx\\size-guide-cm.png",
+      "models": [
+        "Terra Race OMX"
+      ],
+      "variant_skus": [
+        "U90603IE",
+        "U90610IF",
+        "U90609ID",
+        "U90609CM"
+      ],
+      "source_rows": [
+        131,
+        132,
+        133,
+        134
+      ],
+      "status": "error",
+      "attempts": 2,
+      "errors": [
+        "geometry: TimeoutException: Message: Timed out waiting for 'View geometry'",
+        "size guide: TimeoutException: Message: Timed out waiting for 'View size guide'"
+      ],
+      "geometry_ok": false,
+      "size_guide_cm_ok": false,
+      "geometry_dimensions": null,
+      "size_guide_cm_dimensions": null,
+      "last_attempt_at": "2026-08-05T08:58:32+00:00"
+    },
+    "https://cms.orbea.com/en-be/onna-20": {
+      "url": "https://cms.orbea.com/en-be/onna-20",
+      "canonical_url": "https://cms.orbea.com/en-be/onna-20",
+      "folder": "images\\onna-20",
+      "geometry_image": "images\\onna-20\\geometry.png",
+      "size_guide_cm_image": "images\\onna-20\\size-guide-cm.png",
+      "models": [
+        "Onna 20"
+      ],
+      "variant_skus": [
+        "U20314RA",
+        "U20314RF",
+        "U20314RD"
+      ],
+      "source_rows": [
+        135,
+        142,
+        143
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        563
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:58:36+00:00"
+    },
+    "https://cms.orbea.com/en-au/oiz-m-ltd": {
+      "url": "https://cms.orbea.com/en-au/oiz-m-ltd",
+      "canonical_url": "https://cms.orbea.com/en-au/oiz-m-ltd",
+      "folder": "images\\oiz-m-ltd",
+      "geometry_image": "images\\oiz-m-ltd\\geometry.png",
+      "size_guide_cm_image": "images\\oiz-m-ltd\\size-guide-cm.png",
+      "models": [
+        "Oiz M-LTD"
+      ],
+      "variant_skus": [
+        "U23003CM",
+        "U23005PK",
+        "U23007PJ",
+        "U23007PM"
+      ],
+      "source_rows": [
+        136,
+        254,
+        324,
+        326
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:58:46+00:00"
+    },
+    "https://cms.orbea.com/en-au/oiz-m-team-axs": {
+      "url": "https://cms.orbea.com/en-au/oiz-m-team-axs",
+      "canonical_url": "https://cms.orbea.com/en-au/oiz-m-team-axs",
+      "folder": "images\\oiz-m-team-axs",
+      "geometry_image": "images\\oiz-m-team-axs\\geometry.png",
+      "size_guide_cm_image": "images\\oiz-m-team-axs\\size-guide-cm.png",
+      "models": [
+        "Oiz M-Team AXS"
+      ],
+      "variant_skus": [
+        "U22807CM",
+        "U22809PJ",
+        "U22809PL",
+        "U22807PK"
+      ],
+      "source_rows": [
+        137,
+        273,
+        278,
+        296
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:58:55+00:00"
+    },
+    "https://cms.orbea.com/en-au/oiz-h10": {
+      "url": "https://cms.orbea.com/en-au/oiz-h10",
+      "canonical_url": "https://cms.orbea.com/en-au/oiz-h10",
+      "folder": "images\\oiz-h10",
+      "geometry_image": "images\\oiz-h10\\geometry.png",
+      "size_guide_cm_image": "images\\oiz-h10\\size-guide-cm.png",
+      "models": [
+        "Oiz H10"
+      ],
+      "variant_skus": [
+        "U22005KY",
+        "U22005KX"
+      ],
+      "source_rows": [
+        138,
+        139
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:59:00+00:00"
+    },
+    "https://cms.orbea.com/en-au/oiz-m-pro": {
+      "url": "https://cms.orbea.com/en-au/oiz-m-pro",
+      "canonical_url": "https://cms.orbea.com/en-au/oiz-m-pro",
+      "folder": "images\\oiz-m-pro",
+      "geometry_image": "images\\oiz-m-pro\\geometry.png",
+      "size_guide_cm_image": "images\\oiz-m-pro\\size-guide-cm.png",
+      "models": [
+        "Oiz M-PRO"
+      ],
+      "variant_skus": [
+        "U22707CM",
+        "U22707PL",
+        "U22703PK",
+        "U22709PJ"
+      ],
+      "source_rows": [
+        140,
+        216,
+        320,
+        325
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:59:10+00:00"
+    },
+    "https://cms.orbea.com/en-au/oiz-m-team-factory": {
+      "url": "https://cms.orbea.com/en-au/oiz-m-team-factory",
+      "canonical_url": "https://cms.orbea.com/en-au/oiz-m-team-factory",
+      "folder": "images\\oiz-m-team-factory",
+      "geometry_image": "images\\oiz-m-team-factory\\geometry.png",
+      "size_guide_cm_image": "images\\oiz-m-team-factory\\size-guide-cm.png",
+      "models": [
+        "Oiz M-Team Factory"
+      ],
+      "variant_skus": [
+        "U22909CM",
+        "U22909PL",
+        "U22905PJ",
+        "U22903PK"
+      ],
+      "source_rows": [
+        141,
+        215,
+        239,
+        241
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:59:20+00:00"
+    },
+    "https://cms.orbea.com/en-au/orca-m10i-ltd-pwr-replica": {
+      "url": "https://cms.orbea.com/en-au/orca-m10i-ltd-pwr-replica",
+      "canonical_url": "https://cms.orbea.com/en-au/orca-m10i-ltd-pwr-replica",
+      "folder": "images\\orca-m10i-ltd-pwr-replica",
+      "geometry_image": "images\\orca-m10i-ltd-pwr-replica\\geometry.png",
+      "size_guide_cm_image": "images\\orca-m10i-ltd-pwr-replica\\size-guide-cm.png",
+      "models": [
+        "Orca M10i LTD PWR Replica"
+      ],
+      "variant_skus": [
+        "T16055UR"
+      ],
+      "source_rows": [
+        144
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        636
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:59:24+00:00"
+    },
+    "https://cms.orbea.com/en-au/kimu-24-h20": {
+      "url": "https://cms.orbea.com/en-au/kimu-24-h20",
+      "canonical_url": "https://cms.orbea.com/en-au/kimu-24-h20",
+      "folder": "images\\kimu-24-h20",
+      "geometry_image": "images\\kimu-24-h20\\geometry.png",
+      "size_guide_cm_image": "images\\kimu-24-h20\\size-guide-cm.png",
+      "models": [
+        "Kimu 24 H20"
+      ],
+      "variant_skus": [
+        "U00724J4",
+        "U00724J3",
+        "U00724J5"
+      ],
+      "source_rows": [
+        145,
+        152,
+        154
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1233
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        198
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:59:28+00:00"
+    },
+    "https://cms.orbea.com/en-au/kimu-27-h20": {
+      "url": "https://cms.orbea.com/en-au/kimu-27-h20",
+      "canonical_url": "https://cms.orbea.com/en-au/kimu-27-h20",
+      "folder": "images\\kimu-27-h20",
+      "geometry_image": "images\\kimu-27-h20\\geometry.png",
+      "size_guide_cm_image": "images\\kimu-27-h20\\size-guide-cm.png",
+      "models": [
+        "Kimu 27 H20"
+      ],
+      "variant_skus": [
+        "U01127J5",
+        "U01127J4",
+        "U01127J3"
+      ],
+      "source_rows": [
+        146,
+        150,
+        178
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1233
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        198
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:59:32+00:00"
+    },
+    "https://cms.orbea.com/en-au/kimu-24-h10": {
+      "url": "https://cms.orbea.com/en-au/kimu-24-h10",
+      "canonical_url": "https://cms.orbea.com/en-au/kimu-24-h10",
+      "folder": "images\\kimu-24-h10",
+      "geometry_image": "images\\kimu-24-h10\\geometry.png",
+      "size_guide_cm_image": "images\\kimu-24-h10\\size-guide-cm.png",
+      "models": [
+        "Kimu 24 H10"
+      ],
+      "variant_skus": [
+        "U00824J5",
+        "U00824J3",
+        "U00824J4"
+      ],
+      "source_rows": [
+        147,
+        160,
+        187
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1233
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        198
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:59:37+00:00"
+    },
+    "https://cms.orbea.com/en-au/kimu-20-h10": {
+      "url": "https://cms.orbea.com/en-au/kimu-20-h10",
+      "canonical_url": "https://cms.orbea.com/en-au/kimu-20-h10",
+      "folder": "images\\kimu-20-h10",
+      "geometry_image": "images\\kimu-20-h10\\geometry.png",
+      "size_guide_cm_image": "images\\kimu-20-h10\\size-guide-cm.png",
+      "models": [
+        "Kimu 20 H10"
+      ],
+      "variant_skus": [
+        "U00520J3",
+        "U00520J1",
+        "U00520J4"
+      ],
+      "source_rows": [
+        148,
+        149,
+        172
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1233
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        198
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:59:42+00:00"
+    },
+    "https://cms.orbea.com/en-au/kimu-16": {
+      "url": "https://cms.orbea.com/en-au/kimu-16",
+      "canonical_url": "https://cms.orbea.com/en-au/kimu-16",
+      "folder": "images\\kimu-16",
+      "geometry_image": "images\\kimu-16\\geometry.png",
+      "size_guide_cm_image": "images\\kimu-16\\size-guide-cm.png",
+      "models": [
+        "Kimu 16"
+      ],
+      "variant_skus": [
+        "U00216J1",
+        "U00216J2"
+      ],
+      "source_rows": [
+        151,
+        164
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1233
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        198
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:59:47+00:00"
+    },
+    "https://cms.orbea.com/en-au/kimu-27-h10": {
+      "url": "https://cms.orbea.com/en-au/kimu-27-h10",
+      "canonical_url": "https://cms.orbea.com/en-au/kimu-27-h10",
+      "folder": "images\\kimu-27-h10",
+      "geometry_image": "images\\kimu-27-h10\\geometry.png",
+      "size_guide_cm_image": "images\\kimu-27-h10\\size-guide-cm.png",
+      "models": [
+        "Kimu 27 H10"
+      ],
+      "variant_skus": [
+        "U01227J5",
+        "U01227J4",
+        "U01227J3"
+      ],
+      "source_rows": [
+        153,
+        157,
+        166
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1233
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        198
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:59:53+00:00"
+    },
+    "https://cms.orbea.com/en-be/kimu-20-h20": {
+      "url": "https://cms.orbea.com/en-be/kimu-20-h20",
+      "canonical_url": "https://cms.orbea.com/en-be/kimu-20-h20",
+      "folder": "images\\kimu-20-h20",
+      "geometry_image": "images\\kimu-20-h20\\geometry.png",
+      "size_guide_cm_image": "images\\kimu-20-h20\\size-guide-cm.png",
+      "models": [
+        "Kimu 20 H20"
+      ],
+      "variant_skus": [
+        "U00420J1",
+        "U00420J3",
+        "U00420J4"
+      ],
+      "source_rows": [
+        155,
+        163,
+        175
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1233
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        198
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T08:59:58+00:00"
+    },
+    "https://cms.orbea.com/en-be/carpe-10": {
+      "url": "https://cms.orbea.com/en-be/carpe-10",
+      "canonical_url": "https://cms.orbea.com/en-be/carpe-10",
+      "folder": "images\\carpe-10",
+      "geometry_image": "images\\carpe-10\\geometry.png",
+      "size_guide_cm_image": "images\\carpe-10\\size-guide-cm.png",
+      "models": [
+        "Carpe 10"
+      ],
+      "variant_skus": [
+        "U38005WC",
+        "U38007WD",
+        "U38007WE"
+      ],
+      "source_rows": [
+        156,
+        167,
+        169
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:00:03+00:00"
+    },
+    "https://cms.orbea.com/en-au/kimu-24-h10-tr": {
+      "url": "https://cms.orbea.com/en-au/kimu-24-h10-tr",
+      "canonical_url": "https://cms.orbea.com/en-au/kimu-24-h10-tr",
+      "folder": "images\\kimu-24-h10-tr",
+      "geometry_image": "images\\kimu-24-h10-tr\\geometry.png",
+      "size_guide_cm_image": "images\\kimu-24-h10-tr\\size-guide-cm.png",
+      "models": [
+        "Kimu 24 H10 TR"
+      ],
+      "variant_skus": [
+        "U00924J5",
+        "U00924J3",
+        "U00924J4"
+      ],
+      "source_rows": [
+        158,
+        159,
+        185
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1233
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        198
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:00:09+00:00"
+    },
+    "https://cms.orbea.com/en-be/carpe-20": {
+      "url": "https://cms.orbea.com/en-be/carpe-20",
+      "canonical_url": "https://cms.orbea.com/en-be/carpe-20",
+      "folder": "images\\carpe-20",
+      "geometry_image": "images\\carpe-20\\geometry.png",
+      "size_guide_cm_image": "images\\carpe-20\\size-guide-cm.png",
+      "models": [
+        "Carpe 20"
+      ],
+      "variant_skus": [
+        "U37905WD",
+        "U37907WE",
+        "U37903WC"
+      ],
+      "source_rows": [
+        161,
+        171,
+        183
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:00:14+00:00"
+    },
+    "https://cms.orbea.com/en-au/orca-m22-ltd-pwr": {
+      "url": "https://cms.orbea.com/en-au/orca-m22-ltd-pwr",
+      "canonical_url": "https://cms.orbea.com/en-au/orca-m22-ltd-pwr",
+      "folder": "images\\orca-m22-ltd-pwr",
+      "geometry_image": "images\\orca-m22-ltd-pwr\\geometry.png",
+      "size_guide_cm_image": "images\\orca-m22-ltd-pwr\\size-guide-cm.png",
+      "models": [
+        "Orca M22 LTD PWR"
+      ],
+      "variant_skus": [
+        "U11855CM",
+        "U11849AU",
+        "U11849A8",
+        "U11851A7"
+      ],
+      "source_rows": [
+        162,
+        170,
+        173,
+        184
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        636
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:00:22+00:00"
+    },
+    "https://cms.orbea.com/en-au/orca-m22-team": {
+      "url": "https://cms.orbea.com/en-au/orca-m22-team",
+      "canonical_url": "https://cms.orbea.com/en-au/orca-m22-team",
+      "folder": "images\\orca-m22-team",
+      "geometry_image": "images\\orca-m22-team\\geometry.png",
+      "size_guide_cm_image": "images\\orca-m22-team\\size-guide-cm.png",
+      "models": [
+        "Orca M22 TEAM"
+      ],
+      "variant_skus": [
+        "U11249A6",
+        "U11253A5",
+        "U11260A4",
+        "U11257AT",
+        "U11257CM"
+      ],
+      "source_rows": [
+        174,
+        176,
+        181,
+        182,
+        188
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        636
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:00:30+00:00"
+    },
+    "https://cms.orbea.com/en-be/carpe-25": {
+      "url": "https://cms.orbea.com/en-be/carpe-25",
+      "canonical_url": "https://cms.orbea.com/en-be/carpe-25",
+      "folder": "images\\carpe-25",
+      "geometry_image": "images\\carpe-25\\geometry.png",
+      "size_guide_cm_image": "images\\carpe-25\\size-guide-cm.png",
+      "models": [
+        "Carpe 25"
+      ],
+      "variant_skus": [
+        "U37805WC",
+        "U37803WE",
+        "U37807WD"
+      ],
+      "source_rows": [
+        177,
+        179,
+        186
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:00:36+00:00"
+    },
+    "https://cms.orbea.com/en-au/terra-m22-team-1x": {
+      "url": "https://cms.orbea.com/en-au/terra-m22-team-1x",
+      "canonical_url": "https://cms.orbea.com/en-au/terra-m22-team-1x",
+      "folder": "images\\terra-m22-team-1x",
+      "geometry_image": "images\\terra-m22-team-1x\\geometry.png",
+      "size_guide_cm_image": "images\\terra-m22-team-1x\\size-guide-cm.png",
+      "models": [
+        "Terra M22 TEAM 1X"
+      ],
+      "variant_skus": [
+        "U14809CM"
+      ],
+      "source_rows": [
+        180
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        563
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:00:46+00:00"
+    },
+    "https://cms.orbea.com/en-be/rise-sl-m20": {
+      "url": "https://cms.orbea.com/en-be/rise-sl-m20",
+      "canonical_url": "https://cms.orbea.com/en-be/rise-sl-m20",
+      "folder": "images\\rise-sl-m20",
+      "geometry_image": "images\\rise-sl-m20\\geometry.png",
+      "size_guide_cm_image": "images\\rise-sl-m20\\size-guide-cm.png",
+      "models": [
+        "Rise SL M20"
+      ],
+      "variant_skus": [
+        "T32209UE",
+        "T32209SY",
+        "T32209SW",
+        "T32207CM",
+        "T32207SZ"
+      ],
+      "source_rows": [
+        191,
+        386,
+        388,
+        425,
+        429
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:00:56+00:00"
+    },
+    "https://cms.orbea.com/en-be/rise-sl-m-ltd": {
+      "url": "https://cms.orbea.com/en-be/rise-sl-m-ltd",
+      "canonical_url": "https://cms.orbea.com/en-be/rise-sl-m-ltd",
+      "folder": "images\\rise-sl-m-ltd",
+      "geometry_image": "images\\rise-sl-m-ltd\\geometry.png",
+      "size_guide_cm_image": "images\\rise-sl-m-ltd\\size-guide-cm.png",
+      "models": [
+        "Rise SL M-LTD"
+      ],
+      "variant_skus": [
+        "T32405UE",
+        "T32409SY",
+        "T32403CM",
+        "T32405SW",
+        "T32407SZ"
+      ],
+      "source_rows": [
+        192,
+        343,
+        351,
+        353,
+        389
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:01:05+00:00"
+    },
+    "https://cms.orbea.com/en-au/ordu-m10i-ltd": {
+      "url": "https://cms.orbea.com/en-au/ordu-m10i-ltd",
+      "canonical_url": "https://cms.orbea.com/en-au/ordu-m10i-ltd",
+      "folder": "images\\ordu-m10i-ltd",
+      "geometry_image": "images\\ordu-m10i-ltd\\geometry.png",
+      "size_guide_cm_image": "images\\ordu-m10i-ltd\\size-guide-cm.png",
+      "models": [
+        "Ordu M10I LTD"
+      ],
+      "variant_skus": [
+        "U13107GE",
+        "U13109GD",
+        "U13105CM"
+      ],
+      "source_rows": [
+        195,
+        270,
+        315
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1233
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:01:12+00:00"
+    },
+    "https://cms.orbea.com/en-au/orca-aero-m21e-ltd": {
+      "url": "https://cms.orbea.com/en-au/orca-aero-m21e-ltd",
+      "canonical_url": "https://cms.orbea.com/en-au/orca-aero-m21e-ltd",
+      "folder": "images\\orca-aero-m21e-ltd",
+      "geometry_image": "images\\orca-aero-m21e-ltd\\geometry.png",
+      "size_guide_cm_image": "images\\orca-aero-m21e-ltd\\size-guide-cm.png",
+      "models": [
+        "Orca Aero M21e LTD"
+      ],
+      "variant_skus": [
+        "U12451AW",
+        "U12460AV",
+        "U12451AX",
+        "U12447CM"
+      ],
+      "source_rows": [
+        196,
+        198,
+        204,
+        302
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        636
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:01:21+00:00"
+    },
+    "https://cms.orbea.com/en-at/wild-tr-m10": {
+      "url": "https://cms.orbea.com/en-at/wild-tr-m10",
+      "canonical_url": "https://cms.orbea.com/en-at/wild-tr-m10",
+      "folder": "images\\wild-tr-m10",
+      "geometry_image": "images\\wild-tr-m10\\geometry.png",
+      "size_guide_cm_image": "images\\wild-tr-m10\\size-guide-cm.png",
+      "models": [
+        "Wild TR M10"
+      ],
+      "variant_skus": [
+        "U32809XE",
+        "U32809XC",
+        "U32809XD",
+        "U32809CM"
+      ],
+      "source_rows": [
+        199,
+        214,
+        286,
+        313
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:01:29+00:00"
+    },
+    "https://cms.orbea.com/en-au/oiz-m10-axs": {
+      "url": "https://cms.orbea.com/en-au/oiz-m10-axs",
+      "canonical_url": "https://cms.orbea.com/en-au/oiz-m10-axs",
+      "folder": "images\\oiz-m10-axs",
+      "geometry_image": "images\\oiz-m10-axs\\geometry.png",
+      "size_guide_cm_image": "images\\oiz-m10-axs\\size-guide-cm.png",
+      "models": [
+        "Oiz M10 AXS"
+      ],
+      "variant_skus": [
+        "U22505PP",
+        "U22503PQ",
+        "U22503PS"
+      ],
+      "source_rows": [
+        200,
+        217,
+        260
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:01:33+00:00"
+    },
+    "https://cms.orbea.com/en-au/ordu-m20i-ltd": {
+      "url": "https://cms.orbea.com/en-au/ordu-m20i-ltd",
+      "canonical_url": "https://cms.orbea.com/en-au/ordu-m20i-ltd",
+      "folder": "images\\ordu-m20i-ltd",
+      "geometry_image": "images\\ordu-m20i-ltd\\geometry.png",
+      "size_guide_cm_image": "images\\ordu-m20i-ltd\\size-guide-cm.png",
+      "models": [
+        "Ordu M20I LTD"
+      ],
+      "variant_skus": [
+        "U13003GE",
+        "U13007GD",
+        "U13007CM"
+      ],
+      "source_rows": [
+        201,
+        262,
+        308
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1233
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:01:41+00:00"
+    },
+    "https://cms.orbea.com/en-at/wild-tr-m20": {
+      "url": "https://cms.orbea.com/en-at/wild-tr-m20",
+      "canonical_url": "https://cms.orbea.com/en-at/wild-tr-m20",
+      "folder": "images\\wild-tr-m20",
+      "geometry_image": "images\\wild-tr-m20\\geometry.png",
+      "size_guide_cm_image": "images\\wild-tr-m20\\size-guide-cm.png",
+      "models": [
+        "Wild TR M20"
+      ],
+      "variant_skus": [
+        "U32707XD",
+        "U32705XE",
+        "U32709XC"
+      ],
+      "source_rows": [
+        202,
+        203,
+        212
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:01:46+00:00"
+    },
+    "https://cms.orbea.com/en-au/orca-m21eltd-pwr": {
+      "url": "https://cms.orbea.com/en-au/orca-m21eltd-pwr",
+      "canonical_url": "https://cms.orbea.com/en-au/orca-m21eltd-pwr",
+      "folder": "images\\orca-m21eltd-pwr",
+      "geometry_image": "images\\orca-m21eltd-pwr\\geometry.png",
+      "size_guide_cm_image": "images\\orca-m21eltd-pwr\\size-guide-cm.png",
+      "models": [
+        "Orca M21e LTD PWR"
+      ],
+      "variant_skus": [
+        "U11555A8",
+        "U11553A7",
+        "U11547AU",
+        "U11549CM"
+      ],
+      "source_rows": [
+        205,
+        207,
+        223,
+        305
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        636
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:01:57+00:00"
+    },
+    "https://cms.orbea.com/en-at/vector-10": {
+      "url": "https://cms.orbea.com/en-at/vector-10",
+      "canonical_url": "https://cms.orbea.com/en-at/vector-10",
+      "folder": "images\\vector-10",
+      "geometry_image": "images\\vector-10\\geometry.png",
+      "size_guide_cm_image": "images\\vector-10\\size-guide-cm.png",
+      "models": [
+        "Vector 10"
+      ],
+      "variant_skus": [
+        "U40307R5",
+        "U40303R4",
+        "U40303R9"
+      ],
+      "source_rows": [
+        206,
+        232,
+        243
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:02:02+00:00"
+    },
+    "https://cms.orbea.com/en-au/ordu-m10i-ltd-pwr-uci": {
+      "url": "https://cms.orbea.com/en-au/ordu-m10i-ltd-pwr-uci",
+      "canonical_url": "https://cms.orbea.com/en-au/ordu-m10i-ltd-pwr-uci",
+      "folder": "images\\ordu-m10i-ltd-pwr-uci",
+      "geometry_image": "images\\ordu-m10i-ltd-pwr-uci\\geometry.png",
+      "size_guide_cm_image": "images\\ordu-m10i-ltd-pwr-uci\\size-guide-cm.png",
+      "models": [
+        "Ordu M10I LTD PWR UCI"
+      ],
+      "variant_skus": [
+        "U13207GE",
+        "U13209GD",
+        "U13209CM"
+      ],
+      "source_rows": [
+        208,
+        222,
+        309
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1233
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:02:09+00:00"
+    },
+    "https://cms.orbea.com/en-au/orca-m30i-ltd-pwr": {
+      "url": "https://cms.orbea.com/en-au/orca-m30i-ltd-pwr",
+      "canonical_url": "https://cms.orbea.com/en-au/orca-m30i-ltd-pwr",
+      "folder": "images\\orca-m30i-ltd-pwr",
+      "geometry_image": "images\\orca-m30i-ltd-pwr\\geometry.png",
+      "size_guide_cm_image": "images\\orca-m30i-ltd-pwr\\size-guide-cm.png",
+      "models": [
+        "Orca M30i LTD PWR"
+      ],
+      "variant_skus": [
+        "U11360AU",
+        "U11351A7",
+        "U11353A8",
+        "U11360CM"
+      ],
+      "source_rows": [
+        209,
+        230,
+        282,
+        298
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        636
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:02:17+00:00"
+    },
+    "https://cms.orbea.com/en-at/wild-tr-h20": {
+      "url": "https://cms.orbea.com/en-at/wild-tr-h20",
+      "canonical_url": "https://cms.orbea.com/en-at/wild-tr-h20",
+      "folder": "images\\wild-tr-h20",
+      "geometry_image": "images\\wild-tr-h20\\geometry.png",
+      "size_guide_cm_image": "images\\wild-tr-h20\\size-guide-cm.png",
+      "models": [
+        "Wild TR H20"
+      ],
+      "variant_skus": [
+        "U32205XR",
+        "U32209XG",
+        "U32205XF"
+      ],
+      "source_rows": [
+        210,
+        219,
+        224
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:02:22+00:00"
+    },
+    "https://cms.orbea.com/en-au/orca-aero-m10i-ltd-pwr": {
+      "url": "https://cms.orbea.com/en-au/orca-aero-m10i-ltd-pwr",
+      "canonical_url": "https://cms.orbea.com/en-au/orca-aero-m10i-ltd-pwr",
+      "folder": "images\\orca-aero-m10i-ltd-pwr",
+      "geometry_image": "images\\orca-aero-m10i-ltd-pwr\\geometry.png",
+      "size_guide_cm_image": "images\\orca-aero-m10i-ltd-pwr\\size-guide-cm.png",
+      "models": [
+        "Orca Aero M10i LTD PWR"
+      ],
+      "variant_skus": [
+        "U12553AY",
+        "U12553AX",
+        "U12549AW",
+        "U12555CM"
+      ],
+      "source_rows": [
+        211,
+        251,
+        287,
+        299
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        636
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:02:33+00:00"
+    },
+    "https://cms.orbea.com/en-au/terra-race-m11eltd-1x-pwr": {
+      "url": "https://cms.orbea.com/en-au/terra-race-m11eltd-1x-pwr",
+      "canonical_url": "https://cms.orbea.com/en-au/terra-race-m11eltd-1x-pwr",
+      "folder": "images\\terra-race-m11eltd-1x-pwr",
+      "geometry_image": "images\\terra-race-m11eltd-1x-pwr\\geometry.png",
+      "size_guide_cm_image": "images\\terra-race-m11eltd-1x-pwr\\size-guide-cm.png",
+      "models": [
+        "Terra Race M11eLTD 1X PWR"
+      ],
+      "variant_skus": [
+        "U15310IE",
+        "U15309IF",
+        "U15305ID",
+        "U15303CM"
+      ],
+      "source_rows": [
+        213,
+        227,
+        265,
+        314
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        563
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:02:42+00:00"
+    },
+    "https://cms.orbea.com/en-au/ordu-m30i-ltd": {
+      "url": "https://cms.orbea.com/en-au/ordu-m30i-ltd",
+      "canonical_url": "https://cms.orbea.com/en-au/ordu-m30i-ltd",
+      "folder": "images\\ordu-m30i-ltd",
+      "geometry_image": "images\\ordu-m30i-ltd\\geometry.png",
+      "size_guide_cm_image": "images\\ordu-m30i-ltd\\size-guide-cm.png",
+      "models": [
+        "Ordu M30I LTD"
+      ],
+      "variant_skus": [
+        "U12903GD",
+        "U12905GE",
+        "U12909CM"
+      ],
+      "source_rows": [
+        218,
+        285,
+        297
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1233
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:02:51+00:00"
+    },
+    "https://cms.orbea.com/en-at/wild-tr-h10": {
+      "url": "https://cms.orbea.com/en-at/wild-tr-h10",
+      "canonical_url": "https://cms.orbea.com/en-at/wild-tr-h10",
+      "folder": "images\\wild-tr-h10",
+      "geometry_image": "images\\wild-tr-h10\\geometry.png",
+      "size_guide_cm_image": "images\\wild-tr-h10\\size-guide-cm.png",
+      "models": [
+        "Wild TR H10"
+      ],
+      "variant_skus": [
+        "U32303XG",
+        "U32305XR",
+        "U32305XF"
+      ],
+      "source_rows": [
+        220,
+        295,
+        322
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:02:56+00:00"
+    },
+    "https://cms.orbea.com/en-au/orca-m21eteam": {
+      "url": "https://cms.orbea.com/en-au/orca-m21eteam",
+      "canonical_url": "https://cms.orbea.com/en-au/orca-m21eteam",
+      "folder": "images\\orca-m21eteam",
+      "geometry_image": "images\\orca-m21eteam\\geometry.png",
+      "size_guide_cm_image": "images\\orca-m21eteam\\size-guide-cm.png",
+      "models": [
+        "Orca M21eTEAM"
+      ],
+      "variant_skus": [
+        "U11149A6",
+        "U11157A5",
+        "U11149AT",
+        "U11160A4",
+        "U11153CM"
+      ],
+      "source_rows": [
+        221,
+        248,
+        250,
+        253,
+        304
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        636
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:03:06+00:00"
+    },
+    "https://cms.orbea.com/en-au/orca-m20iteam": {
+      "url": "https://cms.orbea.com/en-au/orca-m20iteam",
+      "canonical_url": "https://cms.orbea.com/en-au/orca-m20iteam",
+      "folder": "images\\orca-m20iteam",
+      "geometry_image": "images\\orca-m20iteam\\geometry.png",
+      "size_guide_cm_image": "images\\orca-m20iteam\\size-guide-cm.png",
+      "models": [
+        "Orca M20i TEAM"
+      ],
+      "variant_skus": [
+        "U11053A5",
+        "U11055AT",
+        "U11053A6",
+        "U11057CM",
+        "U11047A4"
+      ],
+      "source_rows": [
+        225,
+        237,
+        245,
+        310,
+        318
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        636
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:03:14+00:00"
+    },
+    "https://cms.orbea.com/en-au/orca-aero-m20i-ltd": {
+      "url": "https://cms.orbea.com/en-au/orca-aero-m20i-ltd",
+      "canonical_url": "https://cms.orbea.com/en-au/orca-aero-m20i-ltd",
+      "folder": "images\\orca-aero-m20i-ltd",
+      "geometry_image": "images\\orca-aero-m20i-ltd\\geometry.png",
+      "size_guide_cm_image": "images\\orca-aero-m20i-ltd\\size-guide-cm.png",
+      "models": [
+        "Orca Aero M20i LTD"
+      ],
+      "variant_skus": [
+        "U12347AX",
+        "U12355AW",
+        "U12349AV",
+        "U12351CM"
+      ],
+      "source_rows": [
+        226,
+        257,
+        269,
+        303
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        636
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:03:22+00:00"
+    },
+    "https://cms.orbea.com/en-au/oiz-m20": {
+      "url": "https://cms.orbea.com/en-au/oiz-m20",
+      "canonical_url": "https://cms.orbea.com/en-au/oiz-m20",
+      "folder": "images\\oiz-m20",
+      "geometry_image": "images\\oiz-m20\\geometry.png",
+      "size_guide_cm_image": "images\\oiz-m20\\size-guide-cm.png",
+      "models": [
+        "Oiz M20"
+      ],
+      "variant_skus": [
+        "U22309PP",
+        "U22305PS",
+        "U22309PQ"
+      ],
+      "source_rows": [
+        229,
+        321,
+        323
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:03:27+00:00"
+    },
+    "https://cms.orbea.com/en-au/orca-aero-m30i-ltd": {
+      "url": "https://cms.orbea.com/en-au/orca-aero-m30i-ltd",
+      "canonical_url": "https://cms.orbea.com/en-au/orca-aero-m30i-ltd",
+      "folder": "images\\orca-aero-m30i-ltd",
+      "geometry_image": "images\\orca-aero-m30i-ltd\\geometry.png",
+      "size_guide_cm_image": "images\\orca-aero-m30i-ltd\\size-guide-cm.png",
+      "models": [
+        "Orca Aero M30i LTD"
+      ],
+      "variant_skus": [
+        "U12251AW",
+        "U12249AX",
+        "U12260AV",
+        "U12247CM"
+      ],
+      "source_rows": [
+        231,
+        235,
+        274,
+        300
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        636
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:03:34+00:00"
+    },
+    "https://cms.orbea.com/en-au/oiz-m30": {
+      "url": "https://cms.orbea.com/en-au/oiz-m30",
+      "canonical_url": "https://cms.orbea.com/en-au/oiz-m30",
+      "folder": "images\\oiz-m30",
+      "geometry_image": "images\\oiz-m30\\geometry.png",
+      "size_guide_cm_image": "images\\oiz-m30\\size-guide-cm.png",
+      "models": [
+        "Oiz M30"
+      ],
+      "variant_skus": [
+        "U22205PP",
+        "U22203PS",
+        "U22203PQ"
+      ],
+      "source_rows": [
+        233,
+        263,
+        316
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:03:38+00:00"
+    },
+    "https://cms.orbea.com/en-au/oiz-m10": {
+      "url": "https://cms.orbea.com/en-au/oiz-m10",
+      "canonical_url": "https://cms.orbea.com/en-au/oiz-m10",
+      "folder": "images\\oiz-m10",
+      "geometry_image": "images\\oiz-m10\\geometry.png",
+      "size_guide_cm_image": "images\\oiz-m10\\size-guide-cm.png",
+      "models": [
+        "Oiz M10"
+      ],
+      "variant_skus": [
+        "U22409PP",
+        "U22409PQ",
+        "U22405PS"
+      ],
+      "source_rows": [
+        236,
+        317,
+        319
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:03:43+00:00"
+    },
+    "https://cms.orbea.com/en-at/vector-25": {
+      "url": "https://cms.orbea.com/en-at/vector-25",
+      "canonical_url": "https://cms.orbea.com/en-at/vector-25",
+      "folder": "images\\vector-25",
+      "geometry_image": "images\\vector-25\\geometry.png",
+      "size_guide_cm_image": "images\\vector-25\\size-guide-cm.png",
+      "models": [
+        "Vector 25"
+      ],
+      "variant_skus": [
+        "U40105R5",
+        "U40109R4",
+        "U40109R9"
+      ],
+      "source_rows": [
+        238,
+        284,
+        289
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:03:47+00:00"
+    },
+    "https://cms.orbea.com/en-au/terra-h50": {
+      "url": "https://cms.orbea.com/en-au/terra-h50",
+      "canonical_url": "https://cms.orbea.com/en-au/terra-h50",
+      "folder": "images\\terra-h50",
+      "geometry_image": "images\\terra-h50\\geometry.png",
+      "size_guide_cm_image": "images\\terra-h50\\size-guide-cm.png",
+      "models": [
+        "Terra H50"
+      ],
+      "variant_skus": [
+        "U13510IL",
+        "U13509IM",
+        "U13503IN"
+      ],
+      "source_rows": [
+        240,
+        258,
+        281
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        563
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:03:52+00:00"
+    },
+    "https://cms.orbea.com/en-au/orca-m10iltd-pwr": {
+      "url": "https://cms.orbea.com/en-au/orca-m10iltd-pwr",
+      "canonical_url": "https://cms.orbea.com/en-au/orca-m10iltd-pwr",
+      "folder": "images\\orca-m10iltd-pwr",
+      "geometry_image": "images\\orca-m10iltd-pwr\\geometry.png",
+      "size_guide_cm_image": "images\\orca-m10iltd-pwr\\size-guide-cm.png",
+      "models": [
+        "Orca M10i LTD PWR"
+      ],
+      "variant_skus": [
+        "U11655A7",
+        "U11651A8",
+        "U11649AU",
+        "U11647CM"
+      ],
+      "source_rows": [
+        242,
+        283,
+        294,
+        307
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        636
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:04:01+00:00"
+    },
+    "https://cms.orbea.com/en-au/orca-aero-m22-ltd": {
+      "url": "https://cms.orbea.com/en-au/orca-aero-m22-ltd",
+      "canonical_url": "https://cms.orbea.com/en-au/orca-aero-m22-ltd",
+      "folder": "images\\orca-aero-m22-ltd",
+      "geometry_image": "images\\orca-aero-m22-ltd\\geometry.png",
+      "size_guide_cm_image": "images\\orca-aero-m22-ltd\\size-guide-cm.png",
+      "models": [
+        "Orca Aero M22 LTD"
+      ],
+      "variant_skus": [
+        "U12757AV",
+        "U12751AX",
+        "U12751AW",
+        "U12753CM"
+      ],
+      "source_rows": [
+        244,
+        261,
+        264,
+        312
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        636
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:04:09+00:00"
+    },
+    "https://cms.orbea.com/en-at/wild-tr-m-team": {
+      "url": "https://cms.orbea.com/en-at/wild-tr-m-team",
+      "canonical_url": "https://cms.orbea.com/en-at/wild-tr-m-team",
+      "folder": "images\\wild-tr-m-team",
+      "geometry_image": "images\\wild-tr-m-team\\geometry.png",
+      "size_guide_cm_image": "images\\wild-tr-m-team\\size-guide-cm.png",
+      "models": [
+        "Wild TR M-TEAM"
+      ],
+      "variant_skus": [
+        "U32905XE",
+        "U32907XC",
+        "U32905XD",
+        "U32909CM"
+      ],
+      "source_rows": [
+        247,
+        267,
+        291,
+        306
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:04:16+00:00"
+    },
+    "https://cms.orbea.com/en-au/orca-m11eltd-pwr": {
+      "url": "https://cms.orbea.com/en-au/orca-m11eltd-pwr",
+      "canonical_url": "https://cms.orbea.com/en-au/orca-m11eltd-pwr",
+      "folder": "images\\orca-m11eltd-pwr",
+      "geometry_image": "images\\orca-m11eltd-pwr\\geometry.png",
+      "size_guide_cm_image": "images\\orca-m11eltd-pwr\\size-guide-cm.png",
+      "models": [
+        "Orca M11e LTD PWR"
+      ],
+      "variant_skus": [
+        "U11747A7",
+        "U11747A8",
+        "U11753AU",
+        "U11755CM"
+      ],
+      "source_rows": [
+        249,
+        259,
+        292,
+        301
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        636
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:04:25+00:00"
+    },
+    "https://cms.orbea.com/en-au/terra-h40": {
+      "url": "https://cms.orbea.com/en-au/terra-h40",
+      "canonical_url": "https://cms.orbea.com/en-au/terra-h40",
+      "folder": "images\\terra-h40",
+      "geometry_image": "images\\terra-h40\\geometry.png",
+      "size_guide_cm_image": "images\\terra-h40\\size-guide-cm.png",
+      "models": [
+        "Terra H40"
+      ],
+      "variant_skus": [
+        "U13607IM",
+        "U13605IN",
+        "U13607IL"
+      ],
+      "source_rows": [
+        252,
+        288,
+        327
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        563
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:04:31+00:00"
+    },
+    "https://cms.orbea.com/en-at/vector-20": {
+      "url": "https://cms.orbea.com/en-at/vector-20",
+      "canonical_url": "https://cms.orbea.com/en-at/vector-20",
+      "folder": "images\\vector-20",
+      "geometry_image": "images\\vector-20\\geometry.png",
+      "size_guide_cm_image": "images\\vector-20\\size-guide-cm.png",
+      "models": [
+        "Vector 20"
+      ],
+      "variant_skus": [
+        "U40207R9",
+        "U40205R4",
+        "U40203R5"
+      ],
+      "source_rows": [
+        266,
+        277,
+        279
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:04:35+00:00"
+    },
+    "https://cms.orbea.com/en-au/orca-m20iltd-pwr": {
+      "url": "https://cms.orbea.com/en-au/orca-m20iltd-pwr",
+      "canonical_url": "https://cms.orbea.com/en-au/orca-m20iltd-pwr",
+      "folder": "images\\orca-m20iltd-pwr",
+      "geometry_image": "images\\orca-m20iltd-pwr\\geometry.png",
+      "size_guide_cm_image": "images\\orca-m20iltd-pwr\\size-guide-cm.png",
+      "models": [
+        "Orca M20i LTD PWR"
+      ],
+      "variant_skus": [
+        "U11457AU",
+        "U11455A7",
+        "U11457A8",
+        "U11453CM"
+      ],
+      "source_rows": [
+        268,
+        275,
+        290,
+        311
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        636
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:04:46+00:00"
+    },
+    "https://cms.orbea.com/en-au/orca-aero-m11e-ltd-pwr": {
+      "url": "https://cms.orbea.com/en-au/orca-aero-m11e-ltd-pwr",
+      "canonical_url": "https://cms.orbea.com/en-au/orca-aero-m11e-ltd-pwr",
+      "folder": "images\\orca-aero-m11e-ltd-pwr",
+      "geometry_image": "images\\orca-aero-m11e-ltd-pwr\\geometry.png",
+      "size_guide_cm_image": "images\\orca-aero-m11e-ltd-pwr\\size-guide-cm.png",
+      "models": [
+        "Orca Aero M11e LTD PWR"
+      ],
+      "variant_skus": [
+        "U12657AW",
+        "U12657AX",
+        "U12653AY",
+        "U12657CM"
+      ],
+      "source_rows": [
+        271,
+        272,
+        276,
+        424
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        636
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:04:54+00:00"
+    },
+    "https://cms.orbea.com/en-be/wild-lt-m-ltd-rs-mullet": {
+      "url": "https://cms.orbea.com/en-be/wild-lt-m-ltd-rs-mullet",
+      "canonical_url": "https://cms.orbea.com/en-be/wild-lt-m-ltd-rs-mullet",
+      "folder": "images\\wild-lt-m-ltd-rs-mullet",
+      "geometry_image": "images\\wild-lt-m-ltd-rs-mullet\\geometry.png",
+      "size_guide_cm_image": "images\\wild-lt-m-ltd-rs-mullet\\size-guide-cm.png",
+      "models": [
+        "Wild LT M-LTD RS Mullet"
+      ],
+      "variant_skus": [
+        "U32007CM",
+        "U32003X7",
+        "U32005X6",
+        "U32007X8"
+      ],
+      "source_rows": [
+        328,
+        375,
+        391,
+        440
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1155
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "Low",
+      "geometry_position_supported": true,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:05:01+00:00"
+    },
+    "https://cms.orbea.com/en-be/wild-lt-h20": {
+      "url": "https://cms.orbea.com/en-be/wild-lt-h20",
+      "canonical_url": "https://cms.orbea.com/en-be/wild-lt-h20",
+      "folder": "images\\wild-lt-h20",
+      "geometry_image": "images\\wild-lt-h20\\geometry.png",
+      "size_guide_cm_image": "images\\wild-lt-h20\\size-guide-cm.png",
+      "models": [
+        "Wild LT H20"
+      ],
+      "variant_skus": [
+        "U30605X9",
+        "U30609XB",
+        "U30603XA"
+      ],
+      "source_rows": [
+        329,
+        380,
+        396
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1155
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "Low",
+      "geometry_position_supported": true,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:05:05+00:00"
+    },
+    "https://cms.orbea.com/en-be/wild-lt-m20-mullet": {
+      "url": "https://cms.orbea.com/en-be/wild-lt-m20-mullet",
+      "canonical_url": "https://cms.orbea.com/en-be/wild-lt-m20-mullet",
+      "folder": "images\\wild-lt-m20-mullet",
+      "geometry_image": "images\\wild-lt-m20-mullet\\geometry.png",
+      "size_guide_cm_image": "images\\wild-lt-m20-mullet\\size-guide-cm.png",
+      "models": [
+        "Wild LT M20 Mullet"
+      ],
+      "variant_skus": [
+        "U31703X5",
+        "U31703X6",
+        "U31703X7"
+      ],
+      "source_rows": [
+        330,
+        401,
+        431
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1155
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "Low",
+      "geometry_position_supported": true,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:05:11+00:00"
+    },
+    "https://cms.orbea.com/en-be/wild-lt-m-team-rs-mullet": {
+      "url": "https://cms.orbea.com/en-be/wild-lt-m-team-rs-mullet",
+      "canonical_url": "https://cms.orbea.com/en-be/wild-lt-m-team-rs-mullet",
+      "folder": "images\\wild-lt-m-team-rs-mullet",
+      "geometry_image": "images\\wild-lt-m-team-rs-mullet\\geometry.png",
+      "size_guide_cm_image": "images\\wild-lt-m-team-rs-mullet\\size-guide-cm.png",
+      "models": [
+        "Wild LT M-TEAM RS Mullet"
+      ],
+      "variant_skus": [
+        "U31907X5",
+        "U31903CM",
+        "U31903X7",
+        "U31905X6"
+      ],
+      "source_rows": [
+        331,
+        350,
+        390,
+        409
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1155
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "Low",
+      "geometry_position_supported": true,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:05:18+00:00"
+    },
+    "https://cms.orbea.com/en-at/alma-h20": {
+      "url": "https://cms.orbea.com/en-at/alma-h20",
+      "canonical_url": "https://cms.orbea.com/en-at/alma-h20",
+      "folder": "images\\alma-h20",
+      "geometry_image": "images\\alma-h20\\geometry.png",
+      "size_guide_cm_image": "images\\alma-h20\\size-guide-cm.png",
+      "models": [
+        "Alma H20"
+      ],
+      "variant_skus": [
+        "T21103M2"
+      ],
+      "source_rows": [
+        332
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:05:24+00:00"
+    },
+    "https://cms.orbea.com/en-au/occam-lt-m10": {
+      "url": "https://cms.orbea.com/en-au/occam-lt-m10",
+      "canonical_url": "https://cms.orbea.com/en-au/occam-lt-m10",
+      "folder": "images\\occam-lt-m10",
+      "geometry_image": "images\\occam-lt-m10\\geometry.png",
+      "size_guide_cm_image": "images\\occam-lt-m10\\size-guide-cm.png",
+      "models": [
+        "Occam LT M10"
+      ],
+      "variant_skus": [
+        "T24809M4"
+      ],
+      "source_rows": [
+        333
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1155
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "Low",
+      "geometry_position_supported": true,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:05:32+00:00"
+    },
+    "https://cms.orbea.com/en-be/wild-lt-h10": {
+      "url": "https://cms.orbea.com/en-be/wild-lt-h10",
+      "canonical_url": "https://cms.orbea.com/en-be/wild-lt-h10",
+      "folder": "images\\wild-lt-h10",
+      "geometry_image": "images\\wild-lt-h10\\geometry.png",
+      "size_guide_cm_image": "images\\wild-lt-h10\\size-guide-cm.png",
+      "models": [
+        "Wild LT H10"
+      ],
+      "variant_skus": [
+        "U30703XB",
+        "U30707XA",
+        "U30703X9"
+      ],
+      "source_rows": [
+        334,
+        398,
+        408
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1155
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "Low",
+      "geometry_position_supported": true,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:05:38+00:00"
+    },
+    "https://cms.orbea.com/en-at/alma-m20": {
+      "url": "https://cms.orbea.com/en-at/alma-m20",
+      "canonical_url": "https://cms.orbea.com/en-at/alma-m20",
+      "folder": "images\\alma-m20",
+      "geometry_image": "images\\alma-m20\\geometry.png",
+      "size_guide_cm_image": "images\\alma-m20\\size-guide-cm.png",
+      "models": [
+        "Alma M20"
+      ],
+      "variant_skus": [
+        "T21507F9"
+      ],
+      "source_rows": [
+        335
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:05:42+00:00"
+    },
+    "https://cms.orbea.com/en-at/occam-sl-h30": {
+      "url": "https://cms.orbea.com/en-at/occam-sl-h30",
+      "canonical_url": "https://cms.orbea.com/en-at/occam-sl-h30",
+      "folder": "images\\occam-sl-h30",
+      "geometry_image": "images\\occam-sl-h30\\geometry.png",
+      "size_guide_cm_image": "images\\occam-sl-h30\\size-guide-cm.png",
+      "models": [
+        "Occam SL H30"
+      ],
+      "variant_skus": [
+        "T23707PF",
+        "T23705PE",
+        "T23709PD"
+      ],
+      "source_rows": [
+        337,
+        349,
+        430
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:05:47+00:00"
+    },
+    "https://cms.orbea.com/en-be/gain-m30": {
+      "url": "https://cms.orbea.com/en-be/gain-m30",
+      "canonical_url": "https://cms.orbea.com/en-be/gain-m30",
+      "folder": "images\\gain-m30",
+      "geometry_image": "images\\gain-m30\\geometry.png",
+      "size_guide_cm_image": "images\\gain-m30\\size-guide-cm.png",
+      "models": [
+        "Gain M30"
+      ],
+      "variant_skus": [
+        "T38410GN",
+        "T38405CM",
+        "T38407GM"
+      ],
+      "source_rows": [
+        338,
+        376,
+        443
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        563
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:05:54+00:00"
+    },
+    "https://cms.orbea.com/en-be/gain-m20i": {
+      "url": "https://cms.orbea.com/en-be/gain-m20i",
+      "canonical_url": "https://cms.orbea.com/en-be/gain-m20i",
+      "folder": "images\\gain-m20i",
+      "geometry_image": "images\\gain-m20i\\geometry.png",
+      "size_guide_cm_image": "images\\gain-m20i\\size-guide-cm.png",
+      "models": [
+        "Gain M20i"
+      ],
+      "variant_skus": [
+        "T38610GN",
+        "T38603GM",
+        "T38603CM"
+      ],
+      "source_rows": [
+        339,
+        377,
+        437
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        563
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:06:01+00:00"
+    },
+    "https://cms.orbea.com/en-be/avant-h50": {
+      "url": "https://cms.orbea.com/en-be/avant-h50",
+      "canonical_url": "https://cms.orbea.com/en-be/avant-h50",
+      "folder": "images\\avant-h50",
+      "geometry_image": "images\\avant-h50\\geometry.png",
+      "size_guide_cm_image": "images\\avant-h50\\size-guide-cm.png",
+      "models": [
+        "Avant H50"
+      ],
+      "variant_skus": [
+        "T10157BN",
+        "T10151BD"
+      ],
+      "source_rows": [
+        340,
+        426
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        636
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:06:07+00:00"
+    },
+    "https://cms.orbea.com/en-au/muga-30": {
+      "url": "https://cms.orbea.com/en-au/muga-30",
+      "canonical_url": "https://cms.orbea.com/en-au/muga-30",
+      "folder": "images\\muga-30",
+      "geometry_image": "images\\muga-30\\geometry.png",
+      "size_guide_cm_image": "images\\muga-30\\size-guide-cm.png",
+      "models": [
+        "Muga 30"
+      ],
+      "variant_skus": [
+        "T37203HT",
+        "T37205HU"
+      ],
+      "source_rows": [
+        341,
+        367
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:06:12+00:00"
+    },
+    "https://cms.orbea.com/en-at/alma-m-team-axs": {
+      "url": "https://cms.orbea.com/en-at/alma-m-team-axs",
+      "canonical_url": "https://cms.orbea.com/en-at/alma-m-team-axs",
+      "folder": "images\\alma-m-team-axs",
+      "geometry_image": "images\\alma-m-team-axs\\geometry.png",
+      "size_guide_cm_image": "images\\alma-m-team-axs\\size-guide-cm.png",
+      "models": [
+        "Alma M-TEAM AXS"
+      ],
+      "variant_skus": [
+        "T21703F8",
+        "T21703FA"
+      ],
+      "source_rows": [
+        342,
+        363
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:06:20+00:00"
+    },
+    "https://cms.orbea.com/en-at/alma-m30": {
+      "url": "https://cms.orbea.com/en-at/alma-m30",
+      "canonical_url": "https://cms.orbea.com/en-at/alma-m30",
+      "folder": "images\\alma-m30",
+      "geometry_image": "images\\alma-m30\\geometry.png",
+      "size_guide_cm_image": "images\\alma-m30\\size-guide-cm.png",
+      "models": [
+        "Alma M30"
+      ],
+      "variant_skus": [
+        "T21403F9",
+        "T21403FA"
+      ],
+      "source_rows": [
+        344,
+        382
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:06:25+00:00"
+    },
+    "https://cms.orbea.com/en-au/occam-sl-h10": {
+      "url": "https://cms.orbea.com/en-au/occam-sl-h10",
+      "canonical_url": "https://cms.orbea.com/en-au/occam-sl-h10",
+      "folder": "images\\occam-sl-h10",
+      "geometry_image": "images\\occam-sl-h10\\geometry.png",
+      "size_guide_cm_image": "images\\occam-sl-h10\\size-guide-cm.png",
+      "models": [
+        "Occam SL H10"
+      ],
+      "variant_skus": [
+        "T23805PD",
+        "T23807PE",
+        "T23805PF"
+      ],
+      "source_rows": [
+        345,
+        442,
+        447
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:06:31+00:00"
+    },
+    "https://cms.orbea.com/en-au/occam-lt-m-team": {
+      "url": "https://cms.orbea.com/en-au/occam-lt-m-team",
+      "canonical_url": "https://cms.orbea.com/en-au/occam-lt-m-team",
+      "folder": "images\\occam-lt-m-team",
+      "geometry_image": "images\\occam-lt-m-team\\geometry.png",
+      "size_guide_cm_image": "images\\occam-lt-m-team\\size-guide-cm.png",
+      "models": [
+        "Occam LT M-TEAM"
+      ],
+      "variant_skus": [
+        "T24907M4",
+        "T24905M3"
+      ],
+      "source_rows": [
+        346,
+        360
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1155
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "Low",
+      "geometry_position_supported": true,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:06:39+00:00"
+    },
+    "https://cms.orbea.com/en-be/wild-lt-m-team-rs": {
+      "url": "https://cms.orbea.com/en-be/wild-lt-m-team-rs",
+      "canonical_url": "https://cms.orbea.com/en-be/wild-lt-m-team-rs",
+      "folder": "images\\wild-lt-m-team-rs",
+      "geometry_image": "images\\wild-lt-m-team-rs\\geometry.png",
+      "size_guide_cm_image": "images\\wild-lt-m-team-rs\\size-guide-cm.png",
+      "models": [
+        "Wild LT M-TEAM RS"
+      ],
+      "variant_skus": [
+        "U31509CM",
+        "U31509X7",
+        "U31505X6",
+        "U31509X5"
+      ],
+      "source_rows": [
+        348,
+        358,
+        373,
+        383
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1155
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "Low",
+      "geometry_position_supported": true,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:06:46+00:00"
+    },
+    "https://cms.orbea.com/en-au/occam-lt-h10": {
+      "url": "https://cms.orbea.com/en-au/occam-lt-h10",
+      "canonical_url": "https://cms.orbea.com/en-au/occam-lt-h10",
+      "folder": "images\\occam-lt-h10",
+      "geometry_image": "images\\occam-lt-h10\\geometry.png",
+      "size_guide_cm_image": "images\\occam-lt-h10\\size-guide-cm.png",
+      "models": [
+        "Occam LT H10"
+      ],
+      "variant_skus": [
+        "T24505PE"
+      ],
+      "source_rows": [
+        352
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1155
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "Low",
+      "geometry_position_supported": true,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:06:52+00:00"
+    },
+    "https://cms.orbea.com/en-be/wild-lt-m10": {
+      "url": "https://cms.orbea.com/en-be/wild-lt-m10",
+      "canonical_url": "https://cms.orbea.com/en-be/wild-lt-m10",
+      "folder": "images\\wild-lt-m10",
+      "geometry_image": "images\\wild-lt-m10\\geometry.png",
+      "size_guide_cm_image": "images\\wild-lt-m10\\size-guide-cm.png",
+      "models": [
+        "Wild LT M10"
+      ],
+      "variant_skus": [
+        "U31409CM",
+        "U31409X7",
+        "U31407X6",
+        "U31409X5"
+      ],
+      "source_rows": [
+        354,
+        365,
+        411,
+        438
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1155
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "Low",
+      "geometry_position_supported": true,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:07:01+00:00"
+    },
+    "https://cms.orbea.com/en-be/gain-m30i": {
+      "url": "https://cms.orbea.com/en-be/gain-m30i",
+      "canonical_url": "https://cms.orbea.com/en-be/gain-m30i",
+      "folder": "images\\gain-m30i",
+      "geometry_image": "images\\gain-m30i\\geometry.png",
+      "size_guide_cm_image": "images\\gain-m30i\\size-guide-cm.png",
+      "models": [
+        "Gain M30i"
+      ],
+      "variant_skus": [
+        "T38505GN",
+        "T38502GM",
+        "T38505CM"
+      ],
+      "source_rows": [
+        355,
+        397,
+        419
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        563
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:07:07+00:00"
+    },
+    "https://cms.orbea.com/en-be/rise-lt-h20": {
+      "url": "https://cms.orbea.com/en-be/rise-lt-h20",
+      "canonical_url": "https://cms.orbea.com/en-be/rise-lt-h20",
+      "folder": "images\\rise-lt-h20",
+      "geometry_image": "images\\rise-lt-h20\\geometry.png",
+      "size_guide_cm_image": "images\\rise-lt-h20\\size-guide-cm.png",
+      "models": [
+        "Rise LT H20"
+      ],
+      "variant_skus": [
+        "T32903SS",
+        "T32905SU"
+      ],
+      "source_rows": [
+        356,
+        404
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1155
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "Low",
+      "geometry_position_supported": true,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:07:12+00:00"
+    },
+    "https://cms.orbea.com/en-au/occam-sl-m30": {
+      "url": "https://cms.orbea.com/en-au/occam-sl-m30",
+      "canonical_url": "https://cms.orbea.com/en-au/occam-sl-m30",
+      "folder": "images\\occam-sl-m30",
+      "geometry_image": "images\\occam-sl-m30\\geometry.png",
+      "size_guide_cm_image": "images\\occam-sl-m30\\size-guide-cm.png",
+      "models": [
+        "Occam SL M30"
+      ],
+      "variant_skus": [
+        "T24005M4"
+      ],
+      "source_rows": [
+        357
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:07:16+00:00"
+    },
+    "https://cms.orbea.com/en-be/denna-m30": {
+      "url": "https://cms.orbea.com/en-be/denna-m30",
+      "canonical_url": "https://cms.orbea.com/en-be/denna-m30",
+      "folder": "images\\denna-m30",
+      "geometry_image": "images\\denna-m30\\geometry.png",
+      "size_guide_cm_image": "images\\denna-m30\\size-guide-cm.png",
+      "models": [
+        "Denna M30"
+      ],
+      "variant_skus": [
+        "T30703RE",
+        "T30703RC",
+        "T30707RZ"
+      ],
+      "source_rows": [
+        359,
+        418,
+        450
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        563
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:07:24+00:00"
+    },
+    "https://cms.orbea.com/en-at/alma-m50": {
+      "url": "https://cms.orbea.com/en-at/alma-m50",
+      "canonical_url": "https://cms.orbea.com/en-at/alma-m50",
+      "folder": "images\\alma-m50",
+      "geometry_image": "images\\alma-m50\\geometry.png",
+      "size_guide_cm_image": "images\\alma-m50\\size-guide-cm.png",
+      "models": [
+        "Alma M50"
+      ],
+      "variant_skus": [
+        "T21309F9",
+        "T21307F8"
+      ],
+      "source_rows": [
+        361,
+        381
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:07:29+00:00"
+    },
+    "https://cms.orbea.com/en-be/rise-sl-h10": {
+      "url": "https://cms.orbea.com/en-be/rise-sl-h10",
+      "canonical_url": "https://cms.orbea.com/en-be/rise-sl-h10",
+      "folder": "images\\rise-sl-h10",
+      "geometry_image": "images\\rise-sl-h10\\geometry.png",
+      "size_guide_cm_image": "images\\rise-sl-h10\\size-guide-cm.png",
+      "models": [
+        "Rise SL H10"
+      ],
+      "variant_skus": [
+        "T32005ST",
+        "T32005SS",
+        "T32009SU"
+      ],
+      "source_rows": [
+        364,
+        379,
+        435
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:07:34+00:00"
+    },
+    "https://cms.orbea.com/en-be/wild-lt-m-ltd-rs": {
+      "url": "https://cms.orbea.com/en-be/wild-lt-m-ltd-rs",
+      "canonical_url": "https://cms.orbea.com/en-be/wild-lt-m-ltd-rs",
+      "folder": "images\\wild-lt-m-ltd-rs",
+      "geometry_image": "images\\wild-lt-m-ltd-rs\\geometry.png",
+      "size_guide_cm_image": "images\\wild-lt-m-ltd-rs\\size-guide-cm.png",
+      "models": [
+        "Wild LT M-LTD RS"
+      ],
+      "variant_skus": [
+        "U31609CM",
+        "U31605X6",
+        "U31603X7",
+        "U31609X8"
+      ],
+      "source_rows": [
+        366,
+        384,
+        405,
+        416
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1155
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "Low",
+      "geometry_position_supported": true,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:07:42+00:00"
+    },
+    "https://cms.orbea.com/en-au/occam-sl-m10": {
+      "url": "https://cms.orbea.com/en-au/occam-sl-m10",
+      "canonical_url": "https://cms.orbea.com/en-au/occam-sl-m10",
+      "folder": "images\\occam-sl-m10",
+      "geometry_image": "images\\occam-sl-m10\\geometry.png",
+      "size_guide_cm_image": "images\\occam-sl-m10\\size-guide-cm.png",
+      "models": [
+        "Occam SL M10"
+      ],
+      "variant_skus": [
+        "T24105M4"
+      ],
+      "source_rows": [
+        368
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:07:49+00:00"
+    },
+    "https://cms.orbea.com/en-be/wild-lt-h20-mullet": {
+      "url": "https://cms.orbea.com/en-be/wild-lt-h20-mullet",
+      "canonical_url": "https://cms.orbea.com/en-be/wild-lt-h20-mullet",
+      "folder": "images\\wild-lt-h20-mullet",
+      "geometry_image": "images\\wild-lt-h20-mullet\\geometry.png",
+      "size_guide_cm_image": "images\\wild-lt-h20-mullet\\size-guide-cm.png",
+      "models": [
+        "Wild LT H20 Mullet"
+      ],
+      "variant_skus": [
+        "U30905X9",
+        "U30905XA",
+        "U30905XB"
+      ],
+      "source_rows": [
+        369,
+        395,
+        421
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1155
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "Low",
+      "geometry_position_supported": true,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:07:55+00:00"
+    },
+    "https://cms.orbea.com/en-at/alma-m-pro": {
+      "url": "https://cms.orbea.com/en-at/alma-m-pro",
+      "canonical_url": "https://cms.orbea.com/en-at/alma-m-pro",
+      "folder": "images\\alma-m-pro",
+      "geometry_image": "images\\alma-m-pro\\geometry.png",
+      "size_guide_cm_image": "images\\alma-m-pro\\size-guide-cm.png",
+      "models": [
+        "Alma M-PRO"
+      ],
+      "variant_skus": [
+        "T21607F9"
+      ],
+      "source_rows": [
+        370
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:08:03+00:00"
+    },
+    "https://cms.orbea.com/en-au/occam-sl-m-ltd": {
+      "url": "https://cms.orbea.com/en-au/occam-sl-m-ltd",
+      "canonical_url": "https://cms.orbea.com/en-au/occam-sl-m-ltd",
+      "folder": "images\\occam-sl-m-ltd",
+      "geometry_image": "images\\occam-sl-m-ltd\\geometry.png",
+      "size_guide_cm_image": "images\\occam-sl-m-ltd\\size-guide-cm.png",
+      "models": [
+        "Occam SL M-LTD"
+      ],
+      "variant_skus": [
+        "T24207M3",
+        "T24205M4"
+      ],
+      "source_rows": [
+        371,
+        422
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:08:11+00:00"
+    },
+    "https://cms.orbea.com/en-au/muga-20": {
+      "url": "https://cms.orbea.com/en-au/muga-20",
+      "canonical_url": "https://cms.orbea.com/en-au/muga-20",
+      "folder": "images\\muga-20",
+      "geometry_image": "images\\muga-20\\geometry.png",
+      "size_guide_cm_image": "images\\muga-20\\size-guide-cm.png",
+      "models": [
+        "Muga 20"
+      ],
+      "variant_skus": [
+        "T37307HS",
+        "T37303HU"
+      ],
+      "source_rows": [
+        372,
+        407
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:08:16+00:00"
+    },
+    "https://cms.orbea.com/en-au/avant-h30": {
+      "url": "https://cms.orbea.com/en-au/avant-h30",
+      "canonical_url": "https://cms.orbea.com/en-au/avant-h30",
+      "folder": "images\\avant-h30",
+      "geometry_image": "images\\avant-h30\\geometry.png",
+      "size_guide_cm_image": "images\\avant-h30\\size-guide-cm.png",
+      "models": [
+        "Avant H30"
+      ],
+      "variant_skus": [
+        "T10349BB",
+        "T10353BN"
+      ],
+      "source_rows": [
+        374,
+        444
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        636
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:08:21+00:00"
+    },
+    "https://cms.orbea.com/en-be/wild-lt-m10-mullet": {
+      "url": "https://cms.orbea.com/en-be/wild-lt-m10-mullet",
+      "canonical_url": "https://cms.orbea.com/en-be/wild-lt-m10-mullet",
+      "folder": "images\\wild-lt-m10-mullet",
+      "geometry_image": "images\\wild-lt-m10-mullet\\geometry.png",
+      "size_guide_cm_image": "images\\wild-lt-m10-mullet\\size-guide-cm.png",
+      "models": [
+        "Wild LT M10 Mullet"
+      ],
+      "variant_skus": [
+        "U31807X5",
+        "U31803X7",
+        "U31803CM",
+        "U31805X6"
+      ],
+      "source_rows": [
+        378,
+        393,
+        399,
+        415
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1155
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "Low",
+      "geometry_position_supported": true,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:08:30+00:00"
+    },
+    "https://cms.orbea.com/en-be/wild-lt-h-team": {
+      "url": "https://cms.orbea.com/en-be/wild-lt-h-team",
+      "canonical_url": "https://cms.orbea.com/en-be/wild-lt-h-team",
+      "folder": "images\\wild-lt-h-team",
+      "geometry_image": "images\\wild-lt-h-team\\geometry.png",
+      "size_guide_cm_image": "images\\wild-lt-h-team\\size-guide-cm.png",
+      "models": [
+        "Wild LT H-TEAM"
+      ],
+      "variant_skus": [
+        "U30809XA",
+        "U30807XB",
+        "U30809X9"
+      ],
+      "source_rows": [
+        385,
+        403,
+        412
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1155
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "Low",
+      "geometry_position_supported": true,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:08:35+00:00"
+    },
+    "https://cms.orbea.com/en-be/wild-lt-h-team-mullet": {
+      "url": "https://cms.orbea.com/en-be/wild-lt-h-team-mullet",
+      "canonical_url": "https://cms.orbea.com/en-be/wild-lt-h-team-mullet",
+      "folder": "images\\wild-lt-h-team-mullet",
+      "geometry_image": "images\\wild-lt-h-team-mullet\\geometry.png",
+      "size_guide_cm_image": "images\\wild-lt-h-team-mullet\\size-guide-cm.png",
+      "models": [
+        "Wild LT H-TEAM Mullet"
+      ],
+      "variant_skus": [
+        "U31109XA",
+        "U31107XB",
+        "U31105X9"
+      ],
+      "source_rows": [
+        387,
+        406,
+        428
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1155
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "Low",
+      "geometry_position_supported": true,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:08:41+00:00"
+    },
+    "https://cms.orbea.com/en-be/denna-h40": {
+      "url": "https://cms.orbea.com/en-be/denna-h40",
+      "canonical_url": "https://cms.orbea.com/en-be/denna-h40",
+      "folder": "images\\denna-h40",
+      "geometry_image": "images\\denna-h40\\geometry.png",
+      "size_guide_cm_image": "images\\denna-h40\\size-guide-cm.png",
+      "models": [
+        "Denna H40"
+      ],
+      "variant_skus": [
+        "T30203GR"
+      ],
+      "source_rows": [
+        392
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        563
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:08:46+00:00"
+    },
+    "https://cms.orbea.com/en-be/wild-lt-h10-mullet": {
+      "url": "https://cms.orbea.com/en-be/wild-lt-h10-mullet",
+      "canonical_url": "https://cms.orbea.com/en-be/wild-lt-h10-mullet",
+      "folder": "images\\wild-lt-h10-mullet",
+      "geometry_image": "images\\wild-lt-h10-mullet\\geometry.png",
+      "size_guide_cm_image": "images\\wild-lt-h10-mullet\\size-guide-cm.png",
+      "models": [
+        "Wild LT H10 Mullet"
+      ],
+      "variant_skus": [
+        "U31005XB",
+        "U31009XA",
+        "U31005X9"
+      ],
+      "source_rows": [
+        394,
+        414,
+        423
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1155
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "Low",
+      "geometry_position_supported": true,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:08:52+00:00"
+    },
+    "https://cms.orbea.com/en-be/denna-h50": {
+      "url": "https://cms.orbea.com/en-be/denna-h50",
+      "canonical_url": "https://cms.orbea.com/en-be/denna-h50",
+      "folder": "images\\denna-h50",
+      "geometry_image": "images\\denna-h50\\geometry.png",
+      "size_guide_cm_image": "images\\denna-h50\\size-guide-cm.png",
+      "models": [
+        "Denna H50"
+      ],
+      "variant_skus": [
+        "T30105GZ",
+        "T30110GS",
+        "T30109GR"
+      ],
+      "source_rows": [
+        400,
+        432,
+        436
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        563
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:08:57+00:00"
+    },
+    "https://cms.orbea.com/en-be/avant-h45-1x": {
+      "url": "https://cms.orbea.com/en-be/avant-h45-1x",
+      "canonical_url": "https://cms.orbea.com/en-be/avant-h45-1x",
+      "folder": "images\\avant-h45-1x",
+      "geometry_image": "images\\avant-h45-1x\\geometry.png",
+      "size_guide_cm_image": "images\\avant-h45-1x\\size-guide-cm.png",
+      "models": [
+        "Avant H45 1X"
+      ],
+      "variant_skus": [
+        "T10455BD"
+      ],
+      "source_rows": [
+        402
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        636
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:09:02+00:00"
+    },
+    "https://cms.orbea.com/en-be/denna-m10i": {
+      "url": "https://cms.orbea.com/en-be/denna-m10i",
+      "canonical_url": "https://cms.orbea.com/en-be/denna-m10i",
+      "folder": "images\\denna-m10i",
+      "geometry_image": "images\\denna-m10i\\geometry.png",
+      "size_guide_cm_image": "images\\denna-m10i\\size-guide-cm.png",
+      "models": [
+        "Denna M10i"
+      ],
+      "variant_skus": [
+        "T31003RE"
+      ],
+      "source_rows": [
+        410
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        563
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:09:11+00:00"
+    },
+    "https://cms.orbea.com/en-be/denna-m31e": {
+      "url": "https://cms.orbea.com/en-be/denna-m31e",
+      "canonical_url": "https://cms.orbea.com/en-be/denna-m31e",
+      "folder": "images\\denna-m31e",
+      "geometry_image": "images\\denna-m31e\\geometry.png",
+      "size_guide_cm_image": "images\\denna-m31e\\size-guide-cm.png",
+      "models": [
+        "Denna M31e"
+      ],
+      "variant_skus": [
+        "T30509RZ"
+      ],
+      "source_rows": [
+        413
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        563
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:09:20+00:00"
+    },
+    "https://cms.orbea.com/en-be/gain-m40": {
+      "url": "https://cms.orbea.com/en-be/gain-m40",
+      "canonical_url": "https://cms.orbea.com/en-be/gain-m40",
+      "folder": "images\\gain-m40",
+      "geometry_image": "images\\gain-m40\\geometry.png",
+      "size_guide_cm_image": "images\\gain-m40\\size-guide-cm.png",
+      "models": [
+        "Gain M40"
+      ],
+      "variant_skus": [
+        "T38302CM",
+        "T38307GN"
+      ],
+      "source_rows": [
+        417,
+        441
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        563
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:09:28+00:00"
+    },
+    "https://cms.orbea.com/en-at/laufey-h-ltd": {
+      "url": "https://cms.orbea.com/en-at/laufey-h-ltd",
+      "canonical_url": "https://cms.orbea.com/en-at/laufey-h-ltd",
+      "folder": "images\\laufey-h-ltd",
+      "geometry_image": "images\\laufey-h-ltd\\geometry.png",
+      "size_guide_cm_image": "images\\laufey-h-ltd\\size-guide-cm.png",
+      "models": [
+        "Laufey H-LTD"
+      ],
+      "variant_skus": [
+        "T23509PG"
+      ],
+      "source_rows": [
+        420
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:09:34+00:00"
+    },
+    "https://cms.orbea.com/en-be/denna-m20": {
+      "url": "https://cms.orbea.com/en-be/denna-m20",
+      "canonical_url": "https://cms.orbea.com/en-be/denna-m20",
+      "folder": "images\\denna-m20",
+      "geometry_image": "images\\denna-m20\\geometry.png",
+      "size_guide_cm_image": "images\\denna-m20\\size-guide-cm.png",
+      "models": [
+        "Denna M20"
+      ],
+      "variant_skus": [
+        "T30807RC"
+      ],
+      "source_rows": [
+        427
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        563
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:09:44+00:00"
+    },
+    "https://cms.orbea.com/en-au/muga-10": {
+      "url": "https://cms.orbea.com/en-au/muga-10",
+      "canonical_url": "https://cms.orbea.com/en-au/muga-10",
+      "folder": "images\\muga-10",
+      "geometry_image": "images\\muga-10\\geometry.png",
+      "size_guide_cm_image": "images\\muga-10\\size-guide-cm.png",
+      "models": [
+        "Muga 10"
+      ],
+      "variant_skus": [
+        "T37407HU"
+      ],
+      "source_rows": [
+        433
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:09:50+00:00"
+    },
+    "https://cms.orbea.com/en-be/denna-h30": {
+      "url": "https://cms.orbea.com/en-be/denna-h30",
+      "canonical_url": "https://cms.orbea.com/en-be/denna-h30",
+      "folder": "images\\denna-h30",
+      "geometry_image": "images\\denna-h30\\geometry.png",
+      "size_guide_cm_image": "images\\denna-h30\\size-guide-cm.png",
+      "models": [
+        "Denna H30"
+      ],
+      "variant_skus": [
+        "T30307GS"
+      ],
+      "source_rows": [
+        434
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1051
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        563
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:09:54+00:00"
+    },
+    "https://cms.orbea.com/en-be/gain-m10i": {
+      "url": "https://cms.orbea.com/en-be/gain-m10i",
+      "canonical_url": "https://cms.orbea.com/en-be/gain-m10i",
+      "folder": "images\\gain-m10i",
+      "geometry_image": "images\\gain-m10i\\geometry.png",
+      "size_guide_cm_image": "images\\gain-m10i\\size-guide-cm.png",
+      "models": [
+        "Gain M10i"
+      ],
+      "variant_skus": [
+        "T38705CM",
+        "T38710GN"
+      ],
+      "source_rows": [
+        439,
+        445
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1120
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        563
+      ],
+      "geometry_position": "",
+      "geometry_position_supported": false,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:10:01+00:00"
+    },
+    "https://cms.orbea.com/en-be/wild-lt-m20": {
+      "url": "https://cms.orbea.com/en-be/wild-lt-m20",
+      "canonical_url": "https://cms.orbea.com/en-be/wild-lt-m20",
+      "folder": "images\\wild-lt-m20",
+      "geometry_image": "images\\wild-lt-m20\\geometry.png",
+      "size_guide_cm_image": "images\\wild-lt-m20\\size-guide-cm.png",
+      "models": [
+        "Wild LT M20"
+      ],
+      "variant_skus": [
+        "U31305X6",
+        "U31303X7",
+        "U31303X5"
+      ],
+      "source_rows": [
+        448,
+        449,
+        456
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1155
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "Low",
+      "geometry_position_supported": true,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:10:07+00:00"
+    },
+    "https://cms.orbea.com/en-au/oiz-omx": {
+      "url": "https://cms.orbea.com/en-au/oiz-omx",
+      "canonical_url": "https://cms.orbea.com/en-au/oiz-omx",
+      "folder": "images\\oiz-omx",
+      "geometry_image": "images\\oiz-omx\\geometry.png",
+      "size_guide_cm_image": "images\\oiz-omx\\size-guide-cm.png",
+      "models": [
+        "Oiz OMX"
+      ],
+      "variant_skus": [
+        "U90809PM",
+        "U90805PL",
+        "U90809CM",
+        "U90803PK",
+        "U90809PJ"
+      ],
+      "source_rows": [
+        452,
+        453,
+        457,
+        460,
+        461
+      ],
+      "status": "error",
+      "attempts": 2,
+      "errors": [
+        "geometry: TimeoutException: Message: Timed out waiting for 'View geometry'",
+        "size guide: TimeoutException: Message: Timed out waiting for 'View size guide'"
+      ],
+      "geometry_ok": false,
+      "size_guide_cm_ok": false,
+      "geometry_dimensions": null,
+      "size_guide_cm_dimensions": null,
+      "last_attempt_at": "2026-08-05T09:11:56+00:00"
+    },
+    "https://cms.orbea.com/en-au/occam-lt-m30": {
+      "url": "https://cms.orbea.com/en-au/occam-lt-m30",
+      "canonical_url": "https://cms.orbea.com/en-au/occam-lt-m30",
+      "folder": "images\\occam-lt-m30",
+      "geometry_image": "images\\occam-lt-m30\\geometry.png",
+      "size_guide_cm_image": "images\\occam-lt-m30\\size-guide-cm.png",
+      "models": [
+        "Occam LT M30"
+      ],
+      "variant_skus": [
+        "T24705M3"
+      ],
+      "source_rows": [
+        458
+      ],
+      "status": "complete",
+      "attempts": 1,
+      "errors": [],
+      "geometry_ok": true,
+      "size_guide_cm_ok": true,
+      "geometry_dimensions": [
+        741,
+        1155
+      ],
+      "size_guide_cm_dimensions": [
+        1620,
+        417
+      ],
+      "geometry_position": "Low",
+      "geometry_position_supported": true,
+      "geometry_position_requested": "low",
+      "geometry_capture_version": 2,
+      "last_attempt_at": "2026-08-05T09:12:02+00:00"
+    }
+  },
+  "workbook": {
+    "path": "C:\\Users\\User\\Desktop\\Ultrabike App\\UltraBike-Automatizacija\\output\\orbea_pimbo\\orbea_pimbo_variant_matches.xlsx",
+    "size": 383176,
+    "modified_ns": 1785427325362044300,
+    "sha256": "b2b3c1665a0d584ff8e0d51f6826d19b0428e5965f4299d4f9335b5a7faeb9c8"
+  },
+  "sheet": "Matches",
+  "output_dir": "C:\\Users\\User\\Desktop\\Ultrabike App\\UltraBike-Automatizacija\\output\\orbea_table_images",
+  "geometry_position": "low",
+  "summary": {
+    "total_pages": 155,
+    "complete": 148,
+    "partial": 0,
+    "failed": 7,
+    "pending": 0
+  }
+}

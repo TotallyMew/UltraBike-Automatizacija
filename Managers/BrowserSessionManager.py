@@ -36,11 +36,11 @@ class BrowserSessionManager:
 
         Args:
             browser_type: Type of browser ("Chrome", "Firefox", "Edge")
-            pool_size: Number of browser instances to maintain (2-4)
+            pool_size: Number of browser instances to maintain (1-4)
             logger: Optional logger instance
         """
         self.browser_type = browser_type
-        self.pool_size = max(2, min(4, pool_size))  # Clamp to 2-4
+        self.pool_size = max(1, min(4, pool_size))
         self.logger = logger
 
         self.sessions: List[BrowserSession] = []
@@ -48,6 +48,11 @@ class BrowserSessionManager:
         self.semaphore = Semaphore(self.pool_size)
 
         self._initialized = False
+        self._session_initializer = None
+
+    def set_session_initializer(self, callback):
+        """Set a callback(driver) used for login on create and reset."""
+        self._session_initializer = callback
 
     def _log(self, message: str, **context):
         """Log a message if logger is available"""
@@ -72,6 +77,14 @@ class BrowserSessionManager:
                 driver = self._create_driver(i)
                 if driver is None:
                     self._log(f"Failed to create driver for session {i}", session_id=i)
+                    self.shutdown_all()
+                    return False
+                if self._session_initializer and not self._session_initializer(driver):
+                    try:
+                        driver.quit()
+                    except Exception:
+                        pass
+                    self._log(f"Session {i} initialization failed", session_id=i)
                     self.shutdown_all()
                     return False
 
@@ -228,6 +241,14 @@ class BrowserSessionManager:
             # Create new driver
             new_driver = self._create_driver(session.session_id)
             if new_driver is None:
+                session.driver = None
+                return False
+            if self._session_initializer and not self._session_initializer(new_driver):
+                try:
+                    new_driver.quit()
+                except Exception:
+                    pass
+                session.driver = None
                 return False
 
             session.driver = new_driver
@@ -260,4 +281,8 @@ class BrowserSessionManager:
 
     def is_ready(self) -> bool:
         """Check if pool is initialized and ready"""
-        return self._initialized and len(self.sessions) == self.pool_size
+        return (
+            self._initialized
+            and len(self.sessions) == self.pool_size
+            and all(session.driver is not None for session in self.sessions)
+        )

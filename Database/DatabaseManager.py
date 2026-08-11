@@ -1,5 +1,6 @@
 ﻿import sqlite3
 from pathlib import Path
+from datetime import datetime, timezone
 
 class DatabaseManager:
     """Manages SQLite database connection and schema"""
@@ -144,11 +145,107 @@ class DatabaseManager:
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         """)
+
+        # Earnings tracker.  Money is stored as integer cents and timestamps as
+        # UTC ISO-8601 strings so calculations do not depend on the workstation
+        # locale.  Custom brands are archived instead of deleted, preserving the
+        # brand on old earning records.
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS earning_brands (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+                is_builtin INTEGER NOT NULL DEFAULT 0,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS work_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                mode TEXT NOT NULL CHECK(mode IN ('stopwatch', 'countdown')),
+                target_seconds INTEGER,
+                status TEXT NOT NULL CHECK(status IN ('running', 'paused', 'completed')),
+                allow_overtime INTEGER NOT NULL DEFAULT 0,
+                started_at TEXT NOT NULL,
+                completed_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS work_segments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id INTEGER NOT NULL,
+                started_at TEXT NOT NULL,
+                ended_at TEXT,
+                FOREIGN KEY(session_id) REFERENCES work_sessions(id) ON DELETE CASCADE
+            )
+        """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS earning_entries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sku TEXT NOT NULL,
+                product_name TEXT,
+                brand_id INTEGER,
+                product_type TEXT NOT NULL CHECK(product_type IN ('bicycle', 'frameset', 'other')),
+                payout_cents INTEGER NOT NULL CHECK(payout_cents >= 0),
+                earned_at TEXT NOT NULL,
+                source TEXT NOT NULL DEFAULT 'manual',
+                session_id INTEGER,
+                processing_history_id INTEGER UNIQUE,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(brand_id) REFERENCES earning_brands(id),
+                FOREIGN KEY(session_id) REFERENCES work_sessions(id) ON DELETE SET NULL
+            )
+        """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS earning_goals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                target_cents INTEGER NOT NULL CHECK(target_cents > 0),
+                started_at TEXT NOT NULL,
+                deadline_date TEXT,
+                status TEXT NOT NULL CHECK(status IN ('active', 'completed', 'archived', 'cancelled')),
+                completed_at TEXT,
+                final_earned_cents INTEGER,
+                final_product_count INTEGER,
+                final_tracked_seconds REAL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        """)
     
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_processing_brand ON processing_history(brand)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_processing_status ON processing_history(status)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_processing_date ON processing_history(processed_at)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_translations_lookup ON translations(source_lang, target_lang, source_term)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_earning_entries_date ON earning_entries(earned_at)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_earning_entries_sku ON earning_entries(sku)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_earning_entries_brand ON earning_entries(brand_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_earning_entries_session ON earning_entries(session_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_work_segments_session ON work_segments(session_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_work_segments_start ON work_segments(started_at)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_earning_goals_status ON earning_goals(status)")
+
+        now_utc = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+        builtin_brands = (
+            "KROSS", "Pinarello", "Basso", "Factor", "TREK",
+            "Rondo", "Octane", "Rascal", "Lee Cougan",
+        )
+        for brand in builtin_brands:
+            cursor.execute(
+                """
+                INSERT OR IGNORE INTO earning_brands
+                    (name, is_builtin, is_active, created_at, updated_at)
+                VALUES (?, 1, 1, ?, ?)
+                """,
+                (brand, now_utc, now_utc),
+            )
     
         self.conn.commit()
 
@@ -197,7 +294,8 @@ class DatabaseManager:
         ALLOWED_TABLES = {
             'credentials', 'external_credentials', 'processing_history',
             'recent_products', 'translations', 'settings', 'descriptions',
-            'description_folders'
+            'description_folders', 'earning_brands', 'earning_entries',
+            'work_sessions', 'work_segments', 'earning_goals'
         }
 
         # Check for empty identifier
