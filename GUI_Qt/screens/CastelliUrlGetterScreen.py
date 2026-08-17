@@ -18,6 +18,7 @@ from PySide6.QtCore import QThread, Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QFileDialog,
+    QGridLayout,
     QHBoxLayout,
     QHeaderView,
     QTableWidget,
@@ -61,6 +62,7 @@ from GUI_Qt.styles.theme_config import (
     RADII,
     SIZES,
     SPACING as THEME_SPACING,
+    get_status_text_color,
 )
 from GUI_Qt.widgets import enable_table_copy, show_file_saved_bar
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
@@ -350,7 +352,7 @@ class CastelliUrlGetterScreen(ResponsiveWidget):
         self._layout.addLayout(header)
 
         toolbar_card = CardWidget()
-        toolbar_layout = QHBoxLayout(toolbar_card)
+        toolbar_layout = QGridLayout(toolbar_card)
         toolbar_layout.setContentsMargins(*TOOLBAR_MARGINS)
         toolbar_layout.setSpacing(CARD_SPACING)
 
@@ -368,10 +370,11 @@ class CastelliUrlGetterScreen(ResponsiveWidget):
         self._start_btn.setEnabled(False)
         self._start_btn.clicked.connect(self._on_start_stop)
 
-        toolbar_layout.addWidget(self._browse_btn)
-        toolbar_layout.addWidget(self._file_label, 1)
-        toolbar_layout.addWidget(self._export_btn)
-        toolbar_layout.addWidget(self._start_btn)
+        toolbar_layout.addWidget(self._browse_btn, 0, 0)
+        toolbar_layout.addWidget(self._file_label, 0, 1)
+        toolbar_layout.addWidget(self._export_btn, 1, 0)
+        toolbar_layout.addWidget(self._start_btn, 1, 1)
+        toolbar_layout.setColumnStretch(1, 1)
         self._layout.addWidget(toolbar_card)
 
         self._drop_zone = DropZoneWidget(self.tr)
@@ -589,13 +592,13 @@ class CastelliUrlGetterScreen(ResponsiveWidget):
     def _on_row_update(self, row: int, status: str, url: str):
         item = QTableWidgetItem(status)
         if status == "Found":
-            item.setForeground(QColor("#4CAF50"))
+            item.setForeground(QColor(get_status_text_color("success", isDarkTheme())))
         elif status == "Multiple results":
-            item.setForeground(QColor("#2196F3"))
+            item.setForeground(QColor(COLORS['focus_ring_dark'] if isDarkTheme() else COLORS['focus_ring_light']))
         elif status in ("Searching", "Skipped", "Not found second part"):
-            item.setForeground(QColor("#FF9800"))
+            item.setForeground(QColor(get_status_text_color("warning", isDarkTheme())))
         else:
-            item.setForeground(QColor("#F44336"))
+            item.setForeground(QColor(get_status_text_color("error", isDarkTheme())))
 
         self._table.setItem(row, 3, item)
         self._table.setItem(row, 4, QTableWidgetItem(url))

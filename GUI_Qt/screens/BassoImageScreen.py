@@ -14,7 +14,10 @@ import requests
 from PIL import Image
 
 from PySide6.QtCore import Qt, QThread, Signal
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFileDialog, QSizePolicy, QPlainTextEdit
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QBoxLayout, QFileDialog,
+    QSizePolicy, QPlainTextEdit,
+)
 
 from qfluentwidgets import (
     CardWidget,
@@ -31,11 +34,18 @@ from qfluentwidgets import (
     IndeterminateProgressRing,
     isDarkTheme,
     qconfig,
+    ScrollArea,
+    IconWidget,
 )
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from GUI_Qt.styles.screen_theme import PAGE_MARGINS, PAGE_SPACING, CARD_MARGINS, ICON_TEXT_GAP, ROW_SPACING, CONTENT_SPACING
+from GUI_Qt.styles.screen_theme import (
+    PAGE_MARGINS, PAGE_SPACING, CARD_MARGINS, ICON_TEXT_GAP,
+    ROW_SPACING, CONTENT_SPACING, apply_screen_theme,
+    get_responsive_margins, get_responsive_spacing,
+)
+from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service as ChromeService
@@ -43,6 +53,7 @@ from selenium.webdriver.chrome.options import Options as ChromeOptions
 from webdriver_manager.chrome import ChromeDriverManager
 
 from GUI_Qt.styles.theme_config import COLORS, FONTS, RADII, PADDINGS, SIZES
+from Utilities.URLHandler import URLHandler
 
 
 DEFAULT_BASSO_URL_PLACEHOLDER = "bassobikes.com/..."
@@ -174,7 +185,7 @@ class BassoImageWorker(QThread):
                 pass
 
 
-class BassoImageScreen(QWidget):
+class BassoImageScreen(ResponsiveWidget):
     def __init__(self, main_window, parent=None):
         super().__init__(parent)
         self.main = main_window
@@ -205,7 +216,18 @@ class BassoImageScreen(QWidget):
         self._apply_theme()
         self.setAutoFillBackground(True)
 
-        main_layout = QVBoxLayout(self)
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
+
+        self.scroll = ScrollArea(self)
+        self.scroll.setWidgetResizable(True)
+        root_layout.addWidget(self.scroll)
+
+        self.content_widget = QWidget()
+        self.scroll.setWidget(self.content_widget)
+
+        main_layout = QVBoxLayout(self.content_widget)
         main_layout.setContentsMargins(*PAGE_MARGINS)
         main_layout.setSpacing(PAGE_SPACING)
 
@@ -213,9 +235,8 @@ class BassoImageScreen(QWidget):
         title_container = QHBoxLayout()
         title_container.setSpacing(ICON_TEXT_GAP)
 
-        title_icon = TransparentToolButton(FluentIcon.PHOTO, self)
+        title_icon = IconWidget(FluentIcon.PHOTO)
         title_icon.setFixedSize(SIZES['icon_lg'], SIZES['icon_lg'])
-        title_icon.setEnabled(False)
 
         self.title_label = TitleLabel("")
         title_container.addWidget(title_icon)
@@ -224,15 +245,15 @@ class BassoImageScreen(QWidget):
         header.addStretch()
         main_layout.addLayout(header)
 
-        content_layout = QHBoxLayout()
-        content_layout.setSpacing(PAGE_SPACING)
+        self.content_layout = QHBoxLayout()
+        self.content_layout.setSpacing(PAGE_SPACING)
 
         # Left: controls
-        left = CardWidget()
-        left.setBorderRadius(RADII['md'])
-        left.setMinimumWidth(SIZES['panel_min_width'])
-        left.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
-        ll = QVBoxLayout(left)
+        self.left_panel = CardWidget()
+        self.left_panel.setBorderRadius(RADII['md'])
+        self.left_panel.setMinimumWidth(SIZES['panel_min_width'])
+        self.left_panel.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+        ll = QVBoxLayout(self.left_panel)
         ll.setContentsMargins(*CARD_MARGINS)
         ll.setSpacing(CONTENT_SPACING)
 
@@ -282,13 +303,13 @@ class BassoImageScreen(QWidget):
         ll.addLayout(actions)
         ll.addStretch(1)
 
-        content_layout.addWidget(left, 4)
+        self.content_layout.addWidget(self.left_panel, 4)
 
         # Right: log/output
-        right = CardWidget()
-        right.setBorderRadius(RADII['md'])
-        right.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        rl = QVBoxLayout(right)
+        self.right_panel = CardWidget()
+        self.right_panel.setBorderRadius(RADII['md'])
+        self.right_panel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        rl = QVBoxLayout(self.right_panel)
         rl.setContentsMargins(*CARD_MARGINS)
         rl.setSpacing(ROW_SPACING)
 
@@ -305,8 +326,15 @@ class BassoImageScreen(QWidget):
         self._apply_theme()
         rl.addWidget(self.log, 1)
 
-        content_layout.addWidget(right, 6)
-        main_layout.addLayout(content_layout, 1)
+        self.content_layout.addWidget(self.right_panel, 6)
+        main_layout.addLayout(self.content_layout, 1)
+
+        apply_screen_theme(
+            self,
+            "BassoImageScreen",
+            scroll=self.scroll,
+            content=self.content_widget,
+        )
 
         self.retranslate_ui()
 
@@ -327,6 +355,26 @@ class BassoImageScreen(QWidget):
 
     def _on_theme_changed(self):
         self._apply_theme()
+        apply_screen_theme(
+            self,
+            "BassoImageScreen",
+            scroll=self.scroll,
+            content=self.content_widget,
+        )
+
+    def _on_breakpoint_changed(self, breakpoint: str):
+        margins = get_responsive_margins(breakpoint)
+        spacing = get_responsive_spacing(breakpoint)
+        if self.content_widget.layout():
+            self.content_widget.layout().setContentsMargins(*margins)
+            self.content_widget.layout().setSpacing(spacing)
+        compact = breakpoint in ("xs", "sm")
+        self.content_layout.setDirection(
+            QBoxLayout.Direction.TopToBottom if compact
+            else QBoxLayout.Direction.LeftToRight
+        )
+        self.content_layout.setSpacing(spacing)
+        self.left_panel.setMinimumWidth(0 if compact else SIZES['panel_min_width'])
 
     def _browse_output(self):
         tr = self.main.i18n.tr
@@ -346,10 +394,10 @@ class BassoImageScreen(QWidget):
 
     def _run(self):
         tr = self.main.i18n.tr
-        url = self.url_field.text().strip()
+        url = URLHandler.normalize_url(self.url_field.text())
         output_dir = self.output_field.text().strip()
 
-        if not url:
+        if not URLHandler.is_valid_url(url):
             InfoBar.error(
                 title=tr("common.error"),
                 content=tr("basso.images.url.invalid"),
@@ -360,6 +408,7 @@ class BassoImageScreen(QWidget):
                 parent=self,
             )
             return
+        self.url_field.setText(url)
         if not output_dir:
             InfoBar.error(
                 title=tr("common.error"),

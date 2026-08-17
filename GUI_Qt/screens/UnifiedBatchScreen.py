@@ -64,6 +64,7 @@ from GUI_Qt.widgets.TieredHeaderWidget import TieredHeaderWidget
 from GUI_Qt.widgets.FrozenColumnTableWidget import FrozenColumnOverlay
 from GUI_Qt.widgets.FilterableComboBox import FilterableComboBox
 from GUI_Qt.widgets import enable_table_copy
+from GUI_Qt.components.dialogs import DestructiveActionDialog
 from GUI_Qt.screens.batch_inspector import BatchInspectorPanel
 from GUI_Qt.styles.theme_config import (
     COLORS,
@@ -866,6 +867,7 @@ class UnifiedBatchScreen(ResponsiveWidget):
         # Delete (19)
         del_btn = TransparentToolButton(FluentIcon.DELETE, self)
         del_btn.setFixedSize(SIZES["button_height_sm"], SIZES["button_height_sm"])
+        del_btn.setToolTip(self.main.i18n.tr("batch.row.remove.tip"))
         del_btn.clicked.connect(self._remove_row)
         del_container = QWidget()
         del_container.setStyleSheet("background: transparent;")
@@ -1336,12 +1338,6 @@ class UnifiedBatchScreen(ResponsiveWidget):
             self._update_row_status(row, strategy, row_valid)
         self.start_btn.setEnabled(count > 0 and not self._is_busy)
 
-    _DOT_COLORS = {
-        "draft": "#ccc",
-        "incomplete": "#f0ad4e",
-        "ready": "#5cb85c",
-    }
-
     def _update_row_status(self, row: int, strategy=None, row_valid: bool | None = None):
         """Update the status dot for a row: grey=Draft, yellow=Incomplete, green=Ready."""
         container = self.table.cellWidget(row, COL["row_status"])
@@ -1366,7 +1362,11 @@ class UnifiedBatchScreen(ResponsiveWidget):
         else:
             state = "incomplete"
 
-        color = self._DOT_COLORS[state]
+        color = {
+            "draft": COLORS["text_tertiary_dark"] if isDarkTheme() else COLORS["text_tertiary_light"],
+            "incomplete": COLORS["warning"],
+            "ready": COLORS["success"],
+        }[state]
         dot_widget.setStyleSheet(f"background: {color}; border-radius: 5px;")
         dot_widget.setProperty("_dot_state", state)
 
@@ -1422,12 +1422,14 @@ class UnifiedBatchScreen(ResponsiveWidget):
     def _clear_all(self):
         if not self._has_data_in_table():
             return
-        dlg = MessageBox(
-            self.main.i18n.tr("batch.clear.title"),
-            self.main.i18n.tr("batch.clear.body"),
-            self,
+        confirmed = DestructiveActionDialog.ask(
+            title=self.main.i18n.tr("batch.clear.title"),
+            message=self.main.i18n.tr("batch.clear.body"),
+            action_text=self.main.i18n.tr("batch.clear_all"),
+            parent=self,
+            tr_func=self.main.i18n.tr,
         )
-        if dlg.exec():
+        if confirmed:
             self._clear_table_data()
 
     def _clear_table_data(self):
@@ -1990,14 +1992,14 @@ class UnifiedBatchScreen(ResponsiveWidget):
         if self._active_review is None:
             return
         _token, _row, code, _url, _mode = self._active_review
-        dialog = MessageBox(
-            "Atmesti neišsaugotus pakeitimus?",
-            f"{code} forma bus perkrauta, o neišsaugoti pakeitimai bus prarasti.",
-            self,
+        confirmed = DestructiveActionDialog.ask(
+            title=self.main.i18n.tr("batch.review.discard.title"),
+            message=self.main.i18n.tr("batch.review.discard.content", code=code),
+            action_text=self.main.i18n.tr("batch.review.discard.action"),
+            parent=self,
+            tr_func=self.main.i18n.tr,
         )
-        dialog.yesButton.setText("Atmesti ir tęsti")
-        dialog.cancelButton.setText("Grįžti į peržiūrą")
-        if dialog.exec():
+        if confirmed:
             self._send_review_action("discard")
 
     def _set_busy(self, busy: bool):
@@ -2436,6 +2438,8 @@ class UnifiedBatchScreen(ResponsiveWidget):
         self.density_compact_btn.setToolTip(tr("batch.density.compact"))
         self.density_standard_btn.setToolTip(tr("batch.density.standard"))
         self.inspector_btn.setToolTip(tr("batch.inspector.toggle"))
+        self.review_saved_btn.setText(tr("batch.review.saved.action"))
+        self.review_discard_btn.setText(tr("batch.review.discard.button"))
 
         # Inspector panel
         if hasattr(self, "inspector"):

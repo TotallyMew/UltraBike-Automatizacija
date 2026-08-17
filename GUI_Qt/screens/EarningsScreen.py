@@ -59,7 +59,19 @@ from qfluentwidgets import (
 )
 
 from GUI_Qt.styles.screen_theme import apply_screen_theme
-from GUI_Qt.styles.theme_config import COLORS, FONTS, PADDINGS, RADII, SIZES, SPACING
+from GUI_Qt.styles.theme_config import (
+    COLORS,
+    COMPONENT_COLORS,
+    FONTS,
+    PADDINGS,
+    RADII,
+    SIZES,
+    SPACING,
+    get_selection_bg,
+    get_subtle_border,
+    get_subtle_item_hover_bg,
+    rgba_from_hex,
+)
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
 from Managers.EarningsManager import (
     ActiveGoalError,
@@ -676,8 +688,7 @@ class EarningsScreen(ResponsiveWidget):
         history_layout.setContentsMargins(0, 0, 0, 0)
         history_layout.setSpacing(8)
         self.history_panel = self._history_card()
-        history_layout.addWidget(self.history_panel)
-        history_layout.addStretch()
+        history_layout.addWidget(self.history_panel, 1)
         self.history_page.hide()
         layout.addWidget(self.history_page)
 
@@ -1108,6 +1119,7 @@ class EarningsScreen(ResponsiveWidget):
     def _history_card(self):
         card = QWidget()
         card.setObjectName("earningsFlatSection")
+        card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         layout = QVBoxLayout(card)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
@@ -1187,17 +1199,49 @@ class EarningsScreen(ResponsiveWidget):
         layout.addWidget(self.history_toolbar)
 
         self.history_tabs = QTabWidget()
-        self.entries_table = QTableWidget(0, 9)
+        self.history_tabs.setObjectName("earningsHistoryTabs")
+        self.entries_table = QTableWidget(0, 10)
+        self.entries_table.setObjectName("earningsEntriesTable")
         self.entries_table.setHorizontalHeaderLabels(
-            ["Date", "SKU", "Name", "Brand", "Type", "Source", "Earning", "Session", "ID"]
+            ["#", "Date", "SKU", "Name", "Brand", "Type", "Source", "Earning", "Session", "ID"]
         )
-        self.entries_table.setColumnHidden(8, True)
+        self.entries_table.setColumnHidden(9, True)
         self.entries_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.entries_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.entries_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.entries_table.setAlternatingRowColors(True)
+        self.entries_table.setShowGrid(False)
+        self.entries_table.setWordWrap(False)
+        self.entries_table.verticalHeader().setVisible(False)
+        self.entries_table.verticalHeader().setDefaultSectionSize(36)
+        self.entries_table.horizontalHeader().setMinimumHeight(42)
+        self.entries_table.horizontalHeader().setHighlightSections(False)
+        self.entries_table.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.entries_table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.entries_table.setSortingEnabled(True)
         self.entries_table.doubleClicked.connect(self._edit_selected_entry)
         self.entries_table.itemSelectionChanged.connect(self._update_history_actions)
-        self.entries_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        entries_header = self.entries_table.horizontalHeader()
+        entries_header.setDefaultAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        )
+        self.entries_table.horizontalHeaderItem(0).setTextAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+        for column in range(9):
+            entries_header.setSectionResizeMode(column, QHeaderView.ResizeMode.Interactive)
+        entries_header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        for column, width in {
+            0: 54,
+            1: 150,
+            2: 120,
+            4: 120,
+            5: 100,
+            6: 125,
+            7: 100,
+            8: 110,
+        }.items():
+            self.entries_table.setColumnWidth(column, width)
 
         self.entries_empty_state = QWidget()
         self.entries_empty_state.setObjectName("earningsEmptyState")
@@ -1226,11 +1270,29 @@ class EarningsScreen(ResponsiveWidget):
         entry_layout.addWidget(self.entries_stack)
         self.history_tabs.addTab(entry_page, "Earnings")
         self.sessions_table = QTableWidget(0, 8)
+        self.sessions_table.setObjectName("earningsSessionsTable")
         self.sessions_table.setHorizontalHeaderLabels(
             ["Started", "Mode", "Status", "Target", "Worked", "Products", "Earned", "€/hour"]
         )
         self.sessions_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.sessions_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.sessions_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.sessions_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.sessions_table.setAlternatingRowColors(True)
+        self.sessions_table.setShowGrid(False)
+        self.sessions_table.setWordWrap(False)
+        self.sessions_table.verticalHeader().setVisible(False)
+        self.sessions_table.verticalHeader().setDefaultSectionSize(36)
+        self.sessions_table.horizontalHeader().setMinimumHeight(42)
+        self.sessions_table.horizontalHeader().setHighlightSections(False)
+        self.sessions_table.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.sessions_table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        sessions_header = self.sessions_table.horizontalHeader()
+        sessions_header.setDefaultAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        )
+        sessions_header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        for column in range(1, 8):
+            sessions_header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
 
         self.sessions_empty_state = QWidget()
         self.sessions_empty_state.setObjectName("earningsEmptyState")
@@ -1258,8 +1320,11 @@ class EarningsScreen(ResponsiveWidget):
         sessions_layout.setContentsMargins(0, 8, 0, 0)
         sessions_layout.addWidget(self.sessions_stack)
         self.history_tabs.addTab(sessions_page, "Work sessions")
-        self.history_tabs.setMinimumHeight(250)
-        layout.addWidget(self.history_tabs)
+        self.history_tabs.setMinimumHeight(420)
+        self.history_tabs.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
+        layout.addWidget(self.history_tabs, 1)
         return card
 
     def _arrange_history_toolbar(self, *, compact: bool) -> None:
@@ -1372,11 +1437,14 @@ class EarningsScreen(ResponsiveWidget):
             money(values["all_cents"]),
             activity_line(values["all_count"], values["all_seconds"]),
         )
-        rate_subtitle = (
-            "Earnings per tracked hour"
-            if values["effective_hourly_cents"] is not None
-            else "Track work time to calculate"
-        )
+        if values["effective_hourly_cents"] is None:
+            rate_subtitle = "Start the timer before logging earnings"
+        elif values["untimed_count"]:
+            rate_subtitle = (
+                f"Timed earnings only | {values['untimed_count']:,} untimed excluded"
+            )
+        else:
+            rate_subtitle = "Timed earnings per tracked hour"
         self.metric_rate.set_values(money(values["effective_hourly_cents"]), rate_subtitle)
         self.analytics_total.set_values(money(values["all_cents"]), "Across all recorded earnings")
         self.analytics_products.set_values(f"{values['all_count']:,}", "Paid products recorded")
@@ -1552,14 +1620,26 @@ class EarningsScreen(ResponsiveWidget):
         self.entries_table.setRowCount(len(self._entries))
         for row, entry in enumerate(self._entries):
             values = (
-                local_datetime(entry["earned_at"]), entry["sku"], entry.get("product_name") or "",
+                row + 1, local_datetime(entry["earned_at"]), entry["sku"], entry.get("product_name") or "",
                 entry.get("brand_name") or "", entry["product_type"].title(),
                 entry["source"].replace("_", " ").title(), money(entry["payout_cents"]),
                 str(entry.get("session_id") or ""), str(entry["id"]),
             )
             for column, value in enumerate(values):
-                item = QTableWidgetItem(str(value))
+                item = QTableWidgetItem()
+                item.setData(
+                    Qt.ItemDataRole.DisplayRole,
+                    int(value) if column == 0 else str(value),
+                )
                 item.setData(Qt.ItemDataRole.UserRole, entry)
+                if value:
+                    item.setToolTip(str(value))
+                if column == 0:
+                    item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                elif column in (7, 8):
+                    item.setTextAlignment(
+                        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+                    )
                 self.entries_table.setItem(row, column, item)
         self.entries_table.setSortingEnabled(True)
         has_rows = bool(self._entries)
@@ -1596,7 +1676,14 @@ class EarningsScreen(ResponsiveWidget):
                 money(session["earned_cents"]), money(session["hourly_cents"]),
             )
             for column, value in enumerate(values):
-                self.sessions_table.setItem(row, column, QTableWidgetItem(str(value)))
+                item = QTableWidgetItem(str(value))
+                if value:
+                    item.setToolTip(str(value))
+                if column >= 3:
+                    item.setTextAlignment(
+                        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+                    )
+                self.sessions_table.setItem(row, column, item)
         has_sessions = bool(sessions)
         self.sessions_stack.setCurrentIndex(0 if has_sessions else 1)
         self.sessions_stack.setMaximumHeight(16777215 if has_sessions else 210)
@@ -1877,6 +1964,8 @@ class EarningsScreen(ResponsiveWidget):
         ws_summary.append(["All-time earnings", values["all_cents"] / 100])
         ws_summary.append(["All-time products", values["all_count"]])
         ws_summary.append(["Tracked hours", values["all_seconds"] / 3600])
+        ws_summary.append(["Timed earnings used for rate", values["timed_cents"] / 100])
+        ws_summary.append(["Untimed earnings excluded", values["untimed_cents"] / 100])
         ws_summary.append(["Effective €/hour", values["effective_hourly_cents"] / 100 if values["effective_hourly_cents"] is not None else None])
         projections = self.service.income_projections(
             effective_hourly_cents=values["effective_hourly_cents"]
@@ -1906,10 +1995,25 @@ class EarningsScreen(ResponsiveWidget):
         empty_surface = "#202332" if dark else "#F6F8FB"
         text = COLORS["text_primary_dark" if dark else "text_primary_light"]
         muted = COLORS["text_secondary_dark" if dark else "text_secondary_light"]
-        outline = "#48506A" if dark else "#CBD5E1"
-        card_border = "#343A52" if dark else "#DCE3EA"
-        secondary_hover = "#34394E" if dark else "#EEF2F7"
-        danger = "#FCA5A5" if dark else "#B42318"
+        outline = get_subtle_border(dark)
+        card_border = COMPONENT_COLORS["card"]["border_dark" if dark else "border_light"]
+        secondary_hover = get_subtle_item_hover_bg(dark)
+        danger = COLORS["error_text_dark" if dark else "error_text_light"]
+        accent = COLORS["lavender_grey" if dark else "space_indigo"]
+        accent_text = COLORS["space_indigo" if dark else "text_white"]
+        accent_hover = "#A5B0C1" if dark else "#3B3E59"
+        accent_pressed = "#758197" if dark else "#202234"
+        accent_soft = rgba_from_hex(
+            COLORS["lavender_grey" if dark else "space_indigo"],
+            0.16 if dark else 0.07,
+        )
+        disabled_bg = COLORS["bg_alt_dark"] if dark else "#E6E9ED"
+        table_colors = COMPONENT_COLORS["table"]
+        table_bg = table_colors["row_bg_dark" if dark else "row_bg_light"]
+        table_alt = table_colors["row_alt_bg_dark" if dark else "row_alt_bg_light"]
+        table_border = table_colors["border_dark" if dark else "border_light"]
+        table_header = COLORS["lavender_grey" if dark else "space_indigo"]
+        table_header_text = COLORS["space_indigo" if dark else "text_white"]
         self.setStyleSheet(
             self.styleSheet()
             + f"""
@@ -1924,27 +2028,27 @@ class EarningsScreen(ResponsiveWidget):
             }}
             EarningsScreen PrimaryPushButton#earningsPrimaryAction,
             EarningsScreen PrimaryPushButton#timerStart {{
-                background-color: #2854C5;
-                border: 1px solid #173B99;
-                color: #FFFFFF;
+                background-color: {accent};
+                border: 1px solid {accent};
+                color: {accent_text};
                 font-weight: 600;
                 border-radius: 8px;
             }}
             EarningsScreen PrimaryPushButton#earningsPrimaryAction:hover,
             EarningsScreen PrimaryPushButton#timerStart:hover {{
-                background-color: #1F46AD;
-                border-color: #1F46AD;
+                background-color: {accent_hover};
+                border-color: {accent_hover};
             }}
             EarningsScreen PrimaryPushButton#earningsPrimaryAction:pressed,
             EarningsScreen PrimaryPushButton#timerStart:pressed {{
-                background-color: #183889;
-                border-color: #183889;
+                background-color: {accent_pressed};
+                border-color: {accent_pressed};
             }}
             EarningsScreen PrimaryPushButton#earningsPrimaryAction:disabled,
             EarningsScreen PrimaryPushButton#timerStart:disabled {{
-                background-color: #94A3B8;
-                border-color: #94A3B8;
-                color: #F8FAFC;
+                background-color: {disabled_bg};
+                border-color: {table_border};
+                color: {muted};
             }}
             EarningsScreen PushButton#earningsSecondaryAction {{
                 background: transparent;
@@ -1954,18 +2058,18 @@ class EarningsScreen(ResponsiveWidget):
             }}
             EarningsScreen PushButton#earningsSecondaryAction:hover {{
                 background-color: {secondary_hover};
-                border-color: #2854C5;
+                border-color: {accent};
             }}
             EarningsScreen PushButton#earningsHeaderAction {{
-                background-color: {surface};
-                border: 1px solid {outline};
-                color: {muted};
+                background-color: {accent_soft};
+                border: 1px solid {accent};
+                color: {accent};
                 border-radius: 7px;
             }}
             EarningsScreen PushButton#earningsHeaderAction:hover {{
-                background-color: {secondary_hover};
-                border-color: #2854C5;
-                color: {text};
+                background-color: {accent};
+                border-color: {accent};
+                color: {accent_text};
             }}
             EarningsScreen PushButton#earningsDangerAction {{
                 background: transparent;
@@ -1983,20 +2087,74 @@ class EarningsScreen(ResponsiveWidget):
             }}
             EarningsScreen PushButton#timerSecondary:hover {{
                 background-color: {secondary_hover};
-                border-color: #2854C5;
+                border-color: {accent};
             }}
             EarningsScreen QWidget#earningsEmptyState {{
                 background-color: {empty_surface};
                 border: 1px solid {card_border};
                 border-radius: 10px;
             }}
-            EarningsScreen QTabWidget::pane {{
+            EarningsScreen QTabWidget#earningsHistoryTabs::pane {{
+                border: 1px solid {table_border};
+                border-radius: 8px;
+                background-color: {table_bg};
+                top: -1px;
+            }}
+            EarningsScreen QTabWidget#earningsHistoryTabs QTabBar::tab {{
+                background-color: transparent;
+                color: {muted};
                 border: none;
-                background: transparent;
+                border-bottom: 2px solid transparent;
+                padding: 8px 14px;
+                margin-right: 2px;
+            }}
+            EarningsScreen QTabWidget#earningsHistoryTabs QTabBar::tab:hover {{
+                background-color: {accent_soft};
+                color: {text};
+            }}
+            EarningsScreen QTabWidget#earningsHistoryTabs QTabBar::tab:selected {{
+                background-color: {table_bg};
+                color: {accent};
+                border-bottom: 2px solid {accent};
+                font-weight: 600;
             }}
             EarningsScreen QTableWidget {{
-                border: 1px solid {outline};
+                background-color: {table_bg};
+                alternate-background-color: {table_alt};
+                color: {text};
+                border: none;
                 border-radius: 8px;
+                gridline-color: transparent;
+                selection-background-color: {get_selection_bg()};
+                selection-color: {text};
+            }}
+            EarningsScreen QTableWidget::viewport {{
+                background-color: {table_bg};
+                border-radius: 8px;
+            }}
+            EarningsScreen QTableWidget::item {{
+                border: none;
+                border-bottom: 1px solid {table_border};
+                padding: 7px 10px;
+            }}
+            EarningsScreen QTableWidget::item:hover {{
+                background-color: {secondary_hover};
+            }}
+            EarningsScreen QTableWidget::item:selected {{
+                background-color: {get_selection_bg()};
+                color: {text};
+            }}
+            EarningsScreen QHeaderView::section {{
+                background-color: {table_header};
+                color: {table_header_text};
+                border: none;
+                border-right: 1px solid {outline};
+                padding: 10px 12px;
+                font-weight: 600;
+            }}
+            EarningsScreen QTableCornerButton::section {{
+                background-color: {table_header};
+                border: none;
             }}
             """
         )
@@ -2018,9 +2176,9 @@ class EarningsScreen(ResponsiveWidget):
             }}
             QTabBar::tab:hover {{ background-color: {secondary_hover}; color: {text}; }}
             QTabBar::tab:selected {{
-                background-color: {'#30364B' if dark else '#E4EBFA'};
-                color: {'#FFFFFF' if dark else '#173B99'};
-                border-bottom: 3px solid #2854C5;
+                background-color: {accent_soft};
+                color: {accent};
+                border-bottom: 3px solid {accent};
                 font-weight: 600;
             }}
         """)
@@ -2049,19 +2207,19 @@ class EarningsScreen(ResponsiveWidget):
                 f"QWidget#earningsEmptyState {{ background-color: {empty_surface}; border: 1px solid {card_border}; border-radius: 10px; }}"
             )
 
-        primary_push_style = """
-            PrimaryPushButton {
-                background-color: #2854C5;
-                border: 1px solid #173B99;
+        primary_push_style = f"""
+            PrimaryPushButton {{
+                background-color: {accent};
+                border: 1px solid {accent};
                 border-radius: 8px;
-                color: #FFFFFF;
+                color: {accent_text};
                 font-weight: 600;
                 padding-left: 16px;
                 padding-right: 16px;
-            }
-            PrimaryPushButton:hover { background-color: #1F46AD; border-color: #1F46AD; }
-            PrimaryPushButton:pressed { background-color: #183889; border-color: #183889; }
-            PrimaryPushButton:disabled { background-color: #94A3B8; border-color: #94A3B8; color: #F8FAFC; }
+            }}
+            PrimaryPushButton:hover {{ background-color: {accent_hover}; border-color: {accent_hover}; }}
+            PrimaryPushButton:pressed {{ background-color: {accent_pressed}; border-color: {accent_pressed}; }}
+            PrimaryPushButton:disabled {{ background-color: {disabled_bg}; border-color: {table_border}; color: {muted}; }}
         """
         for button in (
             self.add_button,
@@ -2075,7 +2233,7 @@ class EarningsScreen(ResponsiveWidget):
             button.setStyleSheet(primary_push_style)
         secondary_style = f"""
             PushButton {{ background: transparent; border: 1px solid {outline}; border-radius: 7px; color: {text}; padding-left: 12px; padding-right: 12px; }}
-            PushButton:hover {{ background-color: {secondary_hover}; border-color: #2854C5; }}
+            PushButton:hover {{ background-color: {secondary_hover}; border-color: {accent}; }}
         """
         for button in (
             self.goal_edit,
@@ -2092,8 +2250,8 @@ class EarningsScreen(ResponsiveWidget):
         self.delete_entry_button.setStyleSheet(danger_style)
         self.timer_reset.setStyleSheet(danger_style)
         header_style = f"""
-            PushButton {{ background-color: {surface}; border: 1px solid {outline}; border-radius: 7px; color: {text}; padding-left: 12px; padding-right: 12px; }}
-            PushButton:hover {{ background-color: {secondary_hover}; border-color: #2854C5; color: {text}; }}
+            PushButton {{ background-color: {accent_soft}; border: 1px solid {accent}; border-radius: 7px; color: {accent}; padding-left: 12px; padding-right: 12px; }}
+            PushButton:hover {{ background-color: {accent}; border-color: {accent}; color: {accent_text}; }}
         """
         for button in (self.brands_button, self.settings_button, self.export_button):
             button.setStyleSheet(header_style)

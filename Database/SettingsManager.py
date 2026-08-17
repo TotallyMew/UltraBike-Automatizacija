@@ -196,46 +196,46 @@ class SettingsManager:
         """
         Set setting value
         """
-        cursor = self.db.conn.cursor()
-        
-        # Convert value to string
-        if isinstance(value, bool):
-            value_str = 'true' if value else 'false'
-        else:
-            value_str = str(value)
-        
-        now = datetime.now()
-        cursor.execute(
-            """
-            UPDATE settings 
-            SET value = ?, updated_at = ?
-            WHERE key = ?
-            """,
-            (value_str, now, key),
-        )
+        self.set_many({key: value})
 
-        # If the key doesn't exist (older DB / missing defaults), insert it.
-        if cursor.rowcount == 0:
-            if isinstance(value, bool):
-                value_type = 'bool'
-                default_value = 'true' if value else 'false'
-            elif isinstance(value, int):
-                value_type = 'int'
-                default_value = str(value)
-            else:
-                value_type = 'string'
-                default_value = ''
+    def set_many(self, values: dict) -> None:
+        """Persist a group of settings atomically."""
+        if not values:
+            return
+        with self.db.conn:
+            cursor = self.db.conn.cursor()
+            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            for key, value in values.items():
+                if isinstance(value, bool):
+                    value_str = 'true' if value else 'false'
+                    value_type = 'bool'
+                    default_value = value_str
+                elif isinstance(value, int):
+                    value_str = str(value)
+                    value_type = 'int'
+                    default_value = value_str
+                else:
+                    value_str = str(value)
+                    value_type = 'string'
+                    default_value = ''
 
-            cursor.execute(
-                """
-                INSERT OR REPLACE INTO settings
-                (key, value, value_type, category, description, default_value, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                (key, value_str, value_type, 'misc', '', default_value, now),
-            )
-
-        self.db.conn.commit()
+                cursor.execute(
+                    """
+                    UPDATE settings
+                    SET value = ?, updated_at = ?
+                    WHERE key = ?
+                    """,
+                    (value_str, now, key),
+                )
+                if cursor.rowcount == 0:
+                    cursor.execute(
+                        """
+                        INSERT INTO settings
+                        (key, value, value_type, category, description, default_value, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (key, value_str, value_type, 'misc', '', default_value, now),
+                    )
     
     def get_all_by_category(self, category: str) -> dict:
         """

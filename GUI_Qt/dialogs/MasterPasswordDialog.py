@@ -7,11 +7,14 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout
 from PySide6.QtCore import Qt
 from qfluentwidgets import (
     MessageBox, PasswordLineEdit, BodyLabel, TitleLabel,
-    PrimaryPushButton, InfoBar, InfoBarPosition
+    CaptionLabel, PrimaryPushButton, InfoBar, InfoBarPosition
 )
 
 from GUI_Qt.styles.theme_config import SIZES, SPACING
-from GUI_Qt.styles.screen_theme import CARD_SPACING, CARD_SPACING_LARGE, CENTER_FORM_MARGINS, ROW_SPACING
+from GUI_Qt.styles.screen_theme import (
+    CARD_SPACING, CARD_SPACING_LARGE, CENTER_FORM_MARGINS, ROW_SPACING,
+    apply_screen_theme,
+)
 
 
 class MasterPasswordSetupDialog(QWidget):
@@ -23,6 +26,7 @@ class MasterPasswordSetupDialog(QWidget):
         self.on_complete_callback = on_complete
 
         self._init_ui()
+        apply_screen_theme(self, "MasterPasswordSetupDialog")
 
     def _init_ui(self):
         """Initialize UI components"""
@@ -62,7 +66,9 @@ class MasterPasswordSetupDialog(QWidget):
         password_label = BodyLabel(self.main.i18n.tr("master.password.label"))
         self.password_field = PasswordLineEdit()
         self.password_field.setPlaceholderText(self.main.i18n.tr("master.password.placeholder"))
+        self.password_field.setAccessibleName(self.main.i18n.tr("master.password.label"))
         self.password_field.textChanged.connect(self._check_form_valid)
+        password_label.setBuddy(self.password_field)
 
         password_row_layout.addWidget(password_label)
         password_row_layout.addWidget(self.password_field)
@@ -77,11 +83,18 @@ class MasterPasswordSetupDialog(QWidget):
         confirm_label = BodyLabel(self.main.i18n.tr("master.confirm.label"))
         self.confirm_field = PasswordLineEdit()
         self.confirm_field.setPlaceholderText(self.main.i18n.tr("master.confirm.placeholder"))
+        self.confirm_field.setAccessibleName(self.main.i18n.tr("master.confirm.label"))
         self.confirm_field.textChanged.connect(self._check_form_valid)
+        self.confirm_field.returnPressed.connect(self._handle_create)
+        confirm_label.setBuddy(self.confirm_field)
 
         confirm_row_layout.addWidget(confirm_label)
         confirm_row_layout.addWidget(self.confirm_field)
         center_layout.addWidget(confirm_row)
+
+        self.validation_label = CaptionLabel(self.main.i18n.tr("master.password.requirement"))
+        self.validation_label.setWordWrap(True)
+        center_layout.addWidget(self.validation_label)
 
         # Spacer
         center_layout.addSpacing(CARD_SPACING)
@@ -108,15 +121,45 @@ class MasterPasswordSetupDialog(QWidget):
         password = self.password_field.text()
         confirm = self.confirm_field.text()
 
-        valid = len(password) >= 6 and password == confirm
+        valid_length = len(password) >= 10
+        matches = password == confirm
+        valid = valid_length and matches
         self.create_button.setEnabled(valid)
+        if not valid_length:
+            self.validation_label.setText(self.main.i18n.tr("master.password.requirement"))
+            state = "error" if password else ""
+        elif not confirm:
+            self.validation_label.setText(self.main.i18n.tr("master.password.confirm_requirement"))
+            state = ""
+        elif not matches:
+            self.validation_label.setText(self.main.i18n.tr("master.password.mismatch"))
+            state = "error"
+        else:
+            self.validation_label.setText(self.main.i18n.tr("master.password.ready"))
+            state = "valid"
+        self.password_field.setProperty("validationState", "valid" if valid_length else state)
+        self.confirm_field.setProperty("validationState", state)
+        for field in (self.password_field, self.confirm_field):
+            field.style().unpolish(field)
+            field.style().polish(field)
 
     def _handle_create(self):
         """Handle create button click"""
         password = self.password_field.text()
+        if not self.create_button.isEnabled():
+            return
 
-        # Create master password
-        self.main.credential_manager.create_master_password(password)
+        try:
+            self.main.credential_manager.create_master_password(password)
+        except Exception as error:
+            InfoBar.error(
+                title=self.main.i18n.tr("common.error"),
+                content=str(error),
+                position=InfoBarPosition.TOP,
+                duration=4000,
+                parent=self,
+            )
+            return
 
         # Show success
         InfoBar.success(
@@ -143,6 +186,7 @@ class MasterPasswordPromptDialog(QWidget):
         self.on_success_callback = on_success
 
         self._init_ui()
+        apply_screen_theme(self, "MasterPasswordPromptDialog")
 
     def _init_ui(self):
         """Initialize UI components"""
@@ -182,8 +226,10 @@ class MasterPasswordPromptDialog(QWidget):
         password_label = BodyLabel(self.main.i18n.tr("master.password.label"))
         self.password_field = PasswordLineEdit()
         self.password_field.setPlaceholderText(self.main.i18n.tr("master.password.placeholder"))
+        self.password_field.setAccessibleName(self.main.i18n.tr("master.password.label"))
         self.password_field.textChanged.connect(self._check_form_valid)
         self.password_field.returnPressed.connect(self._handle_unlock)
+        password_label.setBuddy(self.password_field)
 
         password_row_layout.addWidget(password_label)
         password_row_layout.addWidget(self.password_field)
@@ -264,3 +310,4 @@ class MasterPasswordPromptDialog(QWidget):
 
             # Clear password field
             self.password_field.clear()
+            self.password_field.setFocus(Qt.FocusReason.OtherFocusReason)

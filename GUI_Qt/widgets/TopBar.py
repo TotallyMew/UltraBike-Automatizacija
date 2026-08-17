@@ -12,12 +12,23 @@ from GUI_Qt.styles.theme_config import COLORS, SPACING
 class TopBar(QWidget):
     """Top bar with user info and logout button"""
 
-    def __init__(self, user_text, on_reconnect, on_logout, tr=None, parent=None):
+    def __init__(
+        self,
+        user_text,
+        on_reconnect,
+        on_logout,
+        tr=None,
+        parent=None,
+        on_account=None,
+        on_settings=None,
+    ):
         super().__init__(parent)
 
         self.user_text = user_text
         self.on_reconnect_callback = on_reconnect
         self.on_logout_callback = on_logout
+        self.on_account_callback = on_account
+        self.on_settings_callback = on_settings
         self.tr = tr or (lambda k, **kw: k.format(**kw) if kw else k)
 
         self._init_ui()
@@ -36,12 +47,20 @@ class TopBar(QWidget):
         # Reconnect browser button
         self.reconnect_button = TransparentToolButton(FluentIcon.SYNC, self)
         self.reconnect_button.setToolTip("")
+        self.reconnect_button.setFixedSize(36, 36)
         self.reconnect_button.clicked.connect(self.on_reconnect_callback)
         layout.addWidget(self.reconnect_button)
 
-        self.user_button = PushButton("")
+        self.user_button = PushButton("", self)
         self.user_button.setObjectName("accountMenu")
         self.user_menu = QMenu(self.user_button)
+        self.account_action = self.user_menu.addAction("")
+        if callable(self.on_account_callback):
+            self.account_action.triggered.connect(self.on_account_callback)
+        self.settings_action = self.user_menu.addAction("")
+        if callable(self.on_settings_callback):
+            self.settings_action.triggered.connect(self.on_settings_callback)
+        self.user_menu.addSeparator()
         self.logout_action = self.user_menu.addAction("")
         self.logout_action.triggered.connect(self.on_logout_callback)
         self.user_button.setMenu(self.user_menu)
@@ -74,7 +93,7 @@ class TopBar(QWidget):
                 padding: 6px 12px;
             }}
             #TopBar PushButton#accountMenu:hover {{
-                background-color: {'#303447' if is_dark else '#FFFFFF'};
+                background-color: {COLORS['bg_alt_dark'] if is_dark else COLORS['bg_light']};
             }}
             #TopBar TransparentToolButton {{
                 color: {text_secondary};
@@ -84,7 +103,13 @@ class TopBar(QWidget):
 
     def retranslate_ui(self):
         self.user_button.setText(self.tr("topbar.logged_in", user=self.user_text))
-        self.reconnect_button.setToolTip(self.tr("topbar.reconnect"))
+        reconnect = self.tr("topbar.reconnect")
+        self.reconnect_button.setToolTip(f"{reconnect} (Ctrl+Shift+R)")
+        self.reconnect_button.setAccessibleName(reconnect)
+        self.reconnect_button.setAccessibleDescription(self.tr("topbar.reconnect.description"))
+        self.user_button.setAccessibleName(self.tr("topbar.account_menu"))
+        self.account_action.setText(self.tr("nav.account"))
+        self.settings_action.setText(self.tr("nav.settings"))
         self.logout_action.setText(self.tr("topbar.logout"))
 
     def update_user(self, user_text):

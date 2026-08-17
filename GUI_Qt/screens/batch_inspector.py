@@ -34,7 +34,7 @@ from qfluentwidgets import (
 
 from GUI_Qt.widgets.FilterableComboBox import FilterableComboBox
 from GUI_Qt.screens.batch_columns import COL, COLUMNS, COLUMN_GROUPS
-from GUI_Qt.styles.theme_config import COLORS, RADII, SPACING
+from GUI_Qt.styles.theme_config import COLORS, RADII, SPACING, get_text_color
 
 
 # Fields shown per section.  Key = section i18n key, value = list of column keys.
@@ -123,7 +123,9 @@ class BatchInspectorPanel(QWidget):
         # Status section (always at top, minimal)
         self._status_dot = QWidget()
         self._status_dot.setFixedSize(10, 10)
-        self._status_dot.setStyleSheet("background: #ccc; border-radius: 5px;")
+        self._status_dot.setStyleSheet(
+            f"background: {get_text_color(isDarkTheme(), 'tertiary')}; border-radius: 5px;"
+        )
         self._status_text = BodyLabel("")
         self._status_text.setStyleSheet("background: transparent;")
         status_row = QHBoxLayout()
@@ -247,10 +249,12 @@ class BatchInspectorPanel(QWidget):
         finally:
             self._suppressing = False
 
-    _DOT_COLORS = {"draft": "#ccc", "incomplete": "#f0ad4e", "ready": "#5cb85c"}
-
     def update_status(self, state: str = "draft", text: str = ""):
-        color = self._DOT_COLORS.get(state, "#ccc")
+        color = {
+            "draft": get_text_color(isDarkTheme(), "tertiary"),
+            "incomplete": COLORS["warning"],
+            "ready": COLORS["success"],
+        }.get(state, get_text_color(isDarkTheme(), "tertiary"))
         self._status_dot.setStyleSheet(f"background: {color}; border-radius: 5px;")
         self._status_text.setText(text)
 
@@ -258,7 +262,9 @@ class BatchInspectorPanel(QWidget):
         """Clear all fields (no row selected)."""
         self._current_row = -1
         self._title_label.setText("")
-        self._status_dot.setStyleSheet("background: #ccc; border-radius: 5px;")
+        self._status_dot.setStyleSheet(
+            f"background: {get_text_color(isDarkTheme(), 'tertiary')}; border-radius: 5px;"
+        )
         self._status_text.setText("")
         self._suppressing = True
         try:

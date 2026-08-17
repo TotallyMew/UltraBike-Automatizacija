@@ -4,7 +4,7 @@ HTML description editor with list selection and tabbed editing
 """
 
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QToolButton, QFrame,
+    QWidget, QVBoxLayout, QHBoxLayout, QBoxLayout, QToolButton, QFrame,
     QTextEdit, QTabWidget, QPushButton, QInputDialog
 )
 from PySide6.QtCore import Qt, Signal, QThread
@@ -13,12 +13,12 @@ from qfluentwidgets import (
     CardWidget, TransparentToolButton, FluentIcon,
     TitleLabel, BodyLabel, CaptionLabel, InfoBar, InfoBarPosition,
     isDarkTheme, PrimaryPushButton, LineEdit, PushButton, ComboBox, qconfig,
-    IndeterminateProgressRing, ScrollArea
+    IndeterminateProgressRing, ScrollArea, IconWidget
 )
 from Managers.DescriptionManager import DescriptionManager
 from Managers.DeepLTranslator import DeepLTranslator
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
-from GUI_Qt.components.dialogs import DestructiveActionDialog
+from GUI_Qt.components.dialogs import DestructiveActionDialog, UnsavedChangesDialog
 from GUI_Qt.styles.theme_config import COLORS, FONTS, RADII, PADDINGS, rgba_from_hex
 from GUI_Qt.styles.theme_config import SIZES
 from GUI_Qt.styles.screen_theme import (
@@ -136,9 +136,8 @@ class DescriptionsScreen(ResponsiveWidget):
         title_container = QHBoxLayout()
         title_container.setSpacing(ICON_TEXT_GAP)
 
-        title_icon = TransparentToolButton(FluentIcon.DOCUMENT, self)
+        title_icon = IconWidget(FluentIcon.DOCUMENT)
         title_icon.setFixedSize(SIZES['icon_lg'], SIZES['icon_lg'])
-        title_icon.setEnabled(False)
 
         self.title_label = TitleLabel("")
 
@@ -164,15 +163,15 @@ class DescriptionsScreen(ResponsiveWidget):
         main_layout.addLayout(header)
 
         # === MAIN CONTENT (SIDE BY SIDE) ===
-        content_layout = QHBoxLayout()
-        content_layout.setSpacing(PAGE_SPACING)
+        self.content_layout = QHBoxLayout()
+        self.content_layout.setSpacing(PAGE_SPACING)
 
         # LEFT PANEL - Description List
-        left_panel = CardWidget()
-        left_panel.setBorderRadius(RADII['md'])
-        left_panel.setMinimumWidth(SIZES['sidebar_min_width'])
+        self.left_panel = CardWidget()
+        self.left_panel.setBorderRadius(RADII['md'])
+        self.left_panel.setMinimumWidth(SIZES['sidebar_min_width'])
 
-        left_layout = QVBoxLayout(left_panel)
+        left_layout = QVBoxLayout(self.left_panel)
         left_layout.setContentsMargins(*PANEL_MARGINS)
         left_layout.setSpacing(CONTENT_SPACING)
 
@@ -231,13 +230,13 @@ class DescriptionsScreen(ResponsiveWidget):
 
         left_layout.addLayout(list_btn_layout)
 
-        content_layout.addWidget(left_panel, 3)  # 30% of space
+        self.content_layout.addWidget(self.left_panel, 3)  # 30% of space
 
         # RIGHT PANEL - Tabs with HTML Editors (with max-width for readability)
-        right_panel = CardWidget()
-        right_panel.setBorderRadius(RADII['md'])
+        self.right_panel = CardWidget()
+        self.right_panel.setBorderRadius(RADII['md'])
 
-        right_layout = QVBoxLayout(right_panel)
+        right_layout = QVBoxLayout(self.right_panel)
         right_layout.setContentsMargins(*PANEL_MARGINS)
         right_layout.setSpacing(CONTENT_SPACING)
 
@@ -257,6 +256,9 @@ class DescriptionsScreen(ResponsiveWidget):
         folder_row.setSpacing(ICON_TEXT_GAP)
         self.folder_label = BodyLabel("")
         self.folder_input = ComboBox(self)
+        self.folder_input.setAccessibleName(
+            self.main.i18n.tr("descriptions.folder.label")
+        )
         self.folder_input.currentTextChanged.connect(self._on_folder_changed)
         folder_row.addWidget(self.folder_label)
         folder_row.addWidget(self.folder_input, 1)
@@ -310,9 +312,9 @@ class DescriptionsScreen(ResponsiveWidget):
 
         right_layout.addLayout(action_layout)
 
-        content_layout.addWidget(right_panel, 7)  # 70% of space
+        self.content_layout.addWidget(self.right_panel, 7)  # 70% of space
 
-        main_layout.addLayout(content_layout, 1)
+        main_layout.addLayout(self.content_layout, 1)
 
         self.retranslate_ui()
 
@@ -381,6 +383,7 @@ class DescriptionsScreen(ResponsiveWidget):
         self.name_label.setText(tr("descriptions.name.label"))
         self.name_input.setPlaceholderText(tr("descriptions.name.placeholder"))
         self.folder_label.setText(tr("descriptions.folder.label"))
+        self.folder_input.setAccessibleName(tr("descriptions.folder.label"))
 
         try:
             self.folder_input.setPlaceholderText(tr("descriptions.folder.placeholder"))
@@ -510,6 +513,11 @@ class DescriptionsScreen(ResponsiveWidget):
 
     def _on_description_clicked(self, description_name: str):
         """Select exactly one description and load it."""
+        if description_name == self.current_description_name:
+            return
+        if not self.request_navigation_away():
+            self._select_description_button(self.current_description_name or "")
+            return
         self._select_description_button(description_name)
         self._load_description(description_name)
 
@@ -647,9 +655,10 @@ class DescriptionsScreen(ResponsiveWidget):
 
         name = desc_data['name']
 
-        self._load_description(name)
+        if self.request_navigation_away():
+            self._load_description(name)
 
-    def _load_description(self, name):
+    def _load_description(self, name, notify: bool = True):
         """Load description into editors"""
         try:
             desc = self.desc_manager.load_description(name)
@@ -689,13 +698,14 @@ class DescriptionsScreen(ResponsiveWidget):
                 self.translate_btn.setEnabled(True)
                 self.delete_btn.setEnabled(True)
 
-                InfoBar.success(
-                    title=self.main.i18n.tr("descriptions.loaded.title"),
-                    content=self.main.i18n.tr("descriptions.loaded.content", name=name),
-                    parent=self,
-                    position=InfoBarPosition.TOP,
-                    duration=2000
-                )
+                if notify:
+                    InfoBar.success(
+                        title=self.main.i18n.tr("descriptions.loaded.title"),
+                        content=self.main.i18n.tr("descriptions.loaded.content", name=name),
+                        parent=self,
+                        position=InfoBarPosition.TOP,
+                        duration=2000
+                    )
 
         except Exception as ex:
             InfoBar.error(
@@ -756,6 +766,12 @@ class DescriptionsScreen(ResponsiveWidget):
 
     def _handle_new(self):
         """Create new description"""
+        if self.has_unsaved_changes and not self.request_navigation_away():
+            return
+        self._start_new_description(notify=True)
+
+    def _start_new_description(self, notify: bool = True):
+        """Reset the editor for a new description."""
         self.current_description_name = None
         self.current_description_folder = ""
         self.has_unsaved_changes = True
@@ -780,13 +796,34 @@ class DescriptionsScreen(ResponsiveWidget):
         self.delete_btn.setEnabled(False)
         self._select_description_button("")
 
-        InfoBar.success(
-            title=self.main.i18n.tr("descriptions.new.title"),
-            content=self.main.i18n.tr("descriptions.new.content"),
-            parent=self,
-            position=InfoBarPosition.TOP,
-            duration=2000
-        )
+        if notify:
+            InfoBar.success(
+                title=self.main.i18n.tr("descriptions.new.title"),
+                content=self.main.i18n.tr("descriptions.new.content"),
+                parent=self,
+                position=InfoBarPosition.TOP,
+                duration=2000
+            )
+
+    def request_navigation_away(self) -> bool:
+        """Offer to save or discard edits before changing context."""
+        if not self.has_unsaved_changes:
+            return True
+        choice = UnsavedChangesDialog.ask(parent=self, tr_func=self.main.i18n.tr)
+        if choice == UnsavedChangesDialog.SAVE:
+            self._handle_save()
+            return not self.has_unsaved_changes
+        if choice == UnsavedChangesDialog.DISCARD:
+            if self.current_description_name:
+                self._load_description(self.current_description_name, notify=False)
+            else:
+                self._start_new_description(notify=False)
+                self.has_unsaved_changes = False
+                self.save_btn.setEnabled(False)
+                self.translate_btn.setEnabled(False)
+                self.current_name_label.setVisible(False)
+            return True
+        return False
 
     def _handle_save(self):
         """Save current description"""
@@ -1135,6 +1172,15 @@ class DescriptionsScreen(ResponsiveWidget):
         if hasattr(self, 'content_widget') and self.content_widget and self.content_widget.layout():
             self.content_widget.layout().setContentsMargins(*margins)
             self.content_widget.layout().setSpacing(spacing)
+        compact = breakpoint in ("xs", "sm")
+        if hasattr(self, "content_layout"):
+            self.content_layout.setDirection(
+                QBoxLayout.Direction.TopToBottom if compact
+                else QBoxLayout.Direction.LeftToRight
+            )
+            self.content_layout.setSpacing(spacing)
+        if hasattr(self, "left_panel"):
+            self.left_panel.setMinimumWidth(0 if compact else SIZES['sidebar_min_width'])
 
     def _on_theme_changed(self):
         """Handle theme change event"""

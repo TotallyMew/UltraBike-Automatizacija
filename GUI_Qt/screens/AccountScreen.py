@@ -17,6 +17,7 @@ from qfluentwidgets import (
     FluentIcon,
     InfoBar,
     InfoBarPosition,
+    IconWidget,
 )
 
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
@@ -72,9 +73,8 @@ class AccountScreen(ResponsiveWidget):
         title_container = QHBoxLayout()
         title_container.setSpacing(ICON_TEXT_GAP)
 
-        title_icon = TransparentToolButton(FluentIcon.PEOPLE, self)
+        title_icon = IconWidget(FluentIcon.PEOPLE)
         title_icon.setFixedSize(SIZES['icon_lg'], SIZES['icon_lg'])
-        title_icon.setEnabled(False)
 
         self._ui["title"] = TitleLabel("")
         title_container.addWidget(title_icon)

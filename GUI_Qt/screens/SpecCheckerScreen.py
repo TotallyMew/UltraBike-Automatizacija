@@ -23,6 +23,7 @@ from PySide6.QtCore import QThread, Qt, Signal
 from PySide6.QtGui import QColor, QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import (
     QFileDialog,
+    QGridLayout,
     QHBoxLayout,
     QHeaderView,
     QSizePolicy,
@@ -52,6 +53,7 @@ from GUI_Qt.widgets import enable_table_copy, show_file_saved_bar
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
 from GUI_Qt.styles.theme_config import (
     COLORS, COMPONENT_COLORS, FONTS, RADII, PADDINGS, SIZES, SPACING as THEME_SPACING,
+    get_status_text_color, get_text_color,
 )
 from GUI_Qt.styles.screen_theme import (
     PAGE_MARGINS, PAGE_SPACING, ICON_TEXT_GAP, ROW_SPACING, TOOLBAR_MARGINS,
@@ -504,7 +506,7 @@ class SpecCheckerScreen(ResponsiveWidget):
 
         # -- Toolbar card ----------------------------------------------------
         toolbar_card = CardWidget()
-        toolbar_layout = QHBoxLayout(toolbar_card)
+        toolbar_layout = QGridLayout(toolbar_card)
         toolbar_layout.setContentsMargins(*TOOLBAR_MARGINS)
         toolbar_layout.setSpacing(CARD_SPACING)
 
@@ -532,13 +534,15 @@ class SpecCheckerScreen(ResponsiveWidget):
         self._export_btn.setEnabled(False)
         self._export_btn.clicked.connect(self._export_results)
 
-        toolbar_layout.addWidget(self._browse_btn)
-        toolbar_layout.addWidget(self._template_btn)
-        toolbar_layout.addWidget(self._file_label, 1)
-        toolbar_layout.addWidget(self._browser_label)
-        toolbar_layout.addWidget(self._browser_combo)
-        toolbar_layout.addWidget(self._export_btn)
-        toolbar_layout.addWidget(self._start_btn)
+        toolbar_layout.addWidget(self._browse_btn, 0, 0)
+        toolbar_layout.addWidget(self._template_btn, 0, 1)
+        toolbar_layout.addWidget(self._file_label, 1, 0, 1, 2)
+        toolbar_layout.addWidget(self._browser_label, 2, 0)
+        toolbar_layout.addWidget(self._browser_combo, 2, 1)
+        toolbar_layout.addWidget(self._export_btn, 3, 0)
+        toolbar_layout.addWidget(self._start_btn, 3, 1)
+        toolbar_layout.setColumnStretch(0, 1)
+        toolbar_layout.setColumnStretch(1, 1)
         self._layout.addWidget(toolbar_card)
 
         # -- Drop zone -------------------------------------------------------
@@ -819,23 +823,23 @@ class SpecCheckerScreen(ResponsiveWidget):
         item = QTableWidgetItem(status)
 
         if status == tr("speccheck.status.has_specs"):
-            item.setForeground(QColor("#4CAF50"))
+            item.setForeground(QColor(get_status_text_color("success", isDarkTheme())))
         elif status == tr("speccheck.status.duplicate"):
-            item.setForeground(QColor("#FF9800"))
+            item.setForeground(QColor(get_status_text_color("warning", isDarkTheme())))
         elif status == tr("batchdesc.status.running"):
-            item.setForeground(QColor(COLORS.get('lavender_grey', '#9E9E9E')))
+            item.setForeground(QColor(get_text_color(isDarkTheme(), "secondary")))
         elif status == tr("batchdesc.status.pending"):
             pass
         else:
             # No specs, not found, no specs tab, unexpected errors — all red
-            item.setForeground(QColor("#F44336"))
+            item.setForeground(QColor(get_status_text_color("error", isDarkTheme())))
 
         self._table.setItem(row, 2, item)
 
         # Notes column
         if notes:
             notes_item = QTableWidgetItem(notes)
-            notes_item.setForeground(QColor("#FF9800"))
+            notes_item.setForeground(QColor(get_status_text_color("warning", isDarkTheme())))
             self._table.setItem(row, 3, notes_item)
 
         self._table.scrollToItem(item)

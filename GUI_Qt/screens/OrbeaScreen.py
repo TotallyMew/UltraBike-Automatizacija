@@ -40,6 +40,7 @@ from qfluentwidgets import (
     PushButton,
     ScrollArea,
     TitleLabel,
+    FlowLayout,
     isDarkTheme,
 )
 
@@ -453,9 +454,9 @@ class OrbeaScreen(ResponsiveWidget):
 
         self._status_label = BodyLabel("")
         layout.addWidget(self._status_label)
-        self._status_layout = QHBoxLayout()
-        self._status_layout.setSpacing(ROW_SPACING)
-        self._status_layout.addStretch()
+        self._status_layout = FlowLayout()
+        self._status_layout.setHorizontalSpacing(ROW_SPACING)
+        self._status_layout.setVerticalSpacing(ROW_SPACING)
         layout.addLayout(self._status_layout)
 
         grid = QGridLayout()
@@ -483,16 +484,16 @@ class OrbeaScreen(ResponsiveWidget):
 
         self._stock_label = BodyLabel("")
         layout.addWidget(self._stock_label)
-        self._stock_layout = QHBoxLayout()
-        self._stock_layout.setSpacing(ROW_SPACING)
-        self._stock_layout.addStretch()
+        self._stock_layout = FlowLayout()
+        self._stock_layout.setHorizontalSpacing(ROW_SPACING)
+        self._stock_layout.setVerticalSpacing(ROW_SPACING)
         layout.addLayout(self._stock_layout)
 
         self._bucket_label = BodyLabel("")
         layout.addWidget(self._bucket_label)
-        self._bucket_layout = QHBoxLayout()
-        self._bucket_layout.setSpacing(ROW_SPACING)
-        self._bucket_layout.addStretch()
+        self._bucket_layout = FlowLayout()
+        self._bucket_layout.setHorizontalSpacing(ROW_SPACING)
+        self._bucket_layout.setVerticalSpacing(ROW_SPACING)
         layout.addLayout(self._bucket_layout)
 
         self._layout.addWidget(card)
@@ -520,8 +521,9 @@ class OrbeaScreen(ResponsiveWidget):
 
     def _build_actions_card(self):
         card, layout = self._card()
-        actions = QHBoxLayout()
-        actions.setSpacing(ROW_SPACING)
+        actions = QGridLayout()
+        actions.setHorizontalSpacing(ROW_SPACING)
+        actions.setVerticalSpacing(ROW_SPACING)
         self._start_btn = PrimaryPushButton(FluentIcon.PLAY, "")
         self._start_btn.clicked.connect(self._on_start_stop)
         self._resume_btn = PushButton(FluentIcon.UPDATE, "")
@@ -540,13 +542,14 @@ class OrbeaScreen(ResponsiveWidget):
         self._open_folder_btn.clicked.connect(self._open_folder)
         self._excel_sort_btn = PushButton(FluentIcon.DOCUMENT, "")
         self._excel_sort_btn.clicked.connect(self._sort_existing_excel)
-        actions.addWidget(self._start_btn)
-        actions.addWidget(self._resume_btn)
-        actions.addWidget(self._retry_btn)
-        actions.addWidget(self._excel_sort_btn)
-        actions.addStretch()
-        actions.addWidget(self._open_excel_btn)
-        actions.addWidget(self._open_folder_btn)
+        actions.addWidget(self._start_btn, 0, 0)
+        actions.addWidget(self._resume_btn, 0, 1)
+        actions.addWidget(self._retry_btn, 1, 0)
+        actions.addWidget(self._excel_sort_btn, 1, 1)
+        actions.addWidget(self._open_excel_btn, 2, 0)
+        actions.addWidget(self._open_folder_btn, 2, 1)
+        for column in range(2):
+            actions.setColumnStretch(column, 1)
         layout.addLayout(actions)
         self._layout.addWidget(card)
         self._config_widgets.append(self._excel_sort_btn)
@@ -624,12 +627,12 @@ class OrbeaScreen(ResponsiveWidget):
         self._description_output_edit.editingFinished.connect(self._description_output_changed)
         self._description_output_btn = PushButton(FluentIcon.FOLDER, "")
         self._description_output_btn.clicked.connect(self._browse_description_output)
-        output_row.addWidget(self._description_output_label, 0, 0)
-        output_row.addWidget(self._description_output_edit, 0, 1)
-        output_row.addWidget(self._description_output_btn, 0, 2)
+        output_row.addWidget(self._description_output_label, 0, 0, 1, 2)
+        output_row.addWidget(self._description_output_edit, 1, 0)
+        output_row.addWidget(self._description_output_btn, 1, 1)
         layout.addLayout(output_row)
 
-        action_row = QHBoxLayout()
+        action_row = QVBoxLayout()
         action_row.setSpacing(ROW_SPACING)
         self._description_start_btn = PrimaryPushButton(FluentIcon.PLAY, "")
         self._description_start_btn.clicked.connect(self._on_description_start_stop)
@@ -637,7 +640,6 @@ class OrbeaScreen(ResponsiveWidget):
         self._description_open_btn.setEnabled(False)
         self._description_open_btn.clicked.connect(self._open_description_folder)
         action_row.addWidget(self._description_start_btn)
-        action_row.addStretch()
         action_row.addWidget(self._description_open_btn)
         layout.addLayout(action_row)
 
@@ -758,7 +760,7 @@ class OrbeaScreen(ResponsiveWidget):
             self._restoring_filters = False
         self._save_filter_state()
 
-    def _clear_chip_layout(self, layout: QHBoxLayout, attr_name: str):
+    def _clear_chip_layout(self, layout, attr_name: str):
         buttons = getattr(self, attr_name, {})
         for button in buttons.values():
             layout.removeWidget(button)
@@ -779,7 +781,7 @@ class OrbeaScreen(ResponsiveWidget):
             button.setProperty("filterValue", value)
             button.setChecked(key.lower() in selected_keys or label.lower() in selected_keys)
             button.toggled.connect(self._filter_changed)
-            layout.insertWidget(max(0, layout.count() - 1), button)
+            layout.insertWidget(layout.count(), button)
             buttons[key] = button
             self._config_widgets.append(button)
         setattr(self, attr_name, buttons)
@@ -799,7 +801,7 @@ class OrbeaScreen(ResponsiveWidget):
             button.setProperty("filterValue", value)
             button.toggled.connect(self._filter_changed)
             group.addButton(button)
-            layout.insertWidget(max(0, layout.count() - 1), button)
+            layout.insertWidget(layout.count(), button)
             buttons[key] = button
             self._config_widgets.append(button)
             first = first or button

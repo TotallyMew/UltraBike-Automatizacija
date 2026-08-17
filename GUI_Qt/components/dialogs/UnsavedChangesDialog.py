@@ -7,7 +7,10 @@ attempts to close a form or navigate away.
 
 from typing import Optional, Callable
 from PySide6.QtWidgets import QWidget, QDialog, QVBoxLayout, QHBoxLayout
-from qfluentwidgets import MessageBox, PrimaryPushButton, PushButton
+from qfluentwidgets import PrimaryPushButton, PushButton, isDarkTheme
+from GUI_Qt.styles.theme_config import (
+    COLORS, RADII, get_status_text_color, get_text_color, rgba_from_hex,
+)
 
 
 class UnsavedChangesDialog(QDialog):
@@ -52,6 +55,9 @@ class UnsavedChangesDialog(QDialog):
         from PySide6.QtWidgets import QLabel
         message_label = QLabel(message)
         message_label.setWordWrap(True)
+        message_label.setStyleSheet(
+            f"color: {get_text_color(isDarkTheme(), 'primary')}; background: transparent;"
+        )
         layout.addWidget(message_label)
 
         # Buttons
@@ -68,17 +74,18 @@ class UnsavedChangesDialog(QDialog):
         self.discard_button = PushButton(self.tr("confirm.unsaved.discard"))
         self.discard_button.clicked.connect(lambda: self._set_result(self.DISCARD))
         # Style as warning/destructive
-        self.discard_button.setStyleSheet("""
-            QPushButton {
-                color: #C81D25;
-                border: 2px solid #C81D25;
-                border-radius: 6px;
+        error_color = get_status_text_color("error", isDarkTheme())
+        self.discard_button.setStyleSheet(f"""
+            QPushButton, PushButton {{
+                color: {error_color};
+                border: 2px solid {error_color};
+                border-radius: {RADII['sm']}px;
                 padding: 8px 16px;
                 font-weight: 600;
-            }
-            QPushButton:hover {
-                background-color: rgba(200, 29, 37, 0.1);
-            }
+            }}
+            QPushButton:hover, PushButton:hover {{
+                background-color: {rgba_from_hex(COLORS['flag_red'], 0.12)};
+            }}
         """)
         button_layout.addWidget(self.discard_button)
 
@@ -86,6 +93,9 @@ class UnsavedChangesDialog(QDialog):
         self.save_button = PrimaryPushButton(self.tr("confirm.unsaved.save"))
         self.save_button.clicked.connect(lambda: self._set_result(self.SAVE))
         button_layout.addWidget(self.save_button)
+
+        self.cancel_button.setDefault(True)
+        self.cancel_button.setFocus()
 
         layout.addLayout(button_layout)
 

@@ -81,10 +81,47 @@ def test_stopwatch_excludes_pauses_and_links_entries(manager):
     manager.pause_session(now=at(1, 10))
     manager.create_entry("PAUSED", "bicycle", now=at(1, 10, 30))
     manager.resume_session(now=at(1, 11))
+    manager.create_entry("RUNNING", "bicycle", now=at(1, 11, 30))
     finished = manager.finish_session(now=at(1, 12, 30))
     assert finished["elapsed_seconds"] == pytest.approx(2.5 * 3600)
     assert finished["product_count"] == 1
-    assert manager.list_entries()[0]["session_id"] == session_id
+    by_sku = {row["sku"]: row for row in manager.list_entries()}
+    assert by_sku["PAUSED"]["session_id"] is None
+    assert by_sku["RUNNING"]["session_id"] == session_id
+
+
+def test_untimed_earnings_do_not_inflate_effective_hourly_rate(manager):
+    manager.create_entry("UNTIMED-1", "bicycle", now=at(1, 8))
+    manager.start_session("stopwatch", now=at(1, 9))
+    manager.create_entry("TIMED", "bicycle", now=at(1, 9, 30))
+    manager.finish_session(now=at(1, 10))
+    manager.create_entry("UNTIMED-2", "bicycle", now=at(1, 11))
+
+    summary = manager.summary(now=at(1, 12))
+    assert summary["all_cents"] == 300
+    assert summary["timed_cents"] == 100
+    assert summary["untimed_cents"] == 200
+    assert summary["untimed_count"] == 2
+    assert summary["effective_hourly_cents"] == pytest.approx(100)
+
+
+def test_expired_or_paused_timer_cannot_mark_earnings_as_timed(manager):
+    countdown_id = manager.start_session("countdown", 1800, now=at(1, 9))
+    manager.create_entry("EXPIRED", "bicycle", now=at(1, 10))
+    expired = next(row for row in manager.list_entries() if row["sku"] == "EXPIRED")
+    assert expired["session_id"] is None
+    assert manager.get_session(countdown_id, now=at(1, 10))["product_count"] == 0
+    manager.finish_session(now=at(1, 10))
+
+    session_id = manager.start_session("stopwatch", now=at(2, 9))
+    manager.pause_session(now=at(2, 10))
+    manager.create_entry(
+        "LEGACY-PAUSED", "bicycle", session_id=session_id, now=at(2, 10, 30)
+    )
+    manager.finish_session(now=at(2, 11))
+    session = manager.get_session(session_id, now=at(2, 11))
+    assert session["product_count"] == 0
+    assert session["earned_cents"] == 0
 
 
 def test_only_one_unfinished_session_and_reset_detaches_entries(manager):
@@ -188,4 +225,3 @@ def test_trend_windows_and_summary(manager):
     trend = manager.trend_data("hourly", now=at(10, 12))
     assert len(trend) == 24
     assert sum(bucket["cents"] for bucket in trend) == 175
-

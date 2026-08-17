@@ -14,7 +14,7 @@ from qfluentwidgets import (
     LineEdit, ComboBox, CheckBox, PrimaryPushButton, PushButton,
     IndeterminateProgressRing, BodyLabel, TitleLabel, CaptionLabel,
     InfoBar, InfoBarPosition, MessageBox, TransparentToolButton, FluentIcon,
-    CardWidget, isDarkTheme, StrongBodyLabel, qconfig, ScrollArea
+    CardWidget, isDarkTheme, StrongBodyLabel, qconfig, ScrollArea, IconWidget
 )
 from GUI_Qt.dialogs.AttributeOptionsDialog import (
     AttributeOptionsDialog, load_attribute_options, save_attribute_options,
@@ -25,7 +25,11 @@ from Managers.PimboProductEditor import PimboProductEditor, PimPreparationResult
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
 from GUI_Qt.components.validation import RequiredValidator, URLValidator
 from GUI_Qt.components.accessibility import KeyboardNavigationMixin
-from GUI_Qt.styles.theme_config import COLORS, COMPONENT_COLORS, FONTS, RADII, SIZES, SPACING, rgba_from_hex
+from GUI_Qt.components.dialogs import DestructiveActionDialog
+from GUI_Qt.styles.theme_config import (
+    COLORS, COMPONENT_COLORS, FONTS, RADII, SIZES, SPACING,
+    rgba_from_hex, get_status_text_color,
+)
 from GUI_Qt.styles.screen_theme import (
     PAGE_MARGINS,
     PAGE_SPACING,
@@ -71,6 +75,7 @@ class UploadWorker(QThread):
         self.tr = tr
         self._retry_result = None
         self._waiting_for_retry = False
+        self._cancel_requested = False
         self.retry_response.connect(self._on_retry_response)
 
     def run(self):
@@ -81,11 +86,17 @@ class UploadWorker(QThread):
             self.uploader.set_retry_callback(self._request_retry)
             self.uploader.set_progress_callback(self.progress.emit)
             result = self.uploader.run()
+            if self._cancel_requested:
+                result = PimPreparationResult(
+                    product_code=str(getattr(self.uploader, "ultraBikeCode", "") or ""),
+                    status=PimPreparationStatus.DISCARDED,
+                    error=self.tr("upload.cancel.content"),
+                )
             if not isinstance(result, PimPreparationResult):
                 result = PimPreparationResult(
                     product_code=str(getattr(self.uploader, "ultraBikeCode", "") or ""),
                     status=PimPreparationStatus.FAILED,
-                    error="Įkėlėjas negrąžino struktūrinio PIMBO rezultato",
+                    error=self.tr("upload.result.invalid"),
                 )
             self.completed.emit(result)
         except Exception as e:
@@ -104,11 +115,22 @@ class UploadWorker(QThread):
         self.retry_request.emit(operation_name)
         # Wait for response from GUI, but yield to event loop
         while self._waiting_for_retry:
+            if self._cancel_requested or self.isInterruptionRequested():
+                self._retry_result = False
+                self._waiting_for_retry = False
+                break
             self.msleep(50)
         return self._retry_result
 
     def _on_retry_response(self, result):
         self._retry_result = result
+        self._waiting_for_retry = False
+
+    def request_stop(self) -> None:
+        """Request a safe stop without force-terminating Python or Selenium."""
+        self._cancel_requested = True
+        self.requestInterruption()
+        self._retry_result = False
         self._waiting_for_retry = False
 
 
@@ -134,6 +156,7 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
         self.current_scale = 1.0
         self._form_grid = None
         self._field_blocks = []
+        self._attr_entries = []
         self.scroll = None
         self.content_widget = None
 
@@ -180,9 +203,8 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
         title_container = QHBoxLayout()
         title_container.setSpacing(ICON_TEXT_GAP)
 
-        title_icon = TransparentToolButton(FluentIcon.UP, self)
+        title_icon = IconWidget(FluentIcon.UP)
         title_icon.setFixedSize(SIZES['icon_lg'], SIZES['icon_lg'])
-        title_icon.setEnabled(False)
 
         self.title_label = TitleLabel("")
         title_label = self.title_label
@@ -236,7 +258,7 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
 
         self.brand_combo = ComboBox()
         self._ensure_brand_placeholder(self.brand_combo)
-        self.brand_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.brand_combo.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
         self.brand_combo.currentTextChanged.connect(self._on_brand_change)
         # Accessibility
         self.brand_combo.setAccessibleName(self.main.i18n.tr("upload.brand.label"))
@@ -253,6 +275,7 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
         code_input_widget = QWidget()
         code_input_widget.setStyleSheet("background: transparent;")
         code_input_widget.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
+        code_input_widget.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         code_input_row = QHBoxLayout(code_input_widget)
         code_input_row.setContentsMargins(0, 0, 0, 0)
         code_input_row.setSpacing(8)
@@ -283,6 +306,7 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
         url_input_widget = QWidget()
         url_input_widget.setStyleSheet("background: transparent;")
         url_input_widget.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
+        url_input_widget.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         url_input_row = QHBoxLayout(url_input_widget)
         url_input_row.setContentsMargins(0, 0, 0, 0)
         url_input_row.setSpacing(8)
@@ -319,7 +343,7 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
         desc_caption = self.desc_caption
 
         self.description_combo = ComboBox()
-        self.description_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.description_combo.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
         self.description_combo.currentTextChanged.connect(self._on_description_changed)
         # Accessibility
         self.description_combo.setAccessibleName(self.main.i18n.tr("upload.description.label"))
@@ -441,12 +465,16 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
             _normalize_label_widget(label)
 
             combo = ComboBox()
-            combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            combo.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+            combo.setAccessibleName(name)
             self._load_attr_combo_options(name, combo)
 
             edit_btn = TransparentToolButton(FluentIcon.EDIT, self)
             edit_btn.setFixedSize(SIZES['icon_md'], SIZES['icon_md'])
             edit_btn.setToolTip(self.main.i18n.tr("upload.attr.edit_options"))
+            edit_btn.setAccessibleName(
+                f"{self.main.i18n.tr('upload.attr.edit_options')}: {name}"
+            )
             edit_btn.clicked.connect(lambda checked=False, n=name: self._open_attr_options_dialog(n))
 
             self._attr_grid.addWidget(label, grid_row, col_offset)
@@ -454,6 +482,7 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
             self._attr_grid.addWidget(edit_btn, grid_row, col_offset + 2)
 
             self._attr_widgets[name] = {"combo": combo}
+            self._attr_entries.append((label, combo, edit_btn))
 
         attr_layout.addLayout(self._attr_grid)
 
@@ -521,7 +550,10 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
         """Respond to breakpoint changes - adjust layout and margins."""
         # Update column count based on breakpoint
         col_count = self.get_column_count()
-        self._apply_form_layout_mode(col_count)
+        form_columns = 1 if breakpoint in ('xs', 'sm', 'md', 'lg') else 2
+        self._apply_form_layout_mode(form_columns)
+        attr_columns = 1 if breakpoint in ('xs', 'sm', 'md', 'lg') else 2
+        self._apply_attribute_layout_mode(attr_columns)
 
         # Adjust margins based on breakpoint
         margins = get_responsive_margins(breakpoint)
@@ -547,10 +579,11 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
                 break
 
         if columns == 1:
-            # 1-column: label block + widget per row
+            # Compact desktop: label/caption above the control. Long translated
+            # captions can otherwise force the whole page wider than the window.
             for row, (label_block, field_widget) in enumerate(self._field_blocks):
-                grid.addWidget(label_block, row, 0)
-                grid.addWidget(field_widget, row, 1)
+                grid.addWidget(label_block, row * 2, 0)
+                grid.addWidget(field_widget, row * 2 + 1, 0)
             return
 
         # 2-column (or 3-column treated as 2 for upload screen): two fields per row
@@ -566,6 +599,32 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
             grid.addWidget(left_widget, row, 1)
             grid.addWidget(right_label, row, 2)
             grid.addWidget(right_widget, row, 3)
+
+    def _apply_attribute_layout_mode(self, columns: int) -> None:
+        """Keep the attribute editor usable without page-level horizontal scrolling."""
+        if not self._attr_grid:
+            return
+
+        while self._attr_grid.count():
+            self._attr_grid.takeAt(0)
+
+        compact = columns == 1
+        for index, (label, combo, edit_button) in enumerate(self._attr_entries):
+            if compact:
+                label.setFixedWidth(140)
+                row, column = index, 0
+            else:
+                label.setFixedWidth(140)
+                row, column = index // 2, (index % 2) * 3
+            self._attr_grid.addWidget(label, row, column)
+            self._attr_grid.addWidget(combo, row, column + 1)
+            self._attr_grid.addWidget(edit_button, row, column + 2)
+
+        for column in range(6):
+            self._attr_grid.setColumnStretch(column, 0)
+        self._attr_grid.setColumnStretch(1, 1)
+        if not compact:
+            self._attr_grid.setColumnStretch(4, 1)
 
     def retranslate_ui(self):
         tr = self.main.i18n.tr
@@ -594,6 +653,8 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
         self.frameset_info_btn.setToolTip(tr("upload.frameset.tip"))
 
         self.attr_title.setText(tr("upload.attr.title"))
+        for name, widgets in self._attr_widgets.items():
+            widgets["combo"].setAccessibleName(name)
         self.upload_button.setText(f"{tr('upload.button')} (Ctrl+Enter)")
         self.clear_button.setText(tr("upload.clear"))
         self.clear_button.setToolTip(tr("upload.clear.tip"))
@@ -696,14 +757,22 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
     def _handle_cancel_shortcut(self):
         """Handle Escape shortcut to cancel upload"""
         if self.upload_worker is not None and self.upload_worker.isRunning():
-            self.upload_worker.terminate()
-            self.upload_worker.wait()
-            self._reset_ui_after_upload()
+            self.upload_worker.request_stop()
+            if self._active_retry_dialog is not None:
+                self._active_retry_dialog.close()
+            self.upload_button.setEnabled(False)
+            self.clear_button.setEnabled(False)
+            self.status_label.setText(self.main.i18n.tr("upload.cancel.stopping"))
+            self.status_label.setStyleSheet(
+                f"color: {get_status_text_color('warning', isDarkTheme())}; "
+                "background: transparent; background-color: transparent;"
+            )
             InfoBar.warning(
                 title=self.main.i18n.tr("upload.cancel.title"),
-                content=self.main.i18n.tr("upload.cancel.content"),
+                content=self.main.i18n.tr("upload.cancel.safe_wait"),
                 parent=self,
-                position=InfoBarPosition.TOP
+                position=InfoBarPosition.TOP,
+                duration=4000,
             )
 
     def _on_brand_change(self, brand):
@@ -738,11 +807,7 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
 
     def _validate_url(self, url: str) -> bool:
         """Validate URL format (should be a valid HTTP/HTTPS URL)"""
-        url = url.strip()
-        if not url:
-            return False
-        # Basic URL validation
-        return url.startswith(("http://", "https://", "www.")) and len(url) > 10
+        return URLValidator(self.main.i18n.tr).validate(url.strip()).valid
 
     def _update_validation_icon(self, icon_widget, is_valid: bool, text: str):
         """Update validation icon based on validation result"""
@@ -754,11 +819,14 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
             if is_valid:
                 # Green checkmark for valid input
                 icon_widget.setIcon(FluentIcon.ACCEPT)
-                icon_widget.setStyleSheet("color: #2ECC71; background: transparent; background-color: transparent;")  # Green
+                color = get_status_text_color("success", isDarkTheme())
             else:
                 # Red X for invalid input
                 icon_widget.setIcon(FluentIcon.CLOSE)
-                icon_widget.setStyleSheet("color: #E74C3C; background: transparent; background-color: transparent;")  # Red
+                color = get_status_text_color("error", isDarkTheme())
+            icon_widget.setStyleSheet(
+                f"color: {color}; background: transparent; background-color: transparent;"
+            )
 
     def _on_description_changed(self, text):
         """Handle description dropdown change with validation"""
@@ -1013,16 +1081,35 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
     def _on_upload_finished(self, result: PimPreparationResult):
         """Handle upload completion"""
         self.progress_ring.setVisible(False)
-        self.upload_button.setEnabled(True)
         self.clear_button.setEnabled(True)
+        self._check_form_valid()
+
+        if self.upload_worker is not None and self.upload_worker._cancel_requested:
+            message = self.main.i18n.tr("upload.cancel.content")
+            self.status_label.setText(message)
+            self.status_label.setStyleSheet(
+                f"color: {get_status_text_color('warning', isDarkTheme())}; "
+                "background: transparent; background-color: transparent;"
+            )
+            InfoBar.warning(
+                title=self.main.i18n.tr("upload.cancel.title"),
+                content=message,
+                parent=self,
+                position=InfoBarPosition.TOP,
+                duration=4000,
+            )
+            return
 
         if result.status == PimPreparationStatus.READY_FOR_REVIEW:
-            message = "Paruošta peržiūrai — išsaugokite PIMBO lange."
+            message = self.main.i18n.tr("upload.review.ready")
             self.status_label.setText(message)
-            self.status_label.setStyleSheet(f"color: {COLORS['warning']}; background: transparent; background-color: transparent;")
+            self.status_label.setStyleSheet(
+                f"color: {get_status_text_color('warning', isDarkTheme())}; "
+                "background: transparent; background-color: transparent;"
+            )
 
             InfoBar.info(
-                title="Paruošta peržiūrai",
+                title=self.main.i18n.tr("upload.review.ready.title"),
                 content=message,
                 parent=self,
                 position=InfoBarPosition.TOP,
@@ -1033,20 +1120,26 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
             QTimer.singleShot(0, lambda saved_result=result: self._confirm_regular_save(saved_result))
 
         elif result.status == PimPreparationStatus.BLOCKED_NON_DRAFT:
-            message = result.error or "Produktas nėra Draft — forma nepakeista."
+            message = result.error or self.main.i18n.tr("upload.review.blocked")
             self.status_label.setText(message)
-            self.status_label.setStyleSheet(f"color: {COLORS['warning']}; background: transparent; background-color: transparent;")
+            self.status_label.setStyleSheet(
+                f"color: {get_status_text_color('warning', isDarkTheme())}; "
+                "background: transparent; background-color: transparent;"
+            )
             InfoBar.warning(
-                title="Produktas praleistas",
+                title=self.main.i18n.tr("upload.review.blocked.title"),
                 content=message,
                 parent=self,
                 position=InfoBarPosition.TOP,
                 duration=4000,
             )
         else:
-            message = result.error or "Paruošimas nepavyko"
+            message = result.error or self.main.i18n.tr("upload.review.failed")
             self.status_label.setText(message)
-            self.status_label.setStyleSheet(f"color: {COLORS['error']}; background: transparent; background-color: transparent;")
+            self.status_label.setStyleSheet(
+                f"color: {get_status_text_color('error', isDarkTheme())}; "
+                "background: transparent; background-color: transparent;"
+            )
 
             InfoBar.error(
                 title=self.main.i18n.tr("upload.failed.title"),
@@ -1059,13 +1152,12 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
     def _confirm_regular_save(self, result: PimPreparationResult) -> None:
         """Verify the human PIMBO save before offering an earning entry."""
         dialog = MessageBox(
-            "Confirm the PIMBO save",
-            "Review the product in PIMBO and click Save there. Then return here and confirm. "
-            "Only a verified save can be added to earnings.",
+            self.main.i18n.tr("upload.save_confirm.title"),
+            self.main.i18n.tr("upload.save_confirm.content"),
             self,
         )
-        dialog.yesButton.setText("I saved it")
-        dialog.cancelButton.setText("Skip for now")
+        dialog.yesButton.setText(self.main.i18n.tr("upload.save_confirm.yes"))
+        dialog.cancelButton.setText(self.main.i18n.tr("upload.save_confirm.skip"))
         if not dialog.exec():
             return
         try:
@@ -1075,8 +1167,8 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
             ).verify_manual_save(result)
             if verified.status != PimPreparationStatus.SAVED_MANUALLY:
                 InfoBar.warning(
-                    title="Save could not be verified",
-                    content=verified.error or "PIMBO still reports unsaved changes.",
+                    title=self.main.i18n.tr("upload.save_verify.failed.title"),
+                    content=verified.error or self.main.i18n.tr("upload.save_verify.failed.content"),
                     parent=self,
                     position=InfoBarPosition.TOP,
                     duration=6000,
@@ -1105,9 +1197,10 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
                 )
                 self.main.db.conn.commit()
 
-            self.status_label.setText("Saved manually")
+            self.status_label.setText(self.main.i18n.tr("upload.save_verify.saved"))
             self.status_label.setStyleSheet(
-                f"color: {COLORS['success']}; background: transparent; background-color: transparent;"
+                f"color: {get_status_text_color('success', isDarkTheme())}; "
+                "background: transparent; background-color: transparent;"
             )
             product_type = (
                 "frameset"
@@ -1126,7 +1219,7 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
             )
         except Exception as error:
             InfoBar.error(
-                title="Could not verify the save",
+                title=self.main.i18n.tr("upload.save_verify.error.title"),
                 content=str(error),
                 parent=self,
                 position=InfoBarPosition.TOP,
@@ -1182,13 +1275,14 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
 
     def _clear_form(self) -> None:
         """Clear user-editable fields with confirmation dialog (keeps selected brand)."""
-        # Show confirmation dialog
-        w = MessageBox(
+        confirmed = DestructiveActionDialog.ask(
             title=self.main.i18n.tr("common.confirm"),
-            content=self.main.i18n.tr("upload.clear.confirm"),
-            parent=self
+            message=self.main.i18n.tr("upload.clear.confirm"),
+            action_text=self.main.i18n.tr("upload.clear"),
+            parent=self,
+            tr_func=self.main.i18n.tr,
         )
-        if w.exec():
+        if confirmed:
             self.code_field.clear()
             self.url_field.clear()
             self.description_combo.setCurrentIndex(0)
@@ -1198,6 +1292,16 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
                 widgets["combo"].setCurrentIndex(0)
             self.status_label.setText("")
             self._check_form_valid()
+
+    def shutdown(self, wait_ms: int = 5000) -> bool:
+        """Request a safe upload stop before the shared browser is closed."""
+        worker = self.upload_worker
+        if worker is None or not worker.isRunning():
+            return True
+        worker.request_stop()
+        if self._active_retry_dialog is not None:
+            self._active_retry_dialog.close()
+        return bool(worker.wait(max(0, int(wait_ms))))
 
     def _on_theme_changed(self):
         """Handle theme change event"""

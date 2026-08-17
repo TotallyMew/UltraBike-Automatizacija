@@ -1,6 +1,6 @@
 ﻿"""
 Session Manager - Handles 24h auto-login sessions
-Uses machine-specific encryption for security
+Uses Windows current-user DPAPI protection for session files
 
 Security: Uses Scrypt for password-based key derivation (memory-hard, GPU-resistant)
 Backward compatible: Auto-migrates old SHA256-based encryption to Scrypt
@@ -11,13 +11,14 @@ Migration is transparent - old credentials are re-encrypted on first use
 import base64
 import getpass
 import hashlib
+import hmac
 import json
 import os
 import platform
 import secrets
 import traceback
 from datetime import datetime, timedelta
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 # Third-party packages
 from cryptography.fernet import Fernet
@@ -39,11 +40,11 @@ class SessionManager:
 
     Encryption Strategies:
 
-    1. **Machine-Specific Encryption** (Session Files):
+    1. **Windows DPAPI** (Session Files):
        - Used for: Temporary 24h session files only
-       - Method: SHA256(machine_name + username) → Fernet key
-       - Purpose: Quick local encryption, ties session to specific machine
-       - Security: Machine-bound, auto-expires, low-value data
+       - Method: Current-user Windows Data Protection API
+       - Purpose: Bind auto-login data to the signed-in Windows account
+       - Compatibility: Legacy machine-derived Fernet files remain readable
 
     2. **Scrypt KDF** (Credentials - CURRENT):
     - Used for: admin passwords, external API credentials
@@ -61,7 +62,7 @@ class SessionManager:
        - Deprecation: Will be removed once all users migrate (target: v2.0)
 
     When to use which:
-    - Session files: Machine-specific (fast, temporary)
+    - Session files: Current-user DPAPI (Windows)
     - Passwords: Scrypt KDF (secure, persistent)
     - Never use: Legacy SHA256 for new data
     """
@@ -98,7 +99,7 @@ class SessionManager:
         return hashlib.sha256(machine_string.encode()).hexdigest()
 
     def _get_encryption_key(self):
-        """Generate encryption key from machine ID (for session files only)"""
+        """Generate the legacy machine key used to read older session files."""
         machine_id = self._get_machine_id()
         # Derive a valid Fernet key from machine ID
         key_material = hashlib.sha256(machine_id.encode()).digest()
@@ -125,6 +126,30 @@ class SessionManager:
         )
         return kdf.derive(password.encode())
 
+    def _derive_key_scrypt_params(self, password: str, salt: bytes, params: dict) -> bytes:
+        """Derive a key from validated stored parameters.
+
+        Parameter limits prevent a corrupted local database from requesting an
+        unbounded amount of memory or CPU during unlock.
+        """
+        n = int(params.get("n", self.SCRYPT_N))
+        r = int(params.get("r", self.SCRYPT_R))
+        p = int(params.get("p", self.SCRYPT_P))
+        length = int(params.get("length", self.SCRYPT_LENGTH))
+        if n < 2**14 or n > 2**18 or n & (n - 1):
+            raise ValueError("Invalid Scrypt work factor")
+        if not 1 <= r <= 16 or not 1 <= p <= 4 or length != 32:
+            raise ValueError("Invalid Scrypt parameters")
+        kdf = Scrypt(
+            salt=salt,
+            length=length,
+            n=n,
+            r=r,
+            p=p,
+            backend=default_backend(),
+        )
+        return kdf.derive(password.encode())
+
     def _derive_key_legacy_sha256(self, password: str, salt_hex: str) -> bytes:
         """
         Legacy key derivation using SHA256 (INSECURE - for backward compatibility only).
@@ -142,7 +167,7 @@ class SessionManager:
         combined_key = hashlib.sha256(f"{password}{salt_hex}".encode()).digest()
         return combined_key
 
-    def _get_kdf_params(self) -> Dict[str, any]:
+    def _get_kdf_params(self) -> Dict[str, Any]:
         """Get current KDF parameters as dict for storage"""
         return {
             "kdf": "scrypt",
@@ -152,15 +177,68 @@ class SessionManager:
             "length": self.SCRYPT_LENGTH
         }
     
+    @staticmethod
+    def _dpapi_protect(data: bytes) -> bytes:
+        """Protect bytes for the current Windows user with DPAPI."""
+        import ctypes
+        from ctypes import wintypes
+
+        class DATA_BLOB(ctypes.Structure):
+            _fields_ = [("cbData", wintypes.DWORD), ("pbData", ctypes.POINTER(ctypes.c_ubyte))]
+
+        source_buffer = ctypes.create_string_buffer(data)
+        source = DATA_BLOB(len(data), ctypes.cast(source_buffer, ctypes.POINTER(ctypes.c_ubyte)))
+        protected = DATA_BLOB()
+        if not ctypes.windll.crypt32.CryptProtectData(
+            ctypes.byref(source), None, None, None, None, 0x1, ctypes.byref(protected)
+        ):
+            raise ctypes.WinError()
+        try:
+            return ctypes.string_at(protected.pbData, protected.cbData)
+        finally:
+            ctypes.windll.kernel32.LocalFree(protected.pbData)
+
+    @staticmethod
+    def _dpapi_unprotect(data: bytes) -> bytes:
+        """Unprotect current-user DPAPI bytes."""
+        import ctypes
+        from ctypes import wintypes
+
+        class DATA_BLOB(ctypes.Structure):
+            _fields_ = [("cbData", wintypes.DWORD), ("pbData", ctypes.POINTER(ctypes.c_ubyte))]
+
+        source_buffer = ctypes.create_string_buffer(data)
+        source = DATA_BLOB(len(data), ctypes.cast(source_buffer, ctypes.POINTER(ctypes.c_ubyte)))
+        clear = DATA_BLOB()
+        if not ctypes.windll.crypt32.CryptUnprotectData(
+            ctypes.byref(source), None, None, None, None, 0x1, ctypes.byref(clear)
+        ):
+            raise ctypes.WinError()
+        try:
+            return ctypes.string_at(clear.pbData, clear.cbData)
+        finally:
+            ctypes.windll.kernel32.LocalFree(clear.pbData)
+
     def _encrypt(self, data: str) -> str:
-        """Encrypt data with machine-specific key"""
+        """Encrypt session data with Windows DPAPI when available."""
+        if os.name == "nt":
+            protected = self._dpapi_protect(data.encode("utf-8"))
+            return "dpapi:" + base64.b64encode(protected).decode("ascii")
+
+        # Non-Windows development fallback. Existing Windows session files
+        # using this legacy scheme remain readable and migrate on next write.
         key = self._get_encryption_key()
         f = Fernet(key)
         return f.encrypt(data.encode()).decode()
     
     def _decrypt(self, encrypted_data: str) -> str:
-        """Decrypt data with machine-specific key"""
+        """Decrypt DPAPI sessions, with legacy Fernet compatibility."""
         try:
+            if str(encrypted_data).startswith("dpapi:"):
+                if os.name != "nt":
+                    return None
+                payload = base64.b64decode(str(encrypted_data)[6:], validate=True)
+                return self._dpapi_unprotect(payload).decode("utf-8")
             key = self._get_encryption_key()
             f = Fernet(key)
             return f.decrypt(encrypted_data.encode()).decode()
@@ -183,17 +261,37 @@ class SessionManager:
     
         return result is not None
 
-    def set_master_password(self, master_password: str) -> None:
-        """Persist master password hash in settings (no credentials stored)."""
-        master_hash = hashlib.sha256(master_password.encode()).hexdigest()
-        cursor = self.db.conn.cursor()
+    def _make_master_password_verifier(self, master_password: str) -> str:
+        """Create a salted, memory-hard verifier for the master password."""
+        if not master_password:
+            raise ValueError("Master password is required")
+        salt = secrets.token_bytes(16)
+        digest = self._derive_key_scrypt(master_password, salt)
+        verifier = {
+            "version": 2,
+            **self._get_kdf_params(),
+            "salt": base64.b64encode(salt).decode("ascii"),
+            "hash": base64.b64encode(digest).decode("ascii"),
+        }
+        return json.dumps(verifier, sort_keys=True, separators=(",", ":"))
+
+    def _store_master_password_verifier(self, master_password: str, cursor=None) -> None:
+        cursor = cursor or self.db.conn.cursor()
         cursor.execute(
             """
             INSERT OR REPLACE INTO settings (key, value, updated_at)
             VALUES ('master_password_hash', ?, ?)
             """,
-            (master_hash, datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
+            (
+                self._make_master_password_verifier(master_password),
+                datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            ),
         )
+
+    def set_master_password(self, master_password: str) -> None:
+        """Persist a salted, memory-hard password verifier."""
+        cursor = self.db.conn.cursor()
+        self._store_master_password_verifier(master_password, cursor)
         self.db.conn.commit()
     
     def store_credentials(self, email: str, password: str, master_password: str):
@@ -208,9 +306,6 @@ class SessionManager:
             password: Admin password to encrypt
             master_password: Master password for encryption
         """
-        # Hash master password for verification (still using SHA256 for password verification)
-        master_hash = hashlib.sha256(master_password.encode()).hexdigest()
-
         # Generate random salt (16 bytes = 128 bits)
         salt = secrets.token_bytes(16)
 
@@ -237,11 +332,8 @@ class SessionManager:
             datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         ))
 
-        # Also store master password hash in settings
-        cursor.execute("""
-            INSERT OR REPLACE INTO settings (key, value, updated_at)
-            VALUES ('master_password_hash', ?, ?)
-        """, (master_hash, datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+        # Store a separate salted verifier; never persist a fast unsalted hash.
+        self._store_master_password_verifier(master_password, cursor)
 
         self.db.conn.commit()
 
@@ -344,7 +436,7 @@ class SessionManager:
 
                 if kdf_params.get("kdf") == "scrypt":
                     salt = base64.b64decode(salt_b64)
-                    encryption_key = self._derive_key_scrypt(master_password, salt)
+                    encryption_key = self._derive_key_scrypt_params(master_password, salt, kdf_params)
                     fernet_key = base64.urlsafe_b64encode(encryption_key)
                     f = Fernet(fernet_key)
                     password = f.decrypt(encrypted_password.encode()).decode()
@@ -377,7 +469,9 @@ class SessionManager:
         self.db.conn.commit()
     
     def verify_master_password(self, master_password: str) -> bool:
-        """Verify master password against stored hash"""
+        """Verify the master password and migrate legacy SHA-256 verifiers."""
+        if not isinstance(master_password, str) or not master_password:
+            return False
         cursor = self.db.conn.cursor()
         result = cursor.execute("""
             SELECT value FROM settings WHERE key = 'master_password_hash'
@@ -386,10 +480,36 @@ class SessionManager:
         if not result:
             return False
         
-        stored_hash = result[0]
+        stored_value = str(result[0] or "")
+
+        # Current format: a versioned JSON Scrypt verifier.
+        if stored_value.startswith("{"):
+            try:
+                verifier = json.loads(stored_value)
+                if verifier.get("version") != 2 or verifier.get("kdf") != "scrypt":
+                    return False
+                salt = base64.b64decode(verifier["salt"], validate=True)
+                expected = base64.b64decode(verifier["hash"], validate=True)
+                if len(salt) < 16 or len(expected) != self.SCRYPT_LENGTH:
+                    return False
+                actual = self._derive_key_scrypt_params(master_password, salt, verifier)
+                return hmac.compare_digest(actual, expected)
+            except (KeyError, ValueError, TypeError, json.JSONDecodeError):
+                return False
+
+        # Legacy format: raw unsalted SHA-256 hex. Migrate immediately after a
+        # successful comparison so existing installations remain compatible.
         provided_hash = hashlib.sha256(master_password.encode()).hexdigest()
-        
-        return stored_hash == provided_hash
+        if not hmac.compare_digest(stored_value, provided_hash):
+            return False
+        try:
+            self._store_master_password_verifier(master_password, cursor)
+            self.db.conn.commit()
+        except Exception:
+            # A correct password should still unlock if migration cannot be
+            # persisted; the next successful unlock will retry it.
+            pass
+        return True
     
     def get_credentials(self, master_password: str) -> Tuple[Optional[str], Optional[str]]:
         """
@@ -437,7 +557,7 @@ class SessionManager:
 
                 if kdf_params.get("kdf") == "scrypt":
                     salt = base64.b64decode(salt_b64)
-                    encryption_key = self._derive_key_scrypt(master_password, salt)
+                    encryption_key = self._derive_key_scrypt_params(master_password, salt, kdf_params)
                     fernet_key = base64.urlsafe_b64encode(encryption_key)
                     f = Fernet(fernet_key)
                     password = f.decrypt(encrypted_password.encode()).decode()

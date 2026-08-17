@@ -8,7 +8,7 @@ from datetime import datetime
 
 # Third-party packages
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
+    QWidget, QVBoxLayout, QHBoxLayout, QBoxLayout, QGridLayout, QTableWidget, QTableWidgetItem,
     QHeaderView, QAbstractItemView
 )
 from PySide6.QtCore import Qt, Signal
@@ -20,6 +20,7 @@ from qfluentwidgets import (
     PrimaryPushButton, MessageBox, Dialog, IconWidget, qconfig, ScrollArea
 )
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
+from GUI_Qt.components.dialogs import DestructiveActionDialog
 from GUI_Qt.widgets import enable_table_copy
 from GUI_Qt.styles.theme_config import COLORS, FONTS, RADII, PADDINGS, SIZES, rgba_from_hex
 from GUI_Qt.styles.screen_theme import (
@@ -223,6 +224,7 @@ class TranslationsScreen(ResponsiveWidget):
 
         # === HEADER SECTION ===
         header = QHBoxLayout()
+        self._header_layout = header
 
         # Title with icon
         title_container = QHBoxLayout()
@@ -256,7 +258,7 @@ class TranslationsScreen(ResponsiveWidget):
         # === TOOLBAR SECTION ===
         toolbar_card = CardWidget()
         toolbar_card.setBorderRadius(RADII['md'])
-        toolbar_layout = QHBoxLayout(toolbar_card)
+        toolbar_layout = QGridLayout(toolbar_card)
         toolbar_layout.setContentsMargins(*CARD_MARGINS)
         toolbar_layout.setSpacing(CARD_SPACING)
 
@@ -285,12 +287,12 @@ class TranslationsScreen(ResponsiveWidget):
         self.refresh_btn = TransparentToolButton(FluentIcon.SYNC, self)
         self.refresh_btn.clicked.connect(self._load_translations)
 
-        toolbar_layout.addWidget(self.search_input)
-        toolbar_layout.addWidget(brand_label)
-        toolbar_layout.addWidget(self.brand_filter)
-        toolbar_layout.addStretch()
-        toolbar_layout.addWidget(self.add_btn)
-        toolbar_layout.addWidget(self.refresh_btn)
+        toolbar_layout.addWidget(self.search_input, 0, 0, 1, 4)
+        toolbar_layout.addWidget(brand_label, 1, 0)
+        toolbar_layout.addWidget(self.brand_filter, 1, 1)
+        toolbar_layout.addWidget(self.add_btn, 1, 2)
+        toolbar_layout.addWidget(self.refresh_btn, 1, 3)
+        toolbar_layout.setColumnStretch(1, 1)
 
         layout.addWidget(toolbar_card)
 
@@ -421,6 +423,12 @@ class TranslationsScreen(ResponsiveWidget):
 
     def _on_breakpoint_changed(self, breakpoint: str):
         """Respond to breakpoint changes - adjust margins and spacing."""
+        if hasattr(self, '_header_layout'):
+            self._header_layout.setDirection(
+                QBoxLayout.Direction.TopToBottom
+                if breakpoint in ('xs', 'sm')
+                else QBoxLayout.Direction.LeftToRight
+            )
         margins = get_responsive_margins(breakpoint)
         spacing = get_responsive_spacing(breakpoint)
         if hasattr(self, 'content_widget') and self.content_widget.layout():
@@ -775,16 +783,15 @@ class TranslationsScreen(ResponsiveWidget):
 
     def _delete_translation(self, translation_id: int, original: str):
         """Delete translation with confirmation"""
-        # Show confirmation dialog
-        dialog = MessageBox(
-            self.main.i18n.tr("translations.delete_confirm.title"),
-            self.main.i18n.tr("translations.delete_confirm.content", original=original),
-            self
+        confirmed = DestructiveActionDialog.ask(
+            title=self.main.i18n.tr("translations.delete_confirm.title"),
+            message=self.main.i18n.tr("translations.delete_confirm.content", original=original),
+            action_text=self.main.i18n.tr("common.delete"),
+            parent=self,
+            tr_func=self.main.i18n.tr,
         )
-        dialog.yesButton.setText(self.main.i18n.tr("common.delete"))
-        dialog.cancelButton.setText(self.main.i18n.tr("common.cancel"))
 
-        if dialog.exec():
+        if confirmed:
             try:
                 cursor = self.main.db.conn.cursor()
 

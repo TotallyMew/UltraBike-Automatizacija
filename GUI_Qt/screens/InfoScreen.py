@@ -17,6 +17,7 @@ from qfluentwidgets import (
     FluentIcon,
     isDarkTheme,
     qconfig,
+    IconWidget,
 )
 
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
@@ -172,9 +173,8 @@ class InfoScreen(ResponsiveWidget):
         title_container = QHBoxLayout()
         title_container.setSpacing(ICON_TEXT_GAP)
 
-        title_icon = TransparentToolButton(FluentIcon.INFO, self)
+        title_icon = IconWidget(FluentIcon.INFO)
         title_icon.setFixedSize(SIZES['icon_lg'], SIZES['icon_lg'])
-        title_icon.setEnabled(False)
 
         self.title_label = TitleLabel("")
         title_container.addWidget(title_icon)

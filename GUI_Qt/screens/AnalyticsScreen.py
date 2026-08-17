@@ -4,7 +4,7 @@ Modern analytics interface with visual data representation
 """
 
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QFileDialog
+    QWidget, QVBoxLayout, QHBoxLayout, QBoxLayout, QGridLayout, QLabel, QFileDialog
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPainter, QColor, QPen, QFont
@@ -19,7 +19,10 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
-from GUI_Qt.styles.theme_config import COLORS, FONTS, RADII, SPACING, SIZES, rgba_from_hex
+from GUI_Qt.styles.theme_config import (
+    COLORS, FONTS, RADII, SPACING, SIZES, rgba_from_hex,
+    get_status_text_color,
+)
 from GUI_Qt.styles.screen_theme import (
     apply_screen_theme, PAGE_MARGINS, PAGE_SPACING, CARD_MARGINS, CARD_SPACING,
     ICON_TEXT_GAP, TIGHT_SPACING, get_responsive_margins, get_responsive_spacing
@@ -97,7 +100,9 @@ class MetricCard(CardWidget):
             return
 
         self.trend_label.setVisible(True)
-        trend_color = COLORS['success'] if trend_positive else COLORS['error']
+        trend_color = get_status_text_color(
+            "success" if trend_positive else "error", isDarkTheme()
+        )
         trend_icon = "↑" if trend_positive else "↓"
         self.trend_label.setText(f"{trend_icon} {abs(trend):.1f}%")
         self.trend_label.setStyleSheet(f"color: {trend_color}; font-weight: 600; background: transparent; background-color: transparent;")
@@ -165,7 +170,7 @@ class SimpleBarChart(QWidget):
                 painter.drawText(int(x), int(y - label_h), int(bar_width), label_h, Qt.AlignmentFlag.AlignCenter, value_text)
             else:
                 # Bar is too tall — draw inside the bar at the top
-                painter.setPen(QColor("#FFFFFF"))
+                painter.setPen(QColor(COLORS['text_white']))
                 painter.drawText(int(x), int(y + 4), int(bar_width), label_h, Qt.AlignmentFlag.AlignCenter, value_text)
 
             # Label at bottom
@@ -277,9 +282,8 @@ class AnalyticsScreen(ResponsiveWidget):
         header_layout.setSpacing(ICON_TEXT_GAP)
 
         # Header icon
-        header_icon = TransparentToolButton(FluentIcon.PIE_SINGLE, self)
+        header_icon = IconWidget(FluentIcon.PIE_SINGLE)
         header_icon.setFixedSize(SIZES['icon_lg'], SIZES['icon_lg'])
-        header_icon.setEnabled(False)  # Icon only, not clickable
 
         # Title
         self.title_label = TitleLabel("")
@@ -306,28 +310,32 @@ class AnalyticsScreen(ResponsiveWidget):
         content_layout.addWidget(toolbar)
 
         # Key metrics (4 cards) - activity types
-        metrics_grid = QGridLayout()
-        metrics_grid.setSpacing(CARD_SPACING)
+        self.metrics_grid = QGridLayout()
+        self.metrics_grid.setSpacing(CARD_SPACING)
 
         # Make cards share available width evenly
         for col in range(4):
-            metrics_grid.setColumnStretch(col, 1)
+            self.metrics_grid.setColumnStretch(col, 1)
 
         self.regular_uploads_metric = MetricCard("Regular Uploads", "0", "", FluentIcon.UP)
         self.batch_uploads_metric = MetricCard("Batch Uploads", "0", "", FluentIcon.FOLDER)
         self.batch_desc_metric = MetricCard("Batch Descriptions", "0", "", FluentIcon.DOCUMENT)
         self.batch_titles_metric = MetricCard("Batch Titles", "0", "", FluentIcon.EDIT)
 
-        metrics_grid.addWidget(self.regular_uploads_metric, 0, 0)
-        metrics_grid.addWidget(self.batch_uploads_metric, 0, 1)
-        metrics_grid.addWidget(self.batch_desc_metric, 0, 2)
-        metrics_grid.addWidget(self.batch_titles_metric, 0, 3)
+        self.metric_cards = [
+            self.regular_uploads_metric,
+            self.batch_uploads_metric,
+            self.batch_desc_metric,
+            self.batch_titles_metric,
+        ]
+        for column, card in enumerate(self.metric_cards):
+            self.metrics_grid.addWidget(card, 0, column)
 
-        content_layout.addLayout(metrics_grid)
+        content_layout.addLayout(self.metrics_grid)
 
         # Charts row
-        charts_layout = QHBoxLayout()
-        charts_layout.setSpacing(CARD_SPACING)
+        self.charts_layout = QHBoxLayout()
+        self.charts_layout.setSpacing(CARD_SPACING)
 
         # Brand performance chart
         self.brand_chart_card = CardWidget()
@@ -336,14 +344,14 @@ class AnalyticsScreen(ResponsiveWidget):
         brand_chart_layout.setContentsMargins(*CARD_MARGINS)
         brand_chart_layout.setSpacing(SPACING['md'])
 
-        brand_title = StrongBodyLabel("Brand Performance")
-        brand_title.setStyleSheet(f"font-size: {FONTS['size_subtitle_2']};")
-        brand_chart_layout.addWidget(brand_title)
+        self.brand_title = StrongBodyLabel("Brand Performance")
+        self.brand_title.setStyleSheet(f"font-size: {FONTS['size_subtitle_2']};")
+        brand_chart_layout.addWidget(self.brand_title)
 
         self.brand_chart = SimpleBarChart([], [])
         brand_chart_layout.addWidget(self.brand_chart)
 
-        charts_layout.addWidget(self.brand_chart_card, 2)
+        self.charts_layout.addWidget(self.brand_chart_card, 2)
 
         # Success donut chart
         self.success_chart_card = CardWidget()
@@ -353,20 +361,20 @@ class AnalyticsScreen(ResponsiveWidget):
         success_chart_layout.setSpacing(SPACING['md'])
         success_chart_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        success_title = StrongBodyLabel("Success Rate")
-        success_title.setStyleSheet(f"font-size: {FONTS['size_subtitle_2']};")
-        success_chart_layout.addWidget(success_title, 0, Qt.AlignmentFlag.AlignCenter)
+        self.success_title = StrongBodyLabel("Success Rate")
+        self.success_title.setStyleSheet(f"font-size: {FONTS['size_subtitle_2']};")
+        success_chart_layout.addWidget(self.success_title, 0, Qt.AlignmentFlag.AlignCenter)
 
         self.success_donut = DonutChart(0)
         success_chart_layout.addWidget(self.success_donut, 0, Qt.AlignmentFlag.AlignCenter)
 
-        success_caption = CaptionLabel("Last 30 days")
-        success_caption.setStyleSheet(f"color: {COLORS['text_tertiary']}; background: transparent; background-color: transparent;")
-        success_chart_layout.addWidget(success_caption, 0, Qt.AlignmentFlag.AlignCenter)
+        self.success_caption = CaptionLabel("Last 30 days")
+        self.success_caption.setStyleSheet(f"color: {COLORS['text_tertiary']}; background: transparent; background-color: transparent;")
+        success_chart_layout.addWidget(self.success_caption, 0, Qt.AlignmentFlag.AlignCenter)
 
-        charts_layout.addWidget(self.success_chart_card, 1)
+        self.charts_layout.addWidget(self.success_chart_card, 1)
 
-        content_layout.addLayout(charts_layout)
+        content_layout.addLayout(self.charts_layout)
 
         # Recent activity card
         self.activity_card = CardWidget()
@@ -376,15 +384,15 @@ class AnalyticsScreen(ResponsiveWidget):
         activity_layout.setSpacing(SPACING['md'])
 
         activity_header = QHBoxLayout()
-        activity_title = StrongBodyLabel("Recent Activity")
-        activity_title.setStyleSheet(f"font-size: {FONTS['size_subtitle_2']};")
-        activity_header.addWidget(activity_title)
+        self.activity_title = StrongBodyLabel("Recent Activity")
+        self.activity_title.setStyleSheet(f"font-size: {FONTS['size_subtitle_2']};")
+        activity_header.addWidget(self.activity_title)
         activity_header.addStretch()
 
-        view_all_btn = TransparentToolButton(FluentIcon.RIGHT_ARROW)
-        view_all_btn.setToolTip("View full history")
-        view_all_btn.clicked.connect(self._view_full_history)
-        activity_header.addWidget(view_all_btn)
+        self.view_all_btn = TransparentToolButton(FluentIcon.RIGHT_ARROW)
+        self.view_all_btn.setToolTip("View full history")
+        self.view_all_btn.clicked.connect(self._view_full_history)
+        activity_header.addWidget(self.view_all_btn)
 
         activity_layout.addLayout(activity_header)
 
@@ -401,9 +409,9 @@ class AnalyticsScreen(ResponsiveWidget):
         errors_layout.setContentsMargins(*CARD_MARGINS)
         errors_layout.setSpacing(SPACING['md'])
 
-        errors_title = StrongBodyLabel("Common Issues")
-        errors_title.setStyleSheet(f"font-size: {FONTS['size_subtitle_2']};")
-        errors_layout.addWidget(errors_title)
+        self.errors_title = StrongBodyLabel("Common Issues")
+        self.errors_title.setStyleSheet(f"font-size: {FONTS['size_subtitle_2']};")
+        errors_layout.addWidget(self.errors_title)
 
         self.errors_container = QVBoxLayout()
         self.errors_container.setSpacing(TIGHT_SPACING)
@@ -497,28 +505,31 @@ class AnalyticsScreen(ResponsiveWidget):
         toolbar_layout.setSpacing(CARD_SPACING)
 
         # Time range filter
-        period_label = BodyLabel("Period:")
-        toolbar_layout.addWidget(period_label)
+        self.period_label = BodyLabel("Period:")
+        toolbar_layout.addWidget(self.period_label)
 
         self.period_combo = ComboBox()
-        self.period_combo.addItems(["Last 7 days", "Last 30 days", "Last 90 days", "All time"])
+        self.period_combo.addItem("Last 7 days", userData=7)
+        self.period_combo.addItem("Last 30 days", userData=30)
+        self.period_combo.addItem("Last 90 days", userData=90)
+        self.period_combo.addItem("All time", userData=None)
         self.period_combo.setCurrentIndex(1)  # Default: Last 30 days
-        self.period_combo.currentTextChanged.connect(self.load_analytics)
+        self.period_combo.currentIndexChanged.connect(lambda _index: self.load_analytics())
         toolbar_layout.addWidget(self.period_combo)
 
         toolbar_layout.addStretch()
 
         # Refresh button
-        refresh_btn = TransparentToolButton(FluentIcon.SYNC)
-        refresh_btn.setToolTip("Refresh analytics")
-        refresh_btn.clicked.connect(self.load_analytics)
-        toolbar_layout.addWidget(refresh_btn)
+        self.refresh_btn = TransparentToolButton(FluentIcon.SYNC)
+        self.refresh_btn.setToolTip("Refresh analytics")
+        self.refresh_btn.clicked.connect(self.load_analytics)
+        toolbar_layout.addWidget(self.refresh_btn)
 
         # Export button
-        export_btn = PushButton("Export")
-        export_btn.setIcon(FluentIcon.SAVE.icon())
-        export_btn.clicked.connect(self._export_analytics)
-        toolbar_layout.addWidget(export_btn)
+        self.export_btn = PushButton("Export")
+        self.export_btn.setIcon(FluentIcon.SAVE.icon())
+        self.export_btn.clicked.connect(self._export_analytics)
+        toolbar_layout.addWidget(self.export_btn)
 
         return self.toolbar_card
 
@@ -551,13 +562,8 @@ class AnalyticsScreen(ResponsiveWidget):
 
         # Get time range
         period = self.period_combo.currentText()
-        days_map = {
-            "Last 7 days": 7,
-            "Last 30 days": 30,
-            "Last 90 days": 90,
-            "All time": None
-        }
-        days = days_map.get(period)
+        days = self.period_combo.currentData()
+        self.success_caption.setText(period)
 
         # Build date filter
         date_filter = ""
@@ -619,7 +625,7 @@ class AnalyticsScreen(ResponsiveWidget):
         brand_data = cursor.execute(brand_query, params).fetchall()
 
         if brand_data:
-            brands = [row[0] for row in brand_data]
+            brands = [str(row[0] or self.main.i18n.tr("analytics.brand.unknown")) for row in brand_data]
             counts = [row[1] for row in brand_data]
             self.brand_chart.data = counts
             self.brand_chart.labels = brands
@@ -632,14 +638,18 @@ class AnalyticsScreen(ResponsiveWidget):
         recent_query = f"""
             SELECT brand, product_code, status, processed_at, batch_id
             FROM processing_history
+            {date_filter}
             ORDER BY processed_at DESC
             LIMIT 10
         """
-        recent = cursor.execute(recent_query).fetchall()
+        recent = cursor.execute(recent_query, params).fetchall()
 
         for row in recent:
             item = self._create_activity_item(row[0], row[1], row[2], row[3], row[4])
             self.activity_container.addWidget(item)
+        if not recent:
+            empty = CaptionLabel(self.main.i18n.tr("analytics.activity.empty"))
+            self.activity_container.addWidget(empty)
 
         # Common errors
         self._clear_layout(self.errors_container)
@@ -662,8 +672,11 @@ class AnalyticsScreen(ResponsiveWidget):
                 error_item = self._create_error_item(row[0], row[1])
                 self.errors_container.addWidget(error_item)
         else:
-            no_errors = CaptionLabel("No errors in this period")
-            no_errors.setStyleSheet(f"color: {COLORS['success']}; font-style: italic; background: transparent; background-color: transparent;")
+            no_errors = CaptionLabel(self.main.i18n.tr("analytics.errors.empty"))
+            no_errors.setStyleSheet(
+                f"color: {get_status_text_color('success', isDarkTheme())}; "
+                "font-style: italic; background: transparent; background-color: transparent;"
+            )
             self.errors_container.addWidget(no_errors)
 
     def _update_metric(self, card, value, subtitle, trend=None, trend_positive=True):
@@ -687,23 +700,28 @@ class AnalyticsScreen(ResponsiveWidget):
         layout.setSpacing(CARD_SPACING)
 
         # Activity type
-        activity_type = "Regular" if not batch_id else (
-            "Batch Upload" if str(batch_id).startswith('batch_') else (
-                "Batch Descriptions" if str(batch_id).startswith('batchdesc_') else (
-                    "Batch Titles" if str(batch_id).startswith('batchtitle_') else "Batch"
+        tr = self.main.i18n.tr
+        activity_type = tr("analytics.activity.regular") if not batch_id else (
+            tr("analytics.metric.batch_uploads") if str(batch_id).startswith('batch_') else (
+                tr("analytics.metric.batch_descriptions") if str(batch_id).startswith('batchdesc_') else (
+                    tr("analytics.metric.batch_titles") if str(batch_id).startswith('batchtitle_') else tr("analytics.activity.batch")
                 )
             )
         )
 
         # Status icon
         if status in ('success', 'saved_manually'):
-            status_icon, status_color = FluentIcon.ACCEPT, COLORS['success']
+            status_icon = FluentIcon.ACCEPT
+            status_color = get_status_text_color('success', isDarkTheme())
         elif status == 'ready_for_review':
-            status_icon, status_color = FluentIcon.SYNC, COLORS['warning']
+            status_icon = FluentIcon.SYNC
+            status_color = get_status_text_color('warning', isDarkTheme())
         elif status in ('blocked_non_draft', 'discarded'):
-            status_icon, status_color = FluentIcon.INFO, COLORS['text_tertiary']
+            status_icon = FluentIcon.INFO
+            status_color = COLORS['text_tertiary_dark'] if isDarkTheme() else COLORS['text_tertiary_light']
         else:
-            status_icon, status_color = FluentIcon.CANCEL, COLORS['error']
+            status_icon = FluentIcon.CANCEL
+            status_color = get_status_text_color('error', isDarkTheme())
         icon = IconWidget(status_icon)
         icon.setFixedSize(SIZES['icon_sm'], SIZES['icon_sm'])
         icon.setStyleSheet(f"color: {status_color}; background: transparent; background-color: transparent;")
@@ -763,13 +781,13 @@ class AnalyticsScreen(ResponsiveWidget):
         diff = now - dt
 
         if diff.days > 0:
-            return f"{diff.days}d ago"
+            return self.main.i18n.tr("analytics.time.days", count=diff.days)
         elif diff.seconds >= 3600:
-            return f"{diff.seconds // 3600}h ago"
+            return self.main.i18n.tr("analytics.time.hours", count=diff.seconds // 3600)
         elif diff.seconds >= 60:
-            return f"{diff.seconds // 60}m ago"
+            return self.main.i18n.tr("analytics.time.minutes", count=diff.seconds // 60)
         else:
-            return "Just now"
+            return self.main.i18n.tr("analytics.time.now")
 
     def _clear_layout(self, layout):
         """Clear all widgets from layout"""
@@ -865,7 +883,41 @@ class AnalyticsScreen(ResponsiveWidget):
     def update_translations(self):
         """Update UI text for current language"""
         tr = self.main.i18n.tr
-        self.title_label.setText(tr("analytics.title", default="Analytics"))
+        self.title_label.setText(tr("analytics.title"))
+        self.regular_uploads_metric.title_label.setText(tr("analytics.metric.regular_uploads"))
+        self.batch_uploads_metric.title_label.setText(tr("analytics.metric.batch_uploads"))
+        self.batch_desc_metric.title_label.setText(tr("analytics.metric.batch_descriptions"))
+        self.batch_titles_metric.title_label.setText(tr("analytics.metric.batch_titles"))
+        self.brand_title.setText(tr("analytics.brand.title"))
+        self.success_title.setText(tr("analytics.success.title"))
+        self.activity_title.setText(tr("analytics.activity.title"))
+        self.errors_title.setText(tr("analytics.errors.title"))
+        self.period_label.setText(tr("common.period"))
+        self.refresh_btn.setToolTip(tr("analytics.refresh"))
+        self.export_btn.setText(tr("analytics.export"))
+        self.view_all_btn.setToolTip(tr("analytics.activity.view_all"))
+
+        selected_days = self.period_combo.currentData()
+        self.period_combo.blockSignals(True)
+        self.period_combo.clear()
+        choices = (
+            (tr("common.last_7_days"), 7),
+            (tr("common.last_30_days"), 30),
+            (tr("common.last_90_days"), 90),
+            (tr("common.all_time"), None),
+        )
+        selected_index = 1
+        for index, (label, days) in enumerate(choices):
+            self.period_combo.addItem(label, userData=days)
+            if days == selected_days:
+                selected_index = index
+        self.period_combo.setCurrentIndex(selected_index)
+        self.period_combo.blockSignals(False)
+        self.success_caption.setText(self.period_combo.currentText())
+        self.load_analytics()
+
+    def retranslate_ui(self):
+        self.update_translations()
 
     def _on_breakpoint_changed(self, breakpoint: str):
         """Respond to breakpoint changes - adjust margins and spacing."""
@@ -882,6 +934,24 @@ class AnalyticsScreen(ResponsiveWidget):
             # For AnalyticsScreen, the content widget already has custom margins
             # Only update spacing to maintain the scrollbar offset
             self.content_widget.layout().setSpacing(spacing)
+
+        metric_compact = breakpoint in ("xs", "sm", "md", "lg")
+        chart_compact = breakpoint in ("xs", "sm")
+        columns = 2 if metric_compact else 4
+        if hasattr(self, "metrics_grid"):
+            for card in self.metric_cards:
+                self.metrics_grid.removeWidget(card)
+            for index, card in enumerate(self.metric_cards):
+                self.metrics_grid.addWidget(card, index // columns, index % columns)
+            for column in range(4):
+                self.metrics_grid.setColumnStretch(column, 1 if column < columns else 0)
+            self.metrics_grid.setSpacing(spacing)
+        if hasattr(self, "charts_layout"):
+            self.charts_layout.setDirection(
+                QBoxLayout.Direction.TopToBottom if chart_compact
+                else QBoxLayout.Direction.LeftToRight
+            )
+            self.charts_layout.setSpacing(spacing)
 
     def _on_theme_changed(self):
         """Handle theme change"""

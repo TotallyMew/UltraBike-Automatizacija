@@ -18,11 +18,12 @@ from PySide6.QtCore import QThread, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QFileDialog, QHeaderView, QTableWidgetItem
 
-from qfluentwidgets import FluentIcon, InfoBar, InfoBarPosition
+from qfluentwidgets import FluentIcon, InfoBar, InfoBarPosition, isDarkTheme
 
 from Config.Selectors import CastelliImageSelectors
 from GUI_Qt.screens.CastelliUrlGetterScreen import CastelliUrlGetterScreen
 from GUI_Qt.widgets import show_file_saved_bar
+from GUI_Qt.styles.theme_config import get_status_text_color, get_text_color
 
 
 def sanitize_folder_name(name: str) -> str:
@@ -248,7 +249,7 @@ class CastelliImageDownloaderScreen(CastelliUrlGetterScreen):
                 self._table.setItem(idx, 1, QTableWidgetItem(row["code"]))
                 self._table.setItem(idx, 2, QTableWidgetItem(row["url"]))
                 status = QTableWidgetItem(self.tr("batchdesc.status.pending"))
-                status.setForeground(QColor("#777777"))
+                status.setForeground(QColor(get_text_color(isDarkTheme(), "secondary")))
                 self._table.setItem(idx, 3, status)
                 self._table.setItem(idx, 4, QTableWidgetItem(""))
 
@@ -285,7 +286,7 @@ class CastelliImageDownloaderScreen(CastelliUrlGetterScreen):
 
         for idx in range(self._table.rowCount()):
             status = QTableWidgetItem(self.tr("batchdesc.status.pending"))
-            status.setForeground(QColor("#777777"))
+            status.setForeground(QColor(get_text_color(isDarkTheme(), "secondary")))
             self._table.setItem(idx, 3, status)
             self._table.setItem(idx, 4, QTableWidgetItem(""))
 
@@ -304,11 +305,11 @@ class CastelliImageDownloaderScreen(CastelliUrlGetterScreen):
     def _on_row_update(self, row: int, status: str, count: str, folder: str):
         item = QTableWidgetItem(status if not count else f"{status} ({count})")
         if status == "Done":
-            item.setForeground(QColor("#4CAF50"))
+            item.setForeground(QColor(get_status_text_color("success", isDarkTheme())))
         elif status in ("Downloading", "Skipped"):
-            item.setForeground(QColor("#FF9800"))
+            item.setForeground(QColor(get_status_text_color("warning", isDarkTheme())))
         else:
-            item.setForeground(QColor("#F44336"))
+            item.setForeground(QColor(get_status_text_color("error", isDarkTheme())))
 
         self._table.setItem(row, 3, item)
         self._table.setItem(row, 4, QTableWidgetItem(folder))

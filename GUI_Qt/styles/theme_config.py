@@ -117,10 +117,22 @@ COLORS = {
     'flag_red': '#C81D25',
 
     # Functional colors
-    'success': '#10B981',      # Emerald green
-    'warning': '#F59E0B',      # Amber
+    'success': '#10B981',      # Emerald green (fills / charts)
+    'warning': '#F59E0B',      # Amber (fills / charts)
     'error': '#C81D25',        # Flag red
     'focus_ring': '#8D99AE',   # Lavender grey - for accessibility focus indicators
+
+    # Accessible foreground variants.  Bright semantic fills do not provide
+    # sufficient contrast as text on the light app canvas, so foreground roles
+    # are deliberately separate from chart/fill colors.
+    'success_text_light': '#047857',
+    'success_text_dark': '#6EE7B7',
+    'warning_text_light': '#8A4B08',
+    'warning_text_dark': '#FCD34D',
+    'error_text_light': '#B4232C',
+    'error_text_dark': '#FDA4AF',
+    'focus_ring_light': '#46548A',
+    'focus_ring_dark': '#C3CCE0',
 
     # Text colors
     'text_primary_dark': '#E0E0E0',    # Light gray for dark theme
@@ -131,9 +143,9 @@ COLORS = {
 
     # Theme-aware text roles (preferred over non-specific grays)
     'text_secondary_dark': '#BFC4CC',   # Secondary text on dark surfaces
-    'text_secondary_light': '#6B7280',  # Secondary text on light surfaces
+    'text_secondary_light': '#596273',  # Secondary text on light surfaces
     'text_tertiary_dark': '#9CA3AF',    # Tertiary text on dark surfaces
-    'text_tertiary_light': '#9CA3AF',   # Tertiary text on light surfaces
+    'text_tertiary_light': '#596273',   # Tertiary text on light surfaces
 
     # Background colors
     'bg_dark': '#1E1E1E',              # Dark background
@@ -206,16 +218,21 @@ def get_text_color(is_dark: bool, role: str = 'primary') -> str:
     return COLORS['text_primary_dark'] if is_dark else COLORS['text_primary_light']
 
 
-def get_status_text_color(status: str) -> str:
-    """Return a semantic status color for foreground text (theme-independent)."""
+def get_focus_color(is_dark: bool) -> str:
+    """Return a focus-ring color with contrast against the current canvas."""
+    return COLORS['focus_ring_dark'] if is_dark else COLORS['focus_ring_light']
+
+
+def get_status_text_color(status: str, is_dark: bool = False) -> str:
+    """Return a theme-aware semantic status foreground color."""
     status = (status or '').strip().lower()
     if status in ('success', 'saved_manually', 'ok', 'valid'):
-        return COLORS['success']
+        return COLORS['success_text_dark'] if is_dark else COLORS['success_text_light']
     if status in ('ready_for_review', 'warning', 'warn', 'mixed'):
-        return COLORS['warning']
+        return COLORS['warning_text_dark'] if is_dark else COLORS['warning_text_light']
     if status in ('error', 'danger', 'invalid'):
-        return COLORS['error']
-    return COLORS['text_tertiary']
+        return COLORS['error_text_dark'] if is_dark else COLORS['error_text_light']
+    return get_text_color(is_dark, 'tertiary')
 
 
 def get_status_row_style(is_dark: bool, status: str) -> str:

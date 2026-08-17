@@ -73,10 +73,13 @@ class EarningsServiceTest(unittest.TestCase):
         self.service.pause_session(now=self.at(1, 10))
         self.service.create_entry("A", "bicycle", now=self.at(1, 10, 30))
         self.service.resume_session(now=self.at(1, 11))
+        self.service.create_entry("A-TIMED", "bicycle", now=self.at(1, 11, 30))
         result = self.service.finish_session(now=self.at(1, 12, 30))
         self.assertAlmostEqual(result["elapsed_seconds"], 9000)
         self.assertEqual(result["product_count"], 1)
-        self.assertEqual(self.service.list_entries()[0]["session_id"], session_id)
+        by_sku = {row["sku"]: row for row in self.service.list_entries()}
+        self.assertIsNone(by_sku["A"]["session_id"])
+        self.assertEqual(by_sku["A-TIMED"]["session_id"], session_id)
 
         self.service.start_session("stopwatch", now=self.at(2))
         self.service.create_entry("B", "bicycle", now=self.at(2))
@@ -85,6 +88,48 @@ class EarningsServiceTest(unittest.TestCase):
         self.service.reset_session()
         entry_b = next(row for row in self.service.list_entries() if row["sku"] == "B")
         self.assertIsNone(entry_b["session_id"])
+
+    def test_untimed_earnings_do_not_inflate_effective_hourly_rate(self):
+        self.service.create_entry("UNTIMED-1", "bicycle", now=self.at(1, 8))
+        self.service.start_session("stopwatch", now=self.at(1, 9))
+        self.service.create_entry("TIMED", "bicycle", now=self.at(1, 9, 30))
+        self.service.finish_session(now=self.at(1, 10))
+        self.service.create_entry("UNTIMED-2", "bicycle", now=self.at(1, 11))
+
+        summary = self.service.summary(now=self.at(1, 12))
+        self.assertEqual(summary["all_cents"], 300)
+        self.assertEqual(summary["timed_cents"], 100)
+        self.assertEqual(summary["untimed_cents"], 200)
+        self.assertEqual(summary["untimed_count"], 2)
+        self.assertEqual(summary["effective_hourly_cents"], 100)
+
+    def test_expired_or_paused_timer_cannot_mark_earnings_as_timed(self):
+        countdown_id = self.service.start_session(
+            "countdown", 1800, now=self.at(1, 9)
+        )
+        self.service.create_entry("EXPIRED", "bicycle", now=self.at(1, 10))
+        expired = next(
+            row for row in self.service.list_entries() if row["sku"] == "EXPIRED"
+        )
+        self.assertIsNone(expired["session_id"])
+        self.assertEqual(
+            self.service.get_session(countdown_id, now=self.at(1, 10))["product_count"],
+            0,
+        )
+        self.service.finish_session(now=self.at(1, 10))
+
+        session_id = self.service.start_session("stopwatch", now=self.at(2, 9))
+        self.service.pause_session(now=self.at(2, 10))
+        self.service.create_entry(
+            "LEGACY-PAUSED",
+            "bicycle",
+            session_id=session_id,
+            now=self.at(2, 10, 30),
+        )
+        self.service.finish_session(now=self.at(2, 11))
+        session = self.service.get_session(session_id, now=self.at(2, 11))
+        self.assertEqual(session["product_count"], 0)
+        self.assertEqual(session["earned_cents"], 0)
 
     def test_countdown_stops_exactly_and_supports_overtime(self):
         self.service.start_session("countdown", 1800, now=self.at(1))

@@ -9,7 +9,7 @@ from qfluentwidgets import (
     CardWidget, TitleLabel, StrongBodyLabel, BodyLabel, CaptionLabel,
     ComboBox, SwitchButton, FluentIcon, InfoBar, InfoBarPosition,
     isDarkTheme, setTheme, Theme, PushButton, LineEdit, ScrollArea,
-    PrimaryPushButton, TransparentToolButton, qconfig
+    PrimaryPushButton, TransparentToolButton, qconfig, IconWidget
 )
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
 from GUI_Qt.styles.theme_config import COLORS, FONTS, RADII, SIZES, rgba_from_hex
@@ -19,6 +19,7 @@ from GUI_Qt.styles.screen_theme import (
 )
 from GUI_Qt.i18n import normalize_language, translate
 from GUI_Qt.components.accessibility import KeyboardNavigationMixin
+from GUI_Qt.components.dialogs import UnsavedChangesDialog
 
 
 class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
@@ -243,9 +244,8 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
         title_container = QHBoxLayout()
         title_container.setSpacing(ICON_TEXT_GAP)
 
-        title_icon = TransparentToolButton(FluentIcon.SETTING, self)
+        title_icon = IconWidget(FluentIcon.SETTING)
         title_icon.setFixedSize(SIZES['icon_lg'], SIZES['icon_lg'])
-        title_icon.setEnabled(False)
 
         title_label = TitleLabel(translate(self._preview_lang_code, "settings.title"))
         self._ui["title_label"] = title_label
@@ -269,7 +269,6 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
 
         # Language header
         lang_header = QHBoxLayout()
-        from qfluentwidgets import IconWidget
         lang_icon = IconWidget(FluentIcon.GLOBE)
         lang_icon.setFixedSize(SIZES['icon_md'], SIZES['icon_md'])
         lang_title = StrongBodyLabel(translate(self._preview_lang_code, "settings.language.title"))
@@ -980,21 +979,24 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
             kross_path = self.kross_path_field.text()
             repo_path = self.repo_path_field.text()
 
-            # Save all to database
-            self.main.settings.set('language', language)
-            self.main.settings.set('browser_choice', browser)
-            self.main.settings.set('download_images', download_images)
-            self.main.settings.set('auto_delete_pabaigta_files', auto_delete_pabaigta)
-            self.main.settings.set('magicai_title_template', magic_title_template)
-            self.main.settings.set('magicai_description_template', magic_description_template)
-            self.main.settings.set('multi_session_enabled', bool(multi_session_enabled))
-            self.main.settings.set('browser_count', int(browser_count))
-            self.main.settings.set('theme', theme_name)
-
+            # Commit the settings as one unit so a write failure cannot leave a
+            # half-applied configuration behind.
+            new_settings = {
+                'language': language,
+                'browser_choice': browser,
+                'download_images': download_images,
+                'auto_delete_pabaigta_files': auto_delete_pabaigta,
+                'magicai_title_template': magic_title_template,
+                'magicai_description_template': magic_description_template,
+                'multi_session_enabled': bool(multi_session_enabled),
+                'browser_count': int(browser_count),
+                'theme': theme_name,
+            }
             if kross_path:
-                self.main.settings.set('kross_download_path', kross_path)
+                new_settings['kross_download_path'] = kross_path
             if repo_path:
-                self.main.settings.set('repository_path', repo_path)
+                new_settings['repository_path'] = repo_path
+            self.main.settings.set_many(new_settings)
 
             # Apply theme globally now that it is saved
             self.main._apply_saved_theme()
@@ -1054,6 +1056,10 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
 
     def _cancel_changes(self):
         """Discard changes and revert to saved settings"""
+        self._discard_changes(notify=True)
+
+    def _discard_changes(self, notify: bool = False) -> None:
+        """Restore saved values, optionally confirming the action to the user."""
         # Reload settings from database
         self._loading = True
         self._load_settings()
@@ -1065,16 +1071,29 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
         # Clear dirty flag
         self._mark_clean()
 
-        # Show info message
-        InfoBar.info(
-            title=self.main.i18n.tr("settings.cancelled.title"),
-            content=self.main.i18n.tr("settings.cancelled.content"),
-            orient=Qt.Orientation.Horizontal,
-            isClosable=True,
-            position=InfoBarPosition.TOP,
-            duration=2000,
-            parent=self
-        )
+        if notify:
+            InfoBar.info(
+                title=self.main.i18n.tr("settings.cancelled.title"),
+                content=self.main.i18n.tr("settings.cancelled.content"),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=2000,
+                parent=self
+            )
+
+    def request_navigation_away(self) -> bool:
+        """Protect previewed settings from being silently lost."""
+        if not self._is_dirty:
+            return True
+        choice = UnsavedChangesDialog.ask(parent=self, tr_func=self.main.i18n.tr)
+        if choice == UnsavedChangesDialog.SAVE:
+            self._save_all_settings()
+            return not self._is_dirty
+        if choice == UnsavedChangesDialog.DISCARD:
+            self._discard_changes(notify=False)
+            return True
+        return False
 
     def _mark_dirty(self):
         """Mark settings as having unsaved changes"""
@@ -1106,6 +1125,19 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
         if hasattr(self, 'content_widget') and self.content_widget and self.content_widget.layout():
             self.content_widget.layout().setContentsMargins(*margins)
             self.content_widget.layout().setSpacing(spacing)
+
+        compact = breakpoint in ("xs", "sm")
+        field_minimum = 0 if compact else SIZES['field_min_width_md']
+        for name in (
+            "language_combo",
+            "browser_combo",
+            "browser_count_combo",
+            "magic_title_template_field",
+            "magic_description_template_field",
+        ):
+            field = getattr(self, name, None)
+            if field is not None:
+                field.setMinimumWidth(field_minimum)
 
     def _on_theme_changed(self):
         """Handle theme change event from other screens"""

@@ -16,6 +16,7 @@ from PySide6.QtCore import QThread, Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QFileDialog,
+    QGridLayout,
     QHBoxLayout,
     QHeaderView,
     QTableWidget,
@@ -59,6 +60,7 @@ from GUI_Qt.styles.theme_config import (
     RADII,
     SIZES,
     SPACING as THEME_SPACING,
+    get_status_text_color,
 )
 from GUI_Qt.widgets import enable_table_copy, show_file_saved_bar
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
@@ -289,7 +291,7 @@ class CodeGetterScreen(ResponsiveWidget):
         self._layout.addLayout(header)
 
         toolbar_card = CardWidget()
-        toolbar_layout = QHBoxLayout(toolbar_card)
+        toolbar_layout = QGridLayout(toolbar_card)
         toolbar_layout.setContentsMargins(*TOOLBAR_MARGINS)
         toolbar_layout.setSpacing(CARD_SPACING)
 
@@ -303,9 +305,10 @@ class CodeGetterScreen(ResponsiveWidget):
         self._start_btn = PrimaryPushButton(FluentIcon.PLAY, "")
         self._start_btn.clicked.connect(self._on_start_stop)
 
-        toolbar_layout.addWidget(self._status_label, 1)
-        toolbar_layout.addWidget(self._export_btn)
-        toolbar_layout.addWidget(self._start_btn)
+        toolbar_layout.addWidget(self._status_label, 0, 0, 1, 2)
+        toolbar_layout.addWidget(self._export_btn, 1, 0)
+        toolbar_layout.addWidget(self._start_btn, 1, 1)
+        toolbar_layout.setColumnStretch(0, 1)
         self._layout.addWidget(toolbar_card)
 
         self._progress_label = CaptionLabel("")
@@ -446,11 +449,11 @@ class CodeGetterScreen(ResponsiveWidget):
             item = QTableWidgetItem(value)
             if col == 4:
                 if status == "Found":
-                    item.setForeground(QColor("#4CAF50"))
+                    item.setForeground(QColor(get_status_text_color("success", isDarkTheme())))
                 elif status.startswith("Error"):
-                    item.setForeground(QColor("#F44336"))
+                    item.setForeground(QColor(get_status_text_color("error", isDarkTheme())))
                 else:
-                    item.setForeground(QColor("#FF9800"))
+                    item.setForeground(QColor(get_status_text_color("warning", isDarkTheme())))
             self._table.setItem(row, col, item)
 
         self._table.scrollToItem(self._table.item(row, 0))

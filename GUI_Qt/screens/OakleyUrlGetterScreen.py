@@ -18,11 +18,12 @@ from PySide6.QtCore import QThread, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QFileDialog, QHeaderView, QTableWidgetItem
 
-from qfluentwidgets import FluentIcon, InfoBar, InfoBarPosition
+from qfluentwidgets import FluentIcon, InfoBar, InfoBarPosition, isDarkTheme
 
 from Config.Selectors import OakleySelectors
 from GUI_Qt.screens.CastelliUrlGetterScreen import CastelliUrlGetterScreen
 from GUI_Qt.widgets import show_file_saved_bar
+from GUI_Qt.styles.theme_config import get_text_color
 
 
 def extract_oakley_code(raw_code: str) -> str:
@@ -360,7 +361,7 @@ class OakleyUrlGetterScreen(CastelliUrlGetterScreen):
                 self._table.setItem(idx, 1, QTableWidgetItem(row["original_code"]))
                 self._table.setItem(idx, 2, QTableWidgetItem(row["search_code"]))
                 status = QTableWidgetItem(self.tr("batchdesc.status.pending"))
-                status.setForeground(QColor("#777777"))
+                status.setForeground(QColor(get_text_color(isDarkTheme(), "secondary")))
                 self._table.setItem(idx, 3, status)
                 self._table.setItem(idx, 4, QTableWidgetItem(""))
 
@@ -399,7 +400,7 @@ class OakleyUrlGetterScreen(CastelliUrlGetterScreen):
 
         for idx in range(self._table.rowCount()):
             status = QTableWidgetItem(self.tr("batchdesc.status.pending"))
-            status.setForeground(QColor("#777777"))
+            status.setForeground(QColor(get_text_color(isDarkTheme(), "secondary")))
             self._table.setItem(idx, 3, status)
             self._table.setItem(idx, 4, QTableWidgetItem(""))
 

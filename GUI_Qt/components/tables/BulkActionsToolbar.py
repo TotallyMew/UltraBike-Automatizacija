@@ -14,6 +14,10 @@ from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QTableWidget, QAbstractItemView
 )
 from qfluentwidgets import PushButton, TransparentToolButton, FluentIcon as FIF
+from qfluentwidgets import isDarkTheme
+from GUI_Qt.styles.theme_config import (
+    COLORS, get_status_text_color, get_text_color, rgba_from_hex,
+)
 
 
 class BulkActionsToolbar(QWidget):
@@ -78,18 +82,20 @@ class BulkActionsToolbar(QWidget):
         self.delete_selected_button.clicked.connect(self._on_delete_selected)
         self.delete_selected_button.setEnabled(False)
         # Style as warning/destructive
-        self.delete_selected_button.setStyleSheet("""
-            QPushButton {
-                color: #C81D25;
-                border: 1px solid #C81D25;
-            }
-            QPushButton:hover {
-                background-color: rgba(200, 29, 37, 0.1);
-            }
-            QPushButton:disabled {
-                color: #9CA3AF;
-                border-color: #9CA3AF;
-            }
+        error = get_status_text_color("error", isDarkTheme())
+        disabled = get_text_color(isDarkTheme(), "tertiary")
+        self.delete_selected_button.setStyleSheet(f"""
+            QPushButton, PushButton {{
+                color: {error};
+                border: 1px solid {error};
+            }}
+            QPushButton:hover, PushButton:hover {{
+                background-color: {rgba_from_hex(COLORS['flag_red'], 0.1)};
+            }}
+            QPushButton:disabled, PushButton:disabled {{
+                color: {disabled};
+                border-color: {disabled};
+            }}
         """)
         layout.addWidget(self.delete_selected_button)
 

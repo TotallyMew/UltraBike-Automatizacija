@@ -15,7 +15,7 @@ from typing import List, Dict
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QFileDialog,
+    QWidget, QVBoxLayout, QHBoxLayout, QBoxLayout, QFileDialog,
     QCheckBox, QFrame, QTableWidgetItem,
     QHeaderView, QGridLayout
 )
@@ -55,6 +55,7 @@ from GUI_Qt.styles.screen_theme import (
     get_responsive_spacing,
     apply_screen_theme,
 )
+from Utilities.URLHandler import URLHandler
 
 
 DEFAULT_PINARELLO_URL_PLACEHOLDER = "pinarello.com/..."
@@ -266,9 +267,8 @@ class PinarelloImageScreen(ResponsiveWidget):
         title_container = QHBoxLayout()
         title_container.setSpacing(ICON_TEXT_GAP)
 
-        title_icon = TransparentToolButton(FluentIcon.ALBUM, self)
+        title_icon = IconWidget(FluentIcon.ALBUM)
         title_icon.setFixedSize(SIZES['icon_lg'], SIZES['icon_lg'])
-        title_icon.setEnabled(False)
 
         self.title_label = TitleLabel("")
         title_container.addWidget(title_icon)
@@ -278,8 +278,8 @@ class PinarelloImageScreen(ResponsiveWidget):
         main_layout.addLayout(header)
 
         # Two-column layout (40% / 60%)
-        content_layout = QHBoxLayout()
-        content_layout.setSpacing(PAGE_SPACING)
+        self.content_layout = QHBoxLayout()
+        self.content_layout.setSpacing(PAGE_SPACING)
 
         # LEFT COLUMN: Controls
         left_column = QVBoxLayout()
@@ -485,7 +485,7 @@ class PinarelloImageScreen(ResponsiveWidget):
         is_dark = isDarkTheme()
         self.detail_log.setStyleSheet(f"""
             PlainTextEdit {{
-                background-color: {'#1a1a1a' if is_dark else '#fafafa'};
+                background-color: {COLORS['bg_alt_dark'] if is_dark else COLORS['bg_alt_light']};
                 border: none;
                 border-radius: {RADII['sm']}px;
                 padding: 12px;
@@ -514,10 +514,10 @@ class PinarelloImageScreen(ResponsiveWidget):
         right_column.addStretch(1)
 
         # Add columns to content
-        content_layout.addLayout(left_column, 2)
-        content_layout.addLayout(right_column, 3)
+        self.content_layout.addLayout(left_column, 2)
+        self.content_layout.addLayout(right_column, 3)
 
-        main_layout.addLayout(content_layout, 1)
+        main_layout.addLayout(self.content_layout, 1)
 
         # Apply theme
         apply_screen_theme(
@@ -547,6 +547,7 @@ class PinarelloImageScreen(ResponsiveWidget):
 
         # Store reference
         container.value_label = value_widget
+        container.title_label = label_widget
 
         return container
 
@@ -583,10 +584,10 @@ class PinarelloImageScreen(ResponsiveWidget):
         is_visible = self.detail_log.isVisible()
         self.detail_log.setVisible(not is_visible)
         if not is_visible:
-            self.toggle_details_btn.setText("Hide Details")
+            self.toggle_details_btn.setText(self.main.i18n.tr("pinarello.images.details.hide"))
             self.toggle_details_btn.setIcon(FluentIcon.UP.icon())
         else:
-            self.toggle_details_btn.setText("Show Details")
+            self.toggle_details_btn.setText(self.main.i18n.tr("pinarello.images.details.show"))
             self.toggle_details_btn.setIcon(FluentIcon.DOWN.icon())
 
     def retranslate_ui(self):
@@ -609,13 +610,33 @@ class PinarelloImageScreen(ResponsiveWidget):
         self.browse_btn.setToolTip(tr("pinarello.images.output.browse.tip"))
         self.run_btn.setText(tr("pinarello.images.run"))
         self.run_btn.setToolTip(tr("pinarello.images.run.tip"))
+        self.variant_table.setHorizontalHeaderLabels([
+            "", "", tr("pinarello.images.table.code"),
+            tr("pinarello.images.table.variant"), tr("pinarello.images.table.images"),
+        ])
+        self.stat_variants.title_label.setText(tr("pinarello.images.stats.variants"))
+        self.stat_images.title_label.setText(tr("pinarello.images.stats.images"))
+        self.stat_speed.title_label.setText(tr("pinarello.images.stats.speed"))
+        self.stat_eta.title_label.setText(tr("pinarello.images.stats.eta"))
+        self.toggle_details_btn.setText(
+            tr("pinarello.images.details.hide")
+            if self.detail_log.isVisible()
+            else tr("pinarello.images.details.show")
+        )
+        self.summary_title.setText(tr("pinarello.images.summary.title"))
+        status_key = self.status_title.property("statusKey") or "pinarello.images.status.ready"
+        self.status_title.setText(tr(status_key))
+
+    def _set_status(self, key: str) -> None:
+        self.status_title.setProperty("statusKey", key)
+        self.status_title.setText(self.main.i18n.tr(key))
 
     def _on_theme_changed(self):
         self._apply_theme()
         is_dark = isDarkTheme()
         self.detail_log.setStyleSheet(f"""
             PlainTextEdit {{
-                background-color: {'#1a1a1a' if is_dark else '#fafafa'};
+                background-color: {COLORS['bg_alt_dark'] if is_dark else COLORS['bg_alt_light']};
                 border: none;
                 border-radius: {RADII['sm']}px;
                 padding: 12px;
@@ -629,6 +650,13 @@ class PinarelloImageScreen(ResponsiveWidget):
         if hasattr(self, 'content_widget') and self.content_widget.layout():
             self.content_widget.layout().setContentsMargins(*margins)
             self.content_widget.layout().setSpacing(spacing)
+        if hasattr(self, "content_layout"):
+            self.content_layout.setDirection(
+                QBoxLayout.Direction.TopToBottom
+                if breakpoint in ("xs", "sm")
+                else QBoxLayout.Direction.LeftToRight
+            )
+            self.content_layout.setSpacing(spacing)
 
     def _browse_output(self):
         tr = self.main.i18n.tr
@@ -680,7 +708,13 @@ class PinarelloImageScreen(ResponsiveWidget):
                 self.main_progress.setValue(percentage)
 
             # Update labels
-            self.progress_label.setText(f"{image_current} of {image_total} images downloaded")
+            self.progress_label.setText(
+                self.main.i18n.tr(
+                    "pinarello.images.progress.images",
+                    current=image_current,
+                    total=image_total,
+                )
+            )
             self.stat_variants.value_label.setText(f"{variant_current} / {variant_total}")
             self.stat_images.value_label.setText(f"{image_current} / {image_total}")
 
@@ -714,9 +748,9 @@ class PinarelloImageScreen(ResponsiveWidget):
     def _preview_variants(self):
         """Preview available color variants"""
         tr = self.main.i18n.tr
-        url = self.url_field.text().strip()
+        url = URLHandler.normalize_url(self.url_field.text())
 
-        if not url:
+        if not URLHandler.is_valid_url(url):
             InfoBar.error(
                 title=tr("common.error"),
                 content=tr("pinarello.images.url.invalid"),
@@ -727,10 +761,11 @@ class PinarelloImageScreen(ResponsiveWidget):
                 parent=self,
             )
             return
+        self.url_field.setText(url)
 
         self.detail_log.clear()
         self.status_icon.setIcon(FluentIcon.SYNC)
-        self.status_title.setText("Loading...")
+        self._set_status("pinarello.images.status.loading")
         self._set_busy(True)
 
         self.preview_worker = PinarelloPreviewWorker(
@@ -756,7 +791,7 @@ class PinarelloImageScreen(ResponsiveWidget):
 
             variant_count = len(preview_data.get('variants', []))
             self.status_icon.setIcon(FluentIcon.ACCEPT)
-            self.status_title.setText("Ready")
+            self._set_status("pinarello.images.status.ready")
 
             InfoBar.success(
                 title=tr("common.success"),
@@ -769,7 +804,7 @@ class PinarelloImageScreen(ResponsiveWidget):
             )
         else:
             self.status_icon.setIcon(FluentIcon.CLOSE)
-            self.status_title.setText("Failed")
+            self._set_status("pinarello.images.status.failed")
             InfoBar.error(
                 title=tr("common.error"),
                 content=message,
@@ -790,7 +825,10 @@ class PinarelloImageScreen(ResponsiveWidget):
         if not variants:
             return
 
-        self.variant_title.setText(f"{tr('pinarello.images.variant.title')} ({len(variants)} found)")
+        self.variant_title.setText(
+            f"{tr('pinarello.images.variant.title')} "
+            f"({len(variants)} {tr('pinarello.images.variant.found')})"
+        )
 
         for variant in variants:
             row = self.variant_table.rowCount()
@@ -867,10 +905,10 @@ class PinarelloImageScreen(ResponsiveWidget):
     def _run(self):
         tr = self.main.i18n.tr
 
-        url = self.url_field.text().strip()
+        url = URLHandler.normalize_url(self.url_field.text())
         output_dir = self.output_field.text().strip()
 
-        if not url:
+        if not URLHandler.is_valid_url(url):
             InfoBar.error(
                 title=tr("common.error"),
                 content=tr("pinarello.images.url.invalid"),
@@ -881,6 +919,7 @@ class PinarelloImageScreen(ResponsiveWidget):
                 parent=self,
             )
             return
+        self.url_field.setText(url)
         if not output_dir:
             InfoBar.error(
                 title=tr("common.error"),
@@ -912,7 +951,7 @@ class PinarelloImageScreen(ResponsiveWidget):
         self.detail_log.clear()
         self.summary_card.setVisible(False)
         self.status_icon.setIcon(FluentIcon.SYNC)
-        self.status_title.setText("Downloading")
+        self._set_status("pinarello.images.status.downloading")
         self.main_progress.setValue(0)
         self.download_start_time = time.time()
 
@@ -940,7 +979,7 @@ class PinarelloImageScreen(ResponsiveWidget):
                 r = results if isinstance(results, dict) else None
                 if r:
                     self.status_icon.setIcon(FluentIcon.ACCEPT)
-                    self.status_title.setText("Complete")
+                    self._set_status("pinarello.images.status.complete")
                     self.main_progress.setValue(100)
 
                     # Show summary
@@ -952,12 +991,18 @@ class PinarelloImageScreen(ResponsiveWidget):
 
                     summary_lines = []
                     if title:
-                        summary_lines.append(f"<b>Product:</b> {title}")
+                        summary_lines.append(f"<b>{tr('pinarello.images.summary.product')}:</b> {title}")
                     if product_dir:
-                        summary_lines.append(f"<b>Location:</b> {product_dir}")
-                    summary_lines.append(f"<b>Gallery:</b> {gallery_count or 0} images")
-                    summary_lines.append(f"<b>Variants:</b> {variants or 0}")
-                    summary_lines.append(f"<b>Variant images:</b> {variant_images or 0}")
+                        summary_lines.append(f"<b>{tr('pinarello.images.summary.location')}:</b> {product_dir}")
+                    summary_lines.append(
+                        f"<b>{tr('pinarello.images.summary.gallery')}:</b> {gallery_count or 0}"
+                    )
+                    summary_lines.append(
+                        f"<b>{tr('pinarello.images.summary.variants')}:</b> {variants or 0}"
+                    )
+                    summary_lines.append(
+                        f"<b>{tr('pinarello.images.summary.variant_images')}:</b> {variant_images or 0}"
+                    )
 
                     self.summary_text.setText("<br>".join(summary_lines))
                     self.summary_card.setVisible(True)
@@ -975,7 +1020,7 @@ class PinarelloImageScreen(ResponsiveWidget):
             )
         else:
             self.status_icon.setIcon(FluentIcon.CLOSE)
-            self.status_title.setText("Failed")
+            self._set_status("pinarello.images.status.failed")
             InfoBar.error(
                 title=tr("common.error"),
                 content=message,

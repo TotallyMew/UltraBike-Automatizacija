@@ -13,7 +13,7 @@ from __future__ import annotations
 from typing import Optional
 
 from PySide6.QtCore import QEvent, QObject, Qt
-from PySide6.QtWidgets import QLabel, QWidget
+from PySide6.QtWidgets import QLabel, QSizePolicy, QWidget
 
 from qfluentwidgets import ScrollArea, isDarkTheme
 
@@ -157,6 +157,25 @@ def enforce_transparent_labels(root: QWidget) -> None:
         return
 
 
+def enforce_responsive_text(root: QWidget) -> None:
+    """Allow explanatory labels to wrap instead of widening whole pages."""
+    try:
+        for label in root.findChildren(QLabel):
+            if bool(label.property("ubNoWrap")):
+                continue
+            text = (label.text() or "").strip()
+            if len(text) < 48 and "\n" not in text:
+                continue
+            label.setWordWrap(True)
+            label.setMinimumWidth(0)
+            # QLabel's minimum size hint can still be the unwrapped text width.
+            # Ignoring the horizontal hint lets the parent layout choose the
+            # available width, after which Qt wraps the text normally.
+            label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+    except Exception:
+        return
+
+
 def get_screen_background() -> str:
     return COLORS["space_indigo"] if isDarkTheme() else COLORS["platinum"]
 
@@ -283,3 +302,4 @@ def apply_screen_theme(
     # Enforce transparent labels even when individual widgets override styles
     if transparent_labels:
         enforce_transparent_labels(screen)
+    enforce_responsive_text(screen)

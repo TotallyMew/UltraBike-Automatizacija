@@ -5,6 +5,8 @@ Provides consistent keyboard shortcuts across the application
 
 from PySide6.QtCore import Qt, QEvent
 from PySide6.QtGui import QKeySequence, QShortcut
+from qfluentwidgets import isDarkTheme
+from GUI_Qt.styles.theme_config import get_focus_color
 
 
 class KeyboardNavigationMixin:
@@ -75,7 +77,7 @@ class KeyboardNavigationMixin:
         }
 
 
-def add_focus_indicator_style(widget, focus_color='#8D99AE', offset=2, width=3):
+def add_focus_indicator_style(widget, focus_color=None, offset=0, width=2):
     """
     Add visible focus indicator to a widget for accessibility
 
@@ -89,10 +91,10 @@ def add_focus_indicator_style(widget, focus_color='#8D99AE', offset=2, width=3):
         add_focus_indicator_style(self.login_button)
     """
     current_style = widget.styleSheet()
+    focus_color = focus_color or get_focus_color(isDarkTheme())
     focus_style = f"""
         QWidget:focus {{
-            outline: {width}px solid {focus_color};
-            outline-offset: {offset}px;
+            border: {width}px solid {focus_color};
         }}
     """
     widget.setStyleSheet(current_style + focus_style)

@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -60,6 +61,8 @@ def fetch_update_manifest(url: str, timeout: float = 10.0) -> UpdateManifest:
 
     r = requests.get(url, timeout=timeout, verify=True)
     r.raise_for_status()
+    if not str(r.url).lower().startswith("https://"):
+        raise ValueError("Update manifest redirected to a non-HTTPS URL")
     data = r.json()
 
     version = str(data.get("version", "")).strip()
@@ -76,8 +79,10 @@ def fetch_update_manifest(url: str, timeout: float = 10.0) -> UpdateManifest:
         raise ValueError("Update manifest must include 'sha256' for security verification")
 
     sha256_s = str(sha256).strip()
-    if not sha256_s:
-        raise ValueError("Update manifest 'sha256' field cannot be empty")
+    if not re.fullmatch(r"[0-9a-fA-F]{64}", sha256_s):
+        raise ValueError("Update manifest 'sha256' must be a 64-character hexadecimal digest")
+    if not download_url.lower().startswith("https://"):
+        raise ValueError("Update download URL must use HTTPS")
 
     notes_s = str(notes) if notes is not None else None
     return UpdateManifest(version=version, url=download_url, sha256=sha256_s, notes=notes_s)
@@ -106,23 +111,45 @@ def download_to_temp(
     if not safe_name.lower().endswith(".exe"):
         safe_name += ".exe"
 
-    dest = os.path.join(tempfile.gettempdir(), safe_name)
+    # Use an exclusive, per-download path. A deterministic file in the shared
+    # temp folder could be stale, overwritten by another update, or replaced
+    # between two concurrent app instances.
+    file_descriptor, dest = tempfile.mkstemp(
+        prefix="ultrabike-update-",
+        suffix=f"-{safe_name}",
+    )
+    os.close(file_descriptor)
 
-    with requests.get(url, stream=True, timeout=timeout, verify=True) as r:
-        r.raise_for_status()
-        total = int(r.headers.get("Content-Length", "0") or "0")
-        downloaded = 0
-        with open(dest, "wb") as f:
-            for chunk in r.iter_content(chunk_size=1024 * 256):
-                if not chunk:
-                    continue
-                f.write(chunk)
-                downloaded += len(chunk)
-                if progress_cb:
-                    try:
-                        progress_cb(downloaded, total)
-                    except Exception:
-                        pass
+    max_download_bytes = 1024 * 1024 * 1024  # 1 GiB safety limit
+    try:
+        with requests.get(url, stream=True, timeout=timeout, verify=True) as r:
+            r.raise_for_status()
+            if not str(r.url).lower().startswith("https://"):
+                raise ValueError("Update download redirected to a non-HTTPS URL")
+            total = int(r.headers.get("Content-Length", "0") or "0")
+            if total > max_download_bytes:
+                raise ValueError("Update installer exceeds the 1 GiB safety limit")
+            downloaded = 0
+            with open(dest, "wb") as f:
+                for chunk in r.iter_content(chunk_size=1024 * 256):
+                    if not chunk:
+                        continue
+                    downloaded += len(chunk)
+                    if downloaded > max_download_bytes:
+                        raise ValueError("Update installer exceeds the 1 GiB safety limit")
+                    f.write(chunk)
+                    if progress_cb:
+                        try:
+                            progress_cb(downloaded, total)
+                        except Exception:
+                            pass
+    except Exception:
+        try:
+            if os.path.isfile(dest):
+                os.remove(dest)
+        except OSError:
+            pass
+        raise
 
     return dest
 

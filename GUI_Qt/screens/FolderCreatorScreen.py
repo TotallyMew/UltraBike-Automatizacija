@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
+    QBoxLayout,
     QListWidget,
     QListWidgetItem,
     QTreeWidget,
@@ -30,7 +31,6 @@ from qfluentwidgets import (
     BodyLabel,
     CaptionLabel,
     LineEdit,
-    MessageBox,
     PrimaryPushButton,
     PushButton,
     TransparentToolButton,
@@ -41,6 +41,7 @@ from qfluentwidgets import (
     isDarkTheme,
     qconfig,
     ScrollArea,
+    IconWidget,
 )
 
 from selenium.webdriver.common.by import By
@@ -48,6 +49,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
+from GUI_Qt.components.dialogs import DestructiveActionDialog
 from GUI_Qt.styles.theme_config import COLORS, FONTS, RADII, PADDINGS, SIZES, rgba_from_hex
 from GUI_Qt.styles.screen_theme import (
     PAGE_MARGINS,
@@ -270,9 +272,8 @@ class FolderCreatorScreen(ResponsiveWidget):
         title_container = QHBoxLayout()
         title_container.setSpacing(ICON_TEXT_GAP)
 
-        title_icon = TransparentToolButton(FluentIcon.FOLDER, self)
+        title_icon = IconWidget(FluentIcon.FOLDER)
         title_icon.setFixedSize(SIZES['icon_lg'], SIZES['icon_lg'])
-        title_icon.setEnabled(False)
 
         self.title_label = TitleLabel("")
         title_container.addWidget(title_icon)
@@ -438,6 +439,15 @@ class FolderCreatorScreen(ResponsiveWidget):
         if hasattr(self, 'content_widget') and self.content_widget.layout():
             self.content_widget.layout().setContentsMargins(*margins)
             self.content_widget.layout().setSpacing(spacing)
+        compact = breakpoint in ("xs", "sm")
+        if hasattr(self, "content_layout"):
+            self.content_layout.setDirection(
+                QBoxLayout.Direction.TopToBottom if compact
+                else QBoxLayout.Direction.LeftToRight
+            )
+            self.content_layout.setSpacing(spacing)
+        if hasattr(self, "left_panel"):
+            self.left_panel.setMinimumWidth(0 if compact else SIZES['left_panel_min_width'])
 
     def _on_theme_changed(self):
         self._apply_theme()
@@ -457,13 +467,14 @@ class FolderCreatorScreen(ResponsiveWidget):
 
     def _clear_results(self):
         """Clear scraped results with confirmation dialog"""
-        # Show confirmation dialog
-        w = MessageBox(
+        confirmed = DestructiveActionDialog.ask(
             title=self.main.i18n.tr("common.confirm"),
-            content=self.main.i18n.tr("folders.clear.confirm"),
-            parent=self
+            message=self.main.i18n.tr("folders.clear.confirm"),
+            action_text=self.main.i18n.tr("upload.clear"),
+            parent=self,
+            tr_func=self.main.i18n.tr,
         )
-        if w.exec():
+        if confirmed:
             self._products = []
             self.products_list.clear()
             self._refresh_preview()

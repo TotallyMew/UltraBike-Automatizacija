@@ -8,6 +8,8 @@ like Delete, Clear, or Remove.
 from typing import Optional, Callable
 from PySide6.QtWidgets import QWidget
 from qfluentwidgets import MessageBox
+from GUI_Qt.styles.theme_config import COLORS, RADII, get_focus_color
+from qfluentwidgets import isDarkTheme
 
 
 class DestructiveActionDialog(MessageBox):
@@ -44,22 +46,28 @@ class DestructiveActionDialog(MessageBox):
         self.cancelButton.setText(self.tr("confirm.cancel"))
 
         # Style the action button as red/destructive
-        self.yesButton.setStyleSheet("""
-            QPushButton {
-                background-color: #C81D25;
-                color: white;
+        focus = get_focus_color(isDarkTheme())
+        self.yesButton.setStyleSheet(f"""
+            QPushButton, PushButton {{
+                background-color: {COLORS['flag_red']};
+                color: {COLORS['text_white']};
                 border: none;
-                border-radius: 6px;
+                border-radius: {RADII['sm']}px;
                 padding: 8px 16px;
                 font-weight: 600;
-            }
-            QPushButton:hover {
-                background-color: #A01720;
-            }
-            QPushButton:pressed {
-                background-color: #8B1419;
-            }
+            }}
+            QPushButton:hover, PushButton:hover {{
+                background-color: {COLORS['error_text_light']};
+            }}
+            QPushButton:focus, PushButton:focus {{
+                border: 2px solid {focus};
+            }}
         """)
+        # A destructive action must never be the accidental Enter-key default.
+        self.yesButton.setAutoDefault(False)
+        self.cancelButton.setDefault(True)
+        self.cancelButton.setFocus()
+        self.yesButton.setAccessibleDescription(message)
 
     @staticmethod
     def ask(

@@ -13,8 +13,9 @@ from PySide6.QtCore import Qt
 from qfluentwidgets import (
     LineEdit, PushButton, PrimaryPushButton, BodyLabel, TitleLabel, CaptionLabel,
     TransparentToolButton, FluentIcon, InfoBar, InfoBarPosition,
-    CardWidget, isDarkTheme, MessageBox,
+    CardWidget, isDarkTheme,
 )
+from GUI_Qt.components.dialogs import DestructiveActionDialog
 
 from GUI_Qt.styles.theme_config import (
     COLORS, FONTS, RADII, SIZES, SPACING, rgba_from_hex,
@@ -293,12 +294,14 @@ class AttributeOptionsDialog(QDialog):
             return
 
         names = ", ".join(item.text() for item in selected)
-        w = MessageBox(
+        confirmed = DestructiveActionDialog.ask(
             title=self._tr("upload.attr.confirm_remove_title"),
-            content=self._tr("upload.attr.confirm_remove", values=names),
+            message=self._tr("upload.attr.confirm_remove", values=names),
+            action_text=self._tr("upload.attr.remove_selected"),
             parent=self,
+            tr_func=self._tr,
         )
-        if not w.exec():
+        if not confirmed:
             return
 
         for item in selected:

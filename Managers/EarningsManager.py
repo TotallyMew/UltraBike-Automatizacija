@@ -318,8 +318,15 @@ class EarningsManager:
         stamp = to_utc_iso(stamp_dt)
         earned_stamp = self._normalize_user_datetime(earned_at, stamp_dt)
         if session_id is None:
+            # A countdown may have expired since the last UI tick.  Sync it
+            # before deciding whether this earning belongs to tracked work.
+            self.sync_timer(now=stamp_dt)
             active = self._unfinished_session()
-            session_id = int(active["id"]) if active else None
+            session_id = (
+                int(active["id"])
+                if active and active["status"] == SessionStatus.RUNNING.value
+                else None
+            )
         if session_id is not None:
             self._session(int(session_id))
         if processing_history_id is not None and self.is_processing_imported(processing_history_id):
@@ -604,12 +611,14 @@ class EarningsManager:
     def get_session(self, session_id: int, now: datetime | None = None) -> dict[str, Any]:
         row = dict(self._session(session_id))
         row["elapsed_seconds"] = self.session_elapsed_seconds(session_id, now=now)
-        totals = self.db.conn.execute(
-            "SELECT COUNT(*), COALESCE(SUM(payout_cents), 0) FROM earning_entries WHERE session_id=?",
-            (session_id,),
-        ).fetchone()
-        row["product_count"] = int(totals[0])
-        row["earned_cents"] = int(totals[1])
+        totals = self._entry_stats(
+            None,
+            now,
+            timed_only=True,
+            session_id=session_id,
+        )
+        row["product_count"] = totals["count"]
+        row["earned_cents"] = totals["earned_cents"]
         row["hourly_cents"] = (
             row["earned_cents"] * 3600.0 / row["elapsed_seconds"]
             if row["elapsed_seconds"] > 0 else None
@@ -776,6 +785,8 @@ class EarningsManager:
         recent_start = now - timedelta(days=30)
         recent_entries = self._entry_stats(recent_start, now)
         all_entries = self._entry_stats(None, now)
+        recent_timed_entries = self._entry_stats(recent_start, now, timed_only=True)
+        all_timed_entries = self._entry_stats(None, now, timed_only=True)
         product_stats = recent_entries if recent_entries["count"] >= 5 else all_entries
         product_basis = "last_30_days" if product_stats is recent_entries else "all_time"
         likely_products = None
@@ -787,12 +798,12 @@ class EarningsManager:
         conservative = math.ceil(remaining / min(rates)) if remaining and rates else 0
 
         recent_seconds = self.tracked_seconds_between(recent_start, now)
-        recent_rate = recent_entries["earned_cents"] * 3600.0 / recent_seconds if recent_seconds > 0 else 0.0
+        recent_rate = recent_timed_entries["earned_cents"] * 3600.0 / recent_seconds if recent_seconds > 0 else 0.0
         all_seconds = self.tracked_seconds_between(None, now)
-        all_rate = all_entries["earned_cents"] * 3600.0 / all_seconds if all_seconds > 0 else 0.0
-        if recent_seconds >= 3600 and recent_entries["earned_cents"] > 0:
+        all_rate = all_timed_entries["earned_cents"] * 3600.0 / all_seconds if all_seconds > 0 else 0.0
+        if recent_seconds >= 3600 and recent_timed_entries["earned_cents"] > 0:
             rate, seconds_sample, time_basis = recent_rate, recent_seconds, "last_30_days"
-        elif all_seconds >= 3600 and all_entries["earned_cents"] > 0:
+        elif all_seconds >= 3600 and all_timed_entries["earned_cents"] > 0:
             rate, seconds_sample, time_basis = all_rate, all_seconds, "all_time"
         else:
             rate, seconds_sample, time_basis = 0.0, all_seconds, "insufficient"
@@ -838,6 +849,7 @@ class EarningsManager:
         yesterday = self._entry_stats(day_start - timedelta(days=1), day_start)
         previous_week = self._entry_stats(week_start - timedelta(days=7), week_start)
         all_time = self._entry_stats(None, now)
+        timed_all_time = self._entry_stats(None, now, timed_only=True)
         today_seconds = self.tracked_seconds_between(day_start, now)
         week_seconds = self.tracked_seconds_between(week_start, now)
         all_seconds = self.tracked_seconds_between(None, now)
@@ -847,10 +859,15 @@ class EarningsManager:
             "yesterday_cents": yesterday["earned_cents"],
             "previous_week_cents": previous_week["earned_cents"],
             "all_cents": all_time["earned_cents"], "all_count": all_time["count"],
+            "timed_cents": timed_all_time["earned_cents"],
+            "timed_count": timed_all_time["count"],
+            "untimed_cents": all_time["earned_cents"] - timed_all_time["earned_cents"],
+            "untimed_count": all_time["count"] - timed_all_time["count"],
             "today_seconds": today_seconds, "week_seconds": week_seconds,
             "all_seconds": all_seconds,
             "effective_hourly_cents": (
-                all_time["earned_cents"] * 3600.0 / all_seconds if all_seconds > 0 else None
+                timed_all_time["earned_cents"] * 3600.0 / all_seconds
+                if all_seconds > 0 else None
             ),
         }
 
@@ -965,17 +982,40 @@ class EarningsManager:
         }
 
     # ------------------------------------------------------------------ helpers
-    def _entry_stats(self, start: datetime | None, end: datetime | None) -> dict[str, int]:
+    def _entry_stats(
+        self,
+        start: datetime | None,
+        end: datetime | None,
+        *,
+        timed_only: bool = False,
+        session_id: int | None = None,
+    ) -> dict[str, int]:
         conditions, params = [], []
+        timestamp_column = "e.created_at" if timed_only else "e.earned_at"
         if start:
-            conditions.append("earned_at>=?")
+            conditions.append(f"{timestamp_column}>=?")
             params.append(to_utc_iso(start))
         if end:
-            conditions.append("earned_at<?")
+            conditions.append(f"{timestamp_column}<?")
             params.append(to_utc_iso(end))
+        if session_id is not None:
+            conditions.append("e.session_id=?")
+            params.append(int(session_id))
+        if timed_only:
+            conditions.append(
+                """
+                e.session_id IS NOT NULL AND EXISTS (
+                    SELECT 1 FROM work_segments s
+                    WHERE s.session_id=e.session_id
+                      AND e.created_at>=s.started_at
+                      AND (s.ended_at IS NULL OR e.created_at<=s.ended_at)
+                )
+                """
+            )
         where = "WHERE " + " AND ".join(conditions) if conditions else ""
         row = self.db.conn.execute(
-            f"SELECT COUNT(*), COALESCE(SUM(payout_cents),0) FROM earning_entries {where}", params
+            f"SELECT COUNT(*), COALESCE(SUM(e.payout_cents),0) FROM earning_entries e {where}",
+            params,
         ).fetchone()
         return {"count": int(row[0]), "earned_cents": int(row[1])}
 

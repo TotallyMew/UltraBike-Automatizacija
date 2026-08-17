@@ -4,11 +4,12 @@ Manages navigation, state, and screen switching
 """
 
 from PySide6.QtWidgets import QWidget, QStackedWidget, QHBoxLayout, QApplication, QLineEdit, QMessageBox
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QFont, QColor
+from PySide6.QtCore import Qt, QTimer, QThread
+from PySide6.QtGui import QFont, QColor, QKeySequence, QShortcut
 from qfluentwidgets import FluentWindow, NavigationItemPosition, FluentIcon, MessageBox, InfoBar, InfoBarPosition
 
 import queue
+import os
 import threading
 from Utilities.ErrorManager import ErrorManager
 
@@ -22,17 +23,46 @@ from Utilities.Version import get_app_version
 from Utilities.Updater import fetch_update_manifest, is_newer_version, download_to_temp, sha256_file, run_installer
 from Utilities.AppPaths import get_default_db_path, get_data_dir
 from GUI_Qt.styles.theme_config import FONTS
-from GUI_Qt.styles.theme_config import COLORS
+from GUI_Qt.styles.theme_config import COLORS, get_text_color
 from GUI_Qt.styles.theme_config import SPACING
 from GUI_Qt.styles.theme_config import RADII
 from GUI_Qt.styles.theme_config import PADDINGS
 from GUI_Qt.styles.theme_config import SIZES
-from GUI_Qt.styles.screen_theme import NAV_VERSION_MARGINS, NAV_VERSION_SPACING
+from GUI_Qt.styles.screen_theme import (
+    NAV_VERSION_MARGINS,
+    NAV_VERSION_SPACING,
+    enforce_responsive_text,
+)
+from GUI_Qt.components.accessibility import apply_accessibility_defaults
 from GUI_Qt.i18n import I18nManager, translate
 
 
 class MainWindow(FluentWindow):
     """Main application window with Fluent Design navigation"""
+
+    SCREEN_ROUTES = {
+        0: "upload",
+        1: "batch",
+        2: "descriptions",
+        3: "folders",
+        4: "translations",
+        5: "basso_images",
+        6: "pinarello_images",
+        7: "history",
+        8: "account",
+        9: "settings",
+        10: "info",
+        11: "spec_checker",
+        12: "name_getter",
+        13: "code_getter",
+        14: "castelli_url_getter",
+        15: "castelli_images",
+        16: "abus_url_getter",
+        17: "oakley_url_getter",
+        18: "product_name_getter",
+        19: "orbea",
+        20: "earnings",
+    }
 
     def __init__(self):
         super().__init__()
@@ -78,17 +108,20 @@ class MainWindow(FluentWindow):
         self.resize(1400, 900)
         self.setMinimumSize(900, 700)
 
-        # Set application font
-        app_font = QFont()
-        app_font.setFamily("Segoe UI")
-        app_font.setPointSize(10)
-        QApplication.instance().setFont(app_font)
+        # Preserve the operating system's configured point size so Windows text
+        # scaling remains effective. Prefer the modern UI family when present.
+        app = QApplication.instance()
+        if app is not None:
+            app_font = app.font()
+            app_font.setFamilies(["Segoe UI Variable", "Segoe UI"])
+            app.setFont(app_font)
 
         # Center window on screen
         self._center_on_screen()
 
         # Initialize screens (lazy loading)
         self.login_screen = None
+        self._loading_widget = None
 
         # Cached for current run after master unlock/setup
         self._unlocked_master_password = None
@@ -117,6 +150,10 @@ class MainWindow(FluentWindow):
 
         # Top bar reference
         self.top_bar = None
+        self._main_container = None
+        self.content_stack = None
+        self._current_screen_index = None
+        self._last_navigation_compact = None
 
         # Update check (best-effort; won't block app startup)
         self._update_check_scheduled = False
@@ -130,6 +167,7 @@ class MainWindow(FluentWindow):
         # Setup UI
         self._init_navigation()
         self._init_window()
+        self._init_shortcuts()
 
         # Ensure the frameless title bar stays readable across themes
         try:
@@ -560,10 +598,16 @@ class MainWindow(FluentWindow):
                 return
             try:
                 if selected:
-                    item.setTextColor("#183B8C", "#FFFFFF")
+                    item.setTextColor(COLORS["space_indigo"], COLORS["text_white"])
                 else:
-                    item.setTextColor("#4B5563", "#B7C0CD")
-                item.setIndicatorColor("#2854C5", "#83A5FF")
+                    item.setTextColor(
+                        COLORS["text_secondary_light"],
+                        COLORS["text_secondary_dark"],
+                    )
+                item.setIndicatorColor(
+                    COLORS["focus_ring_light"],
+                    COLORS["focus_ring_dark"],
+                )
                 font = item.font()
                 font.setWeight(QFont.Weight.DemiBold if selected else QFont.Weight.Normal)
                 item.setFont(font)
@@ -581,7 +625,10 @@ class MainWindow(FluentWindow):
             )
             self._nav_items[route_key] = item
             try:
-                item.setTextColor("#344054", "#D0D5DD")
+                item.setTextColor(
+                    COLORS["text_primary_light"],
+                    COLORS["text_primary_dark"],
+                )
                 font = item.font()
                 font.setWeight(QFont.Weight.DemiBold)
                 item.setFont(font)
@@ -851,9 +898,13 @@ class MainWindow(FluentWindow):
     def _init_window(self):
         """Initialize window layout"""
         # FluentWindow automatically handles navigation layout
-        # Make the navigation panel wider for better visibility
-        self.navigationInterface.setExpandWidth(200)
-        # Force navigation to stay expanded
+        # Use a desktop-sized label rail and collapse it automatically only
+        # when the content area needs the space.
+        self.navigationInterface.setExpandWidth(240)
+        try:
+            self.navigationInterface.setMinimumExpandWidth(1100)
+        except Exception:
+            pass
         self.navigationInterface.expand(useAni=False)
 
         # The NavigationInterface shows a return/back button by default.
@@ -878,6 +929,70 @@ class MainWindow(FluentWindow):
         except Exception:
             pass
         self._apply_titlebar_theme()
+        self._sync_navigation_for_width(force=True)
+
+    def _init_shortcuts(self) -> None:
+        """Install a compact set of predictable desktop keyboard shortcuts."""
+        self._shortcuts = []
+
+        def _add(sequence: str, callback) -> None:
+            shortcut = QShortcut(QKeySequence(sequence), self)
+            shortcut.setContext(Qt.ShortcutContext.WindowShortcut)
+            shortcut.activated.connect(callback)
+            self._shortcuts.append(shortcut)
+
+        _add("Ctrl+,", lambda: self._switch_to_screen(9))
+        _add("Ctrl+Shift+R", self.reconnect_browser)
+        _add("F6", lambda: self._cycle_focus(False))
+        _add("Shift+F6", lambda: self._cycle_focus(True))
+
+    def _cycle_focus(self, backwards: bool = False) -> None:
+        """Move focus between navigation, the top bar, and page content."""
+        if not self.navigationInterface.isVisible():
+            return
+        targets = [
+            self.navigationInterface,
+            getattr(self, "top_bar", None),
+            getattr(self, "content_stack", None),
+        ]
+        targets = [target for target in targets if target is not None and target.isVisible()]
+        if not targets:
+            return
+        focused = QApplication.focusWidget()
+        current = -1
+        for index, target in enumerate(targets):
+            if focused is target or (focused is not None and target.isAncestorOf(focused)):
+                current = index
+                break
+        step = -1 if backwards else 1
+        target = targets[(current + step) % len(targets)]
+        if target is self.content_stack and self.content_stack.currentWidget() is not None:
+            target = self.content_stack.currentWidget()
+        target.setFocus(Qt.FocusReason.ShortcutFocusReason)
+
+    def _sync_navigation_for_width(self, force: bool = False) -> None:
+        """Keep the navigation usable without crowding minimum-size pages."""
+        compact = self.width() < 1120
+        if not force and compact == self._last_navigation_compact:
+            return
+        self._last_navigation_compact = compact
+        try:
+            if compact:
+                self.navigationInterface.panel.collapse()
+            else:
+                self.navigationInterface.panel.expand(useAni=False)
+        except Exception:
+            try:
+                if compact:
+                    self.navigationInterface.collapse()
+                else:
+                    self.navigationInterface.expand(useAni=False)
+            except Exception:
+                pass
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._sync_navigation_for_width()
 
     @staticmethod
     def _qcolor(hex_color: str, alpha: int = 255) -> QColor:
@@ -973,14 +1088,66 @@ class MainWindow(FluentWindow):
             pass
     def _switch_to_screen(self, index):
         """Switch to a different screen"""
-        screen = self._ensure_screen_created(index)
+        if not self._can_leave_current_screen():
+            self._restore_current_navigation_selection()
+            return
+        try:
+            screen = self._ensure_screen_created(index)
+        except Exception as error:
+            try:
+                self.logger.error("Navigation", f"Could not open screen {index}", exception=error)
+            except Exception:
+                pass
+            InfoBar.error(
+                title=self.i18n.tr("common.error"),
+                content=self.i18n.tr("navigation.load_error"),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=5000,
+                parent=self,
+            )
+            self._restore_current_navigation_selection()
+            return
         if screen is not None:
             self._show_screen(screen)
+            self._current_screen_index = index
+            route = self.SCREEN_ROUTES.get(index)
+            if route:
+                try:
+                    self.navigationInterface.setCurrentItem(route)
+                except Exception:
+                    pass
+
+    def _can_leave_current_screen(self) -> bool:
+        """Give the current page a chance to save or discard pending edits."""
+        stack = getattr(self, "content_stack", None)
+        screen = stack.currentWidget() if stack is not None else None
+        guard = getattr(screen, "request_navigation_away", None)
+        if not callable(guard):
+            return True
+        try:
+            return bool(guard())
+        except Exception as error:
+            try:
+                self.logger.error("Navigation", "Unsaved-change guard failed", exception=error)
+            except Exception:
+                pass
+            return False
+
+    def _restore_current_navigation_selection(self) -> None:
+        route = self.SCREEN_ROUTES.get(self._current_screen_index)
+        if not route:
+            return
+        try:
+            self.navigationInterface.setCurrentItem(route)
+        except Exception:
+            pass
 
     def _add_screen_to_stack(self, screen, name):
         """Add screen to content stack if not already added"""
         # Check if content_stack exists (after login)
-        if not hasattr(self, 'content_stack'):
+        if getattr(self, 'content_stack', None) is None:
             return False
 
         # Check if screen already in stack
@@ -990,11 +1157,21 @@ class MainWindow(FluentWindow):
 
         # Add screen to stack
         self.content_stack.addWidget(screen)
+        self._polish_screen(screen)
         return True
+
+    def _polish_screen(self, screen) -> None:
+        """Apply cross-screen responsive and assistive-technology defaults."""
+        def _apply() -> None:
+            enforce_responsive_text(screen)
+            apply_accessibility_defaults(screen)
+
+        _apply()
+        QTimer.singleShot(0, _apply)
 
     def _show_screen(self, screen):
         """Show a specific screen in content stack"""
-        if not hasattr(self, 'content_stack'):
+        if getattr(self, 'content_stack', None) is None:
             return
 
         # Verify screen is in stack before trying to show it
@@ -1006,6 +1183,7 @@ class MainWindow(FluentWindow):
 
         if is_in_stack:
             self.content_stack.setCurrentWidget(screen)
+            self._polish_screen(screen)
 
     def _check_session(self):
         """Check for valid session and show appropriate screen"""
@@ -1028,9 +1206,13 @@ class MainWindow(FluentWindow):
         """Show loading screen"""
         from GUI_Qt.widgets.LoadingWidget import LoadingWidget
 
-        loading_widget = LoadingWidget(message, tr=self.i18n.tr)
-        self.stackedWidget.addWidget(loading_widget)
-        self.stackedWidget.setCurrentWidget(loading_widget)
+        if self._loading_widget is None:
+            self._loading_widget = LoadingWidget(message, tr=self.i18n.tr)
+            self.stackedWidget.addWidget(self._loading_widget)
+        else:
+            self._loading_widget.set_message(message)
+        self.stackedWidget.setCurrentWidget(self._loading_widget)
+        self._polish_screen(self._loading_widget)
 
     def _show_master_password_setup(self):
         """Show master password setup screen (first run)"""
@@ -1044,6 +1226,7 @@ class MainWindow(FluentWindow):
         setup_screen = MasterPasswordSetupDialog(self, on_complete)
         self.stackedWidget.addWidget(setup_screen)
         self.stackedWidget.setCurrentWidget(setup_screen)
+        self._polish_screen(setup_screen)
 
     def _show_master_password_prompt(self):
         """Show master password prompt (session expired)"""
@@ -1065,6 +1248,7 @@ class MainWindow(FluentWindow):
         prompt_screen = MasterPasswordPromptDialog(self, on_success)
         self.stackedWidget.addWidget(prompt_screen)
         self.stackedWidget.setCurrentWidget(prompt_screen)
+        self._polish_screen(prompt_screen)
 
     def _auto_login(self, email, password):
         """Auto-login with saved credentials"""
@@ -1084,6 +1268,7 @@ class MainWindow(FluentWindow):
                 self.credential_manager = credential_manager
 
             def run(self):
+                path = ''
                 try:
                     browser_choice = self.settings.get_browser_choice()
                     browser_manager = BrowserManager()
@@ -1153,8 +1338,10 @@ class MainWindow(FluentWindow):
         if not self.login_screen:
             self.login_screen = LoginScreen(self)
 
-        self.stackedWidget.addWidget(self.login_screen)
+        if self.stackedWidget.indexOf(self.login_screen) < 0:
+            self.stackedWidget.addWidget(self.login_screen)
         self.stackedWidget.setCurrentWidget(self.login_screen)
+        self._polish_screen(self.login_screen)
         try:
             self.login_screen.prefill_credentials(prefill_email, prefill_password)
             if saved_login_failed:
@@ -1172,24 +1359,35 @@ class MainWindow(FluentWindow):
 
         # Create top bar if not exists
         if not self.top_bar:
-            self.top_bar = TopBar(self._get_topbar_user_text(), self.reconnect_browser, self.logout, self.i18n.tr, self)
+            self.top_bar = TopBar(
+                self._get_topbar_user_text(),
+                self.reconnect_browser,
+                self.logout,
+                self.i18n.tr,
+                self,
+                on_account=lambda: self._switch_to_screen(8),
+                on_settings=lambda: self._switch_to_screen(9),
+            )
         else:
             try:
                 self.top_bar.update_user(self._get_topbar_user_text())
             except Exception:
                 pass
 
-        # Create main content container with top bar and content area
-        main_container = QWidget()
-        main_container.setObjectName("mainContainer")
-        main_layout = QVBoxLayout(main_container)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
-        main_layout.addWidget(self.top_bar)
+        # Build the authenticated shell once. Recreating it after every logout
+        # leaked stacked widgets and discarded the current page state.
+        if self._main_container is None:
+            self._main_container = QWidget()
+            self._main_container.setObjectName("mainContainer")
+            main_layout = QVBoxLayout(self._main_container)
+            main_layout.setContentsMargins(0, 0, 0, 0)
+            main_layout.setSpacing(0)
+            main_layout.addWidget(self.top_bar)
 
-        # Create our own stacked widget for content screens
-        self.content_stack = QStackedWidget()
-        self.content_stack.setObjectName("contentStack")
+            self.content_stack = QStackedWidget()
+            self.content_stack.setObjectName("contentStack")
+            main_layout.addWidget(self.content_stack, 1)
+            self.stackedWidget.addWidget(self._main_container)
 
         # Apply background colors to containers
         from qfluentwidgets import isDarkTheme
@@ -1197,7 +1395,7 @@ class MainWindow(FluentWindow):
         is_dark = isDarkTheme()
         bg_color = COLORS['space_indigo'] if is_dark else COLORS['platinum']
 
-        main_container.setStyleSheet(f"""
+        self._main_container.setStyleSheet(f"""
             #mainContainer {{
                 background-color: {bg_color};
             }}
@@ -1208,17 +1406,16 @@ class MainWindow(FluentWindow):
             }}
         """)
 
-        main_layout.addWidget(self.content_stack, 1)
-
-        # Add main container to FluentWindow's stackedWidget
-        self.stackedWidget.addWidget(main_container)
-        self.stackedWidget.setCurrentWidget(main_container)
+        self.stackedWidget.setCurrentWidget(self._main_container)
 
         # If any screens were pre-constructed before content_stack existed, add them now.
         self._add_created_screens_to_stack()
 
         # Switch to upload screen by default
+        self._current_screen_index = None
         self._switch_to_screen(0)
+        self._sync_navigation_for_width(force=True)
+        apply_accessibility_defaults(self._main_container)
 
         # Optional: check for updates after the UI is visible
         self._schedule_update_check()
@@ -1344,6 +1541,11 @@ class MainWindow(FluentWindow):
 
                     self.finished.emit(True, path, '')
                 except Exception as e:
+                    if path:
+                        try:
+                            os.remove(path)
+                        except OSError:
+                            pass
                     self.finished.emit(False, '', str(e))
 
         worker = _DownloadWorker(manifest)
@@ -1366,13 +1568,6 @@ class MainWindow(FluentWindow):
                 # Updates should be unattended: no destination/shortcut prompts and no immediate
                 # post-install launch (which can race with AV/file locks and cause transient DLL errors).
                 run_installer(path, silent=True)
-
-                # CRITICAL FIX: Wait for installer to launch and UAC dialog to appear
-                # Without this delay, app quits before UAC completes, causing installer to fail
-                # This ensures the installer process is stable before parent app exits
-                import time
-                time.sleep(5.0)  # 5 seconds allows UAC dialog to appear and user to respond
-
             except Exception as e:
                 InfoBar.error(
                     title=self.i18n.tr('update.error.title') if hasattr(self, 'i18n') else 'Update',
@@ -1385,11 +1580,9 @@ class MainWindow(FluentWindow):
                 )
                 return
 
-            # Exit so installer can replace files.
-            try:
-                QApplication.instance().quit()
-            except Exception:
-                pass
+            # Exit on the next event-loop turn so the UI remains responsive
+            # while the installer starts (a blocking sleep froze the window).
+            QTimer.singleShot(500, QApplication.instance().quit)
 
         worker.finished.connect(_done)
         worker.start()
@@ -1549,6 +1742,11 @@ class MainWindow(FluentWindow):
 
     def logout(self):
         """Logout and return to login"""
+        if not self._can_leave_current_screen():
+            self._restore_current_navigation_selection()
+            return
+        if not self._confirm_stop_active_work():
+            return
         if not self._stop_orbea_automation_for_shutdown():
             InfoBar.warning(
                 title=self.i18n.tr("orbea.shutdown.title"),
@@ -1560,10 +1758,23 @@ class MainWindow(FluentWindow):
                 parent=self,
             )
             return
+        if not self._stop_background_work():
+            InfoBar.warning(
+                title=self.i18n.tr("shutdown.wait.title"),
+                content=self.i18n.tr("shutdown.wait.content"),
+                position=InfoBarPosition.TOP,
+                duration=5000,
+                parent=self,
+            )
+            return
         if self.driver:
-            self.driver.quit()
+            try:
+                self.driver.quit()
+            except Exception:
+                pass
             self.driver = None
         self.current_user = None
+        self._current_screen_index = None
 
         # Hide navigation bar
         self.navigationInterface.setVisible(False)
@@ -1588,8 +1799,88 @@ class MainWindow(FluentWindow):
                 pass
             return False
 
+    def _iter_background_workers(self, include_orbea: bool = True):
+        """Yield distinct running QThreads retained by constructed screens."""
+        seen = set()
+        for value in vars(self).values():
+            if isinstance(value, QThread) and value.isRunning():
+                seen.add(id(value))
+                yield self, value
+        for index in self.SCREEN_ROUTES:
+            # Resolve from the already-created screen attributes only; shutdown
+            # must never instantiate new pages or start their dependencies.
+            route_attr = {
+                0: "upload_screen", 1: "unified_batch_screen", 2: "descriptions_screen",
+                3: "folder_creator_screen", 5: "basso_images_screen",
+                6: "pinarello_images_screen", 11: "spec_checker_screen",
+                12: "name_getter_screen", 13: "code_getter_screen",
+                14: "castelli_url_getter_screen", 15: "castelli_image_downloader_screen",
+                16: "abus_url_getter_screen", 17: "oakley_url_getter_screen",
+                18: "product_name_getter_screen", 19: "orbea_screen",
+            }.get(index)
+            screen = getattr(self, route_attr, None) if route_attr else None
+            if screen is None or (screen is self.orbea_screen and not include_orbea):
+                continue
+            for value in vars(screen).values():
+                if isinstance(value, QThread) and id(value) not in seen and value.isRunning():
+                    seen.add(id(value))
+                    yield screen, value
+        login = getattr(self, "login_screen", None)
+        if login is not None:
+            for value in vars(login).values():
+                if isinstance(value, QThread) and id(value) not in seen and value.isRunning():
+                    seen.add(id(value))
+                    yield login, value
+
+    def _confirm_stop_active_work(self) -> bool:
+        if not any(True for _ in self._iter_background_workers(include_orbea=True)):
+            return True
+        dialog = MessageBox(
+            self.i18n.tr("shutdown.confirm.title"),
+            self.i18n.tr("shutdown.confirm.content"),
+            self,
+        )
+        dialog.yesButton.setText(self.i18n.tr("shutdown.confirm.stop"))
+        dialog.cancelButton.setText(self.i18n.tr("common.cancel"))
+        try:
+            dialog.cancelButton.setFocus()
+        except Exception:
+            pass
+        return bool(dialog.exec())
+
+    def _stop_background_work(self, wait_ms: int = 5000) -> bool:
+        """Cooperatively stop page workers before shared resources disappear."""
+        workers = list(self._iter_background_workers(include_orbea=False))
+        for screen, worker in workers:
+            shutdown = getattr(screen, "shutdown", None)
+            if callable(shutdown):
+                try:
+                    if not shutdown(wait_ms=wait_ms):
+                        return False
+                    continue
+                except Exception:
+                    return False
+            stopper = getattr(worker, "request_stop", None) or getattr(worker, "stop", None)
+            try:
+                if callable(stopper):
+                    stopper()
+                else:
+                    worker.requestInterruption()
+            except Exception:
+                return False
+        for _screen, worker in workers:
+            if worker.isRunning() and not worker.wait(max(0, int(wait_ms))):
+                return False
+        return True
+
     def closeEvent(self, event):
         """Checkpoint long-running automation before closing application resources."""
+        if not self._can_leave_current_screen():
+            event.ignore()
+            return
+        if not self._confirm_stop_active_work():
+            event.ignore()
+            return
         try:
             snapshot = self.earnings_manager.timer_snapshot()
         except Exception:
@@ -1623,6 +1914,16 @@ class MainWindow(FluentWindow):
             # next launch elapsed wall time is recovered from its UTC timestamp.
             _ = keep_button
         if not self._stop_orbea_automation_for_shutdown():
+            event.ignore()
+            return
+        if not self._stop_background_work():
+            InfoBar.warning(
+                title=self.i18n.tr("shutdown.wait.title"),
+                content=self.i18n.tr("shutdown.wait.content"),
+                position=InfoBarPosition.TOP,
+                duration=5000,
+                parent=self,
+            )
             event.ignore()
             return
         try:
@@ -1711,7 +2012,7 @@ class MainWindow(FluentWindow):
         from qfluentwidgets import isDarkTheme
         from GUI_Qt.styles.theme_config import COLORS
 
-        if not hasattr(self, 'content_stack'):
+        if getattr(self, 'content_stack', None) is None:
             return
 
         is_dark = isDarkTheme()
