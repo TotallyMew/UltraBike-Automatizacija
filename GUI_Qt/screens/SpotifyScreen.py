@@ -502,12 +502,19 @@ class SpotifyScreen(ResponsiveWidget):
             self.play_button.setIcon(FluentIcon.PLAY)
             return
         track = playback["item"]
+        item_type = str(
+            track.get("type") or playback.get("currently_playing_type") or "track"
+        )
         artists = ", ".join(
             str(artist.get("name") or "")
             for artist in track.get("artists") or []
             if isinstance(artist, dict)
         )
         album = track.get("album") if isinstance(track.get("album"), dict) else {}
+        if item_type == "episode":
+            show = track.get("show") if isinstance(track.get("show"), dict) else {}
+            artists = str(show.get("name") or show.get("publisher") or "")
+            album = {"name": str(show.get("publisher") or "")}
         progress = max(0, int(playback.get("progress_ms") or 0))
         duration = max(0, int(track.get("duration_ms") or 0))
         device = playback.get("device") if isinstance(playback.get("device"), dict) else {}

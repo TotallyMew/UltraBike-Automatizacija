@@ -191,6 +191,52 @@ def test_recent_plays_link_to_running_work_segments_and_deduplicate():
         database.close()
 
 
+def test_current_playback_requests_and_records_podcast_episodes():
+    started = datetime(2026, 8, 22, 9, 0, tzinfo=UTC)
+    now = started + timedelta(minutes=10)
+    database, settings, http, spotify = _manager(now)
+    earnings = EarningsManager(database, settings)
+    try:
+        session_id = earnings.start_session("stopwatch", now=started)
+        spotify.complete_authorization("auth-code", "verifier")
+        http.api[("GET", "/me/player")] = _Response(
+            200,
+            {
+                "timestamp": int(now.timestamp() * 1000),
+                "progress_ms": 5 * 60_000,
+                "is_playing": True,
+                "currently_playing_type": "episode",
+                "item": {
+                    "id": "episode-1",
+                    "name": "How Bikes Get Built",
+                    "type": "episode",
+                    "duration_ms": 2_400_000,
+                    "show": {
+                        "id": "show-1",
+                        "name": "The Workshop",
+                        "publisher": "Ultra Media",
+                    },
+                },
+                "context": {"uri": "spotify:show:show-1", "type": "show"},
+            },
+        )
+
+        playback = spotify.current_playback()
+
+        assert playback["currently_playing_type"] == "episode"
+        request = http.requests[-1]
+        assert request[0:2] == ("GET", "/me/player")
+        assert request[2]["params"] == {"additional_types": "track,episode"}
+        row = database.conn.execute("SELECT * FROM spotify_plays").fetchone()
+        assert row["track_id"] == "episode-1"
+        assert row["track_name"] == "How Bikes Get Built"
+        assert row["artist_display"] == "The Workshop"
+        assert row["album_name"] == "Ultra Media"
+        assert row["session_id"] == session_id
+    finally:
+        database.close()
+
+
 def test_local_stats_and_best_session_soundtrack_are_derived_from_ledger():
     started = datetime(2026, 8, 22, 9, 0, tzinfo=UTC)
     database, settings, _http, spotify = _manager(started + timedelta(hours=2))

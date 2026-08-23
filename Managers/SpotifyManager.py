@@ -343,7 +343,14 @@ class SpotifyManager:
             return payload
 
     def current_playback(self, *, record: bool = True) -> dict[str, Any] | None:
-        playback = self._request("GET", "/me/player")
+        # Spotify defaults this endpoint to tracks only.  Request episodes as
+        # well so podcast playback reaches both the player UI and our local
+        # work-session ledger.
+        playback = self._request(
+            "GET",
+            "/me/player",
+            params={"additional_types": "track,episode"},
+        )
         if playback and record:
             self.record_current_playback(playback)
         return playback
@@ -442,6 +449,7 @@ class SpotifyManager:
         # a running work segment is neither stored nor shown in the app.
         if session_id is None:
             return False
+        item_type = str(track.get("type") or "track").strip().lower()
         artists = [artist for artist in (track.get("artists") or []) if isinstance(artist, dict)]
         artist_display = ", ".join(
             str(artist.get("name") or "").strip()
@@ -449,6 +457,12 @@ class SpotifyManager:
             if str(artist.get("name") or "").strip()
         )
         album = track.get("album") if isinstance(track.get("album"), dict) else {}
+        if item_type == "episode":
+            show = track.get("show") if isinstance(track.get("show"), dict) else {}
+            show_name = str(show.get("name") or "").strip()
+            publisher = str(show.get("publisher") or "").strip()
+            artist_display = show_name or publisher
+            album = {"name": publisher or show_name}
         context = play.get("context") if isinstance(play.get("context"), dict) else {}
 
         # A current-playback poll and the later recently-played entry can differ

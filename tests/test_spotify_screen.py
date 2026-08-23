@@ -135,3 +135,41 @@ def test_foreground_activation_starts_fast_polling_and_live_progress(monkeypatch
         app.processEvents()
     finally:
         database.close()
+
+
+def test_now_playing_renders_podcast_episode_show_and_publisher():
+    app = QApplication.instance() or QApplication([])
+    database = DatabaseManager(":memory:")
+    try:
+        settings = SettingsManager(database)
+        main = _Main(database, settings)
+        screen = SpotifyScreen(main)
+
+        screen._apply_playback(
+            {
+                "is_playing": True,
+                "currently_playing_type": "episode",
+                "progress_ms": 120_000,
+                "item": {
+                    "id": "episode-1",
+                    "name": "How Bikes Get Built",
+                    "type": "episode",
+                    "duration_ms": 2_400_000,
+                    "show": {
+                        "name": "The Workshop",
+                        "publisher": "Ultra Media",
+                    },
+                },
+            }
+        )
+
+        assert screen.track_name.text() == "How Bikes Get Built"
+        assert screen.track_artists.text() == "The Workshop"
+        assert screen.track_album.text() == "Ultra Media"
+
+        screen.close()
+        screen.deleteLater()
+        main.deleteLater()
+        app.processEvents()
+    finally:
+        database.close()
