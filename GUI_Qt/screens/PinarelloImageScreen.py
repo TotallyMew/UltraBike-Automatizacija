@@ -43,7 +43,7 @@ from qfluentwidgets import (
 )
 
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
-from GUI_Qt.styles.theme_config import COLORS, FONTS, RADII, SIZES, get_surface_color
+from GUI_Qt.styles.theme_config import COLORS, FONTS, RADII, SIZES, get_surface_color, get_text_color
 from GUI_Qt.styles.screen_theme import (
     PAGE_MARGINS,
     PAGE_SPACING,
@@ -54,6 +54,7 @@ from GUI_Qt.styles.screen_theme import (
     get_responsive_margins,
     get_responsive_spacing,
     apply_screen_theme,
+    enforce_transparent_labels,
 )
 from Utilities.URLHandler import URLHandler
 
@@ -229,15 +230,11 @@ class PinarelloImageScreen(ResponsiveWidget):
         qconfig.themeChangedFinished.connect(self._on_theme_changed)
 
     def _apply_theme(self):
-        is_dark = isDarkTheme()
-        bg_color = get_surface_color(is_dark, 'canvas')
-        self.setStyleSheet(
-            f"""
-            PinarelloImageScreen {{
-                background-color: {bg_color};
-                font-family: {FONTS['family']};
-            }}
-            """
+        apply_screen_theme(
+            self,
+            "PinarelloImageScreen",
+            scroll=self.__dict__.get("scroll"),
+            content=self.__dict__.get("content_widget"),
         )
 
     def _init_ui(self):
@@ -297,7 +294,7 @@ class PinarelloImageScreen(ResponsiveWidget):
         url_layout.addWidget(self.url_label)
 
         self.url_caption = CaptionLabel("")
-        self.url_caption.setStyleSheet(f"color: {COLORS['text_secondary']}; background: transparent; background-color: transparent;")
+        self.url_caption.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')}; background: transparent; background-color: transparent;")
         self.url_caption.setWordWrap(True)
         url_layout.addWidget(self.url_caption)
 
@@ -381,7 +378,7 @@ class PinarelloImageScreen(ResponsiveWidget):
         output_layout.addWidget(self.output_label)
 
         self.output_caption = CaptionLabel("")
-        self.output_caption.setStyleSheet(f"color: {COLORS['text_secondary']}; background: transparent; background-color: transparent;")
+        self.output_caption.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')}; background: transparent; background-color: transparent;")
         self.output_caption.setWordWrap(True)
         output_layout.addWidget(self.output_caption)
 
@@ -537,7 +534,7 @@ class PinarelloImageScreen(ResponsiveWidget):
         layout.setContentsMargins(12, 8, 12, 8)
 
         label_widget = CaptionLabel(label)
-        label_widget.setStyleSheet(f"color: {COLORS['text_secondary']}; background: transparent; background-color: transparent;")
+        label_widget.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')}; background: transparent; background-color: transparent;")
 
         value_widget = BodyLabel(value)
         value_widget.setStyleSheet("font-size: 22px; font-weight: 600;")
@@ -642,6 +639,7 @@ class PinarelloImageScreen(ResponsiveWidget):
                 padding: 12px;
             }}
         """)
+        enforce_transparent_labels(self)
 
     def _on_breakpoint_changed(self, breakpoint: str):
         """Respond to breakpoint changes - adjust margins and spacing."""

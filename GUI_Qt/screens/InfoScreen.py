@@ -22,7 +22,7 @@ from qfluentwidgets import (
 
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
 from GUI_Qt.styles.theme_config import (
-    COLORS, FONTS, RADII, SIZES, get_details_card_bg, get_surface_color,
+    COLORS, FONTS, RADII, SIZES, get_details_card_bg, get_surface_color, get_text_color,
 )
 from GUI_Qt.styles.screen_theme import (
     PAGE_MARGINS,
@@ -55,37 +55,12 @@ class InfoScreen(ResponsiveWidget):
         qconfig.themeChangedFinished.connect(self._on_theme_changed)
 
     def _apply_theme(self):
-        is_dark = isDarkTheme()
-        bg_color = get_surface_color(is_dark, 'canvas')
-        self.setStyleSheet(f"""
-            InfoScreen {{
-                background-color: {bg_color};
-                font-family: {FONTS['family']};
-            }}
-
-            /* Ensure QFluent labels never paint stripe backgrounds */
-            InfoScreen BodyLabel,
-            InfoScreen CaptionLabel,
-            InfoScreen StrongBodyLabel,
-            InfoScreen TitleLabel,
-            InfoScreen QLabel {{
-                background-color: transparent;
-                border: none;
-            }}
-        """)
-
-        if self.scroll is not None:
-            self.scroll.setStyleSheet(f"""
-                QScrollArea {{
-                    background-color: {bg_color};
-                    border: none;
-                }}
-                QScrollArea QWidget#qt_scrollarea_viewport {{
-                    background-color: {bg_color};
-                }}
-            """)
-        if self.content is not None:
-            self.content.setStyleSheet(f"background-color: {bg_color};")
+        apply_screen_theme(
+            self,
+            "InfoScreen",
+            scroll=self.scroll,
+            content=self.content,
+        )
 
         self._apply_extra_details_style()
 
@@ -200,7 +175,7 @@ class InfoScreen(ResponsiveWidget):
         self.overview_text.setWordWrap(True)
         self.overview_note = CaptionLabel("")
         self.overview_note.setWordWrap(True)
-        self.overview_note.setStyleSheet(f"color: {COLORS['text_secondary']}; background-color: transparent;")
+        self.overview_note.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')}; background-color: transparent;")
         ov.insertWidget(1, self.overview_text)
         ov.insertWidget(2, self.overview_note)
         content_layout.addWidget(self.overview_card)

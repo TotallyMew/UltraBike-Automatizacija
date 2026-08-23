@@ -6,7 +6,7 @@ Displays user information and logout button
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QMenu
 from PySide6.QtCore import Qt
 from qfluentwidgets import TransparentToolButton, PushButton, FluentIcon, isDarkTheme, qconfig
-from GUI_Qt.styles.theme_config import COLORS, SPACING, get_surface_color
+from GUI_Qt.styles.theme_config import COLORS, SPACING, get_surface_color, get_text_color
 
 
 class TopBar(QWidget):
@@ -89,7 +89,7 @@ class TopBar(QWidget):
         bg_color = get_surface_color(is_dark, 'canvas')
         text_primary = COLORS['text_primary_dark'] if is_dark else COLORS['text_primary_light']
         # Use a lighter caption color in dark mode than the standard secondary gray
-        text_secondary = COLORS['lavender_grey'] if is_dark else COLORS['text_secondary']
+        text_secondary = get_text_color(is_dark, 'secondary')
 
         self.setStyleSheet(
             f"""

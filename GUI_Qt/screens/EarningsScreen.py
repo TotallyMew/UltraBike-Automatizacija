@@ -69,7 +69,7 @@ from qfluentwidgets import (
     qconfig,
 )
 
-from GUI_Qt.styles.screen_theme import apply_screen_theme
+from GUI_Qt.styles.screen_theme import apply_screen_theme, enforce_transparent_labels
 from GUI_Qt.styles.theme_config import (
     COLORS,
     COMPONENT_COLORS,
@@ -86,6 +86,7 @@ from GUI_Qt.styles.theme_config import (
     get_form_dialog_style,
     get_form_input_style,
     get_accent_colors,
+    get_activity_heatmap_colors,
     get_selection_bg,
     get_status_text_color,
     get_subtle_border,
@@ -109,7 +110,8 @@ from GUI_Qt.earnings.presentation import (
     PRODUCT_TYPES, duration, goal_level_state, goal_progress_state, local_datetime, money,
 )
 from GUI_Qt.earnings.widgets import (
-    ActivityHeatmap, ActivityLegend, AnimatedSubmitButton, BatchProgressTicks, EarningsBurstBadge,
+    ActivityHeatmap, ActivityLegend, ActivityMetricTile, AnimatedSubmitButton,
+    BatchProgressTicks, EarningsBurstBadge,
     EarningsChart, FluentCalendarWidget, GoalMilestoneBar, MetricCard, ProjectionMetric,
     PerformanceTargetWidget, QuestCelebrationOverlay, QuestProgressWidget,
     apply_earnings_datetime_theme, configure_earnings_datetime_edit,
@@ -923,10 +925,10 @@ class EarningsScreen(ResponsiveWidget):
         summary_layout.setHorizontalSpacing(8)
         summary_layout.setVerticalSpacing(2)
         self.activity_summary_widgets = []
+        self.activity_summary_cards = []
         for column in range(3):
-            metric = QWidget()
+            metric = ActivityMetricTile()
             metric.setObjectName("earningsActivityMetric")
-            metric.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
             metric_layout = QVBoxLayout(metric)
             metric_layout.setContentsMargins(10, 8, 10, 8)
             metric_layout.setSpacing(1)
@@ -939,6 +941,7 @@ class EarningsScreen(ResponsiveWidget):
             summary_layout.addWidget(metric, 0, column)
             summary_layout.setColumnStretch(column, 1)
             self.activity_summary_widgets.append((value, caption))
+            self.activity_summary_cards.append(metric)
         activity_layout.addWidget(self.activity_summary)
         layout.addWidget(self.activity_block)
         return card
@@ -2421,6 +2424,7 @@ class EarningsScreen(ResponsiveWidget):
         empty_surface = get_surface_color(dark, "alternate")
         text = COLORS["text_primary_dark" if dark else "text_primary_light"]
         muted = COLORS["text_secondary_dark" if dark else "text_secondary_light"]
+        disabled_text = COLORS["text_disabled_dark" if dark else "text_disabled_light"]
         outline = get_subtle_border(dark)
         card_border = COMPONENT_COLORS["card"]["border_dark" if dark else "border_light"]
         secondary_hover = get_subtle_item_hover_bg(dark)
@@ -2434,7 +2438,13 @@ class EarningsScreen(ResponsiveWidget):
             COLORS["lavender_grey" if dark else "space_indigo"],
             0.16 if dark else 0.07,
         )
-        disabled_bg = COLORS["bg_alt_dark"] if dark else "#E6E9ED"
+        heatmap_levels = get_activity_heatmap_colors(dark)
+        activity_bg = canvas if dark else accent_soft
+        activity_metric_bg = get_surface_color(dark, "alternate") if dark else surface
+        activity_outline = heatmap_levels[1] if dark else outline
+        for metric in self.activity_summary_cards:
+            metric.set_theme_colors(activity_metric_bg, activity_outline)
+        disabled_bg = COLORS["disabled_surface_dark" if dark else "disabled_surface_light"]
         table_colors = COMPONENT_COLORS["table"]
         table_bg = table_colors["row_bg_dark" if dark else "row_bg_light"]
         table_alt = table_colors["row_alt_bg_dark" if dark else "row_alt_bg_light"]
@@ -2463,7 +2473,7 @@ class EarningsScreen(ResponsiveWidget):
                 border: none;
             }}
             EarningsScreen QLabel#earningsTargetTitle {{
-                color: {muted};
+                color: {disabled_text};
                 font-weight: 600;
             }}
             EarningsScreen QLabel#earningsTargetCurrent {{
@@ -2501,8 +2511,8 @@ class EarningsScreen(ResponsiveWidget):
                 font-weight: 600;
             }}
             EarningsScreen QWidget#earningsActivityBlock {{
-                background-color: {accent_soft};
-                border: 1px solid {outline};
+                background-color: {activity_bg};
+                border: 1px solid {activity_outline};
                 border-radius: 10px;
             }}
             EarningsScreen QWidget#earningsActivityBlock QLabel {{
@@ -2512,11 +2522,6 @@ class EarningsScreen(ResponsiveWidget):
             EarningsScreen QLabel#activityHeatmapHeading {{
                 color: {text};
                 font-weight: 650;
-            }}
-            EarningsScreen QWidget#earningsActivityMetric {{
-                background-color: {surface};
-                border: 1px solid {outline};
-                border-radius: 8px;
             }}
             EarningsScreen QLabel#earningsActivityValue {{
                 color: {text};
@@ -2625,7 +2630,7 @@ class EarningsScreen(ResponsiveWidget):
                 border: none;
                 border-radius: 8px;
                 gridline-color: transparent;
-                selection-background-color: {get_selection_bg()};
+                selection-background-color: {get_selection_bg(dark)};
                 selection-color: {text};
             }}
             EarningsScreen QTableWidget::viewport {{
@@ -2641,7 +2646,7 @@ class EarningsScreen(ResponsiveWidget):
                 background-color: {secondary_hover};
             }}
             EarningsScreen QTableWidget::item:selected {{
-                background-color: {get_selection_bg()};
+                background-color: {get_selection_bg(dark)};
                 color: {text};
             }}
             EarningsScreen QHeaderView::section {{
@@ -2723,7 +2728,7 @@ class EarningsScreen(ResponsiveWidget):
             }}
             PrimaryPushButton:hover {{ background-color: {accent_hover}; border-color: {accent_hover}; }}
             PrimaryPushButton:pressed {{ background-color: {accent_pressed}; border-color: {accent_pressed}; }}
-            PrimaryPushButton:disabled {{ background-color: {disabled_bg}; border-color: {table_border}; color: {muted}; }}
+            PrimaryPushButton:disabled {{ background-color: {disabled_bg}; border-color: {table_border}; color: {disabled_text}; }}
         """
         for button in (
             self.add_button,
@@ -2794,6 +2799,7 @@ class EarningsScreen(ResponsiveWidget):
         )
         self._apply_goal_progress_theme()
         self.chart.update()
+        enforce_transparent_labels(self)
 
     def retranslate_ui(self):
         tr = self.main.i18n.tr

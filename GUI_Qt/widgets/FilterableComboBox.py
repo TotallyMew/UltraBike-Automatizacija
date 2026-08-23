@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
 )
 from qfluentwidgets import isDarkTheme
 
-from GUI_Qt.styles.theme_config import COLORS, COMPONENT_COLORS, RADII
+from GUI_Qt.styles.theme_config import COLORS, COMPONENT_COLORS, RADII, get_text_color
 
 
 class _PopupList(QWidget):
@@ -133,7 +133,7 @@ class FilterableComboBox(QWidget):
         self._arrow = QLabel("▾")
         self._arrow.setFixedWidth(16)
         self._arrow.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._arrow.setStyleSheet(f"color: {COLORS['text_secondary']}; background: transparent; font-size: 11px;")
+        self._arrow.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')}; background: transparent; font-size: 11px;")
         layout.addWidget(self._arrow)
 
         self._popup = _PopupList()
@@ -230,7 +230,7 @@ class FilterableComboBox(QWidget):
     def _apply_ghost_style(self):
         is_dark = isDarkTheme()
         text = COLORS["text_primary_dark"] if is_dark else COLORS["text_primary_light"]
-        placeholder = COLORS["text_secondary"]
+        placeholder = get_text_color(is_dark, "secondary")
 
         # Ghost: no border, no background
         self._edit.setStyleSheet(f"""
@@ -248,7 +248,7 @@ class FilterableComboBox(QWidget):
     def _apply_focus_style(self):
         is_dark = isDarkTheme()
         text = COLORS["text_primary_dark"] if is_dark else COLORS["text_primary_light"]
-        placeholder = COLORS["text_secondary"]
+        placeholder = get_text_color(is_dark, "secondary")
         eib_bg = COMPONENT_COLORS["input"]["bg_dark"] if is_dark else COMPONENT_COLORS["input"]["bg_light"]
         border = COLORS["lavender_grey"] if is_dark else COLORS["space_indigo"]
 

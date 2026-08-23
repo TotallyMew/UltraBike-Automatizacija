@@ -4,7 +4,7 @@ Colors, spacing, and typography standards
 Premium Space Indigo & Lavender palette
 """
 
-from qfluentwidgets import Theme, setTheme, setThemeColor
+from qfluentwidgets import Theme, isDarkTheme, qconfig, setTheme, setThemeColor
 from PySide6.QtGui import QColor
 
 
@@ -31,16 +31,18 @@ def rgba_rgb(r: int, g: int, b: int, alpha: float) -> str:
 
 
 def get_hover_bg(is_dark: bool) -> str:
-    return rgba_from_hex(COLORS['lavender_grey'], 0.10 if is_dark else 0.06)
+    """Return the neutral hover overlay for the active theme."""
+    return COLORS['hover_layer_dark'] if is_dark else COLORS['hover_layer_light']
+
+
+def get_pressed_bg(is_dark: bool) -> str:
+    """Return the neutral pressed/active overlay for the active theme."""
+    return COLORS['pressed_layer_dark'] if is_dark else COLORS['pressed_layer_light']
 
 
 def get_details_card_bg(is_dark: bool) -> str:
     """Background tint for small details/info cards."""
-    return (
-        rgba_from_hex(COLORS['lavender_grey'], 0.10)
-        if is_dark
-        else rgba_from_hex(COLORS['space_indigo'], 0.04)
-    )
+    return get_surface_color(is_dark, 'alternate')
 
 
 def get_embedded_input_border(is_dark: bool) -> str:
@@ -51,25 +53,17 @@ def get_embedded_input_border(is_dark: bool) -> str:
     )
 
 
-def get_selection_bg() -> str:
-    # Keep existing value (RGB 139,153,174) to avoid visual regressions.
-    return rgba_rgb(139, 153, 174, 0.2)
+def get_selection_bg(is_dark: bool) -> str:
+    """Return the selected-item surface for the active theme."""
+    return COLORS['selected_surface_dark'] if is_dark else COLORS['selected_surface_light']
 
 
 def get_subtle_border(is_dark: bool) -> str:
-    return (
-        rgba_from_hex(COLORS['lavender_grey'], 0.55)
-        if is_dark
-        else rgba_from_hex(COLORS['space_indigo'], 0.35)
-    )
+    return COLORS['stroke_dark'] if is_dark else COLORS['stroke_light']
 
 
 def get_subtle_item_hover_bg(is_dark: bool) -> str:
-    return (
-        rgba_from_hex(COLORS['lavender_grey'], 0.20)
-        if is_dark
-        else rgba_from_hex(COLORS['space_indigo'], 0.08)
-    )
+    return get_hover_bg(is_dark)
 
 
 def get_scrollbar_handle_bg(is_dark: bool) -> str:
@@ -89,92 +83,168 @@ def get_scrollbar_handle_hover_bg(is_dark: bool) -> str:
 
 
 def get_card_border_light() -> str:
-    return rgba_from_hex(COLORS['lavender_grey'], 0.28)
+    return COLORS['stroke_light']
 
-# Premium Color Palette (inspired by Space Indigo/Lavender Grey)
-THEME_COLORS = {
-    'primary': QColor(43, 45, 66),       # Space Indigo (#2B2D42) - Deep, sophisticated
-    'secondary': QColor(141, 153, 174),  # Lavender Grey (#8D99AE) - Elegant accent
-    'accent': QColor(237, 242, 244),     # Platinum (#EDF2F4) - Light, clean
-    'blush': QColor(227, 101, 136),      # Blush Rose (#E36588) - Vibrant highlight
-    'flag': QColor(200, 29, 37),         # Flag Red (#C81D25) - Bold accent
-
-    # Functional colors
-    'success': QColor(16, 185, 129),     # Emerald Green (#10B981) - Success states
-    'warning': QColor(245, 158, 11),     # Amber (#F59E0B) - Warning states
-    'error': QColor(200, 29, 37),        # Flag Red (matches palette)
-    'background': QColor(243, 243, 243), # Light gray
-    'surface': QColor(255, 255, 255),    # White
-}
-
-# Color Hex Values (for stylesheets)
-COLORS = {
-    # Primary palette
+# Brand swatches are stable; UI code should consume the mode-aware roles below.
+CORE_SWATCHES = {
     'space_indigo': '#2B2D42',
     'lavender_grey': '#8D99AE',
     'platinum': '#EDF2F4',
     'blush_rose': '#E36588',
+    'blush_rose_dark': '#C94A6E',
     'flag_red': '#C81D25',
+}
 
-    # Theme roles. Keep brand swatches above stable and use these roles in UI
-    # code so canvases and surfaces do not drift between feature screens.
-    'canvas_dark': '#1B1E2B',
-    'canvas_light': '#EDF2F4',
-    'surface_dark': '#242737',
-    'surface_light': '#FFFFFF',
-    'surface_alt_dark': '#292D40',
-    'surface_alt_light': '#F7F9FB',
-    'accent_light': '#2B2D42',
-    'accent_dark': '#8D99AE',
-    'accent_hover_light': '#3B3E59',
-    'accent_hover_dark': '#A5B0C1',
-    'accent_pressed_light': '#202234',
-    'accent_pressed_dark': '#758197',
-    'accent_text_light': '#FFFFFF',
-    'accent_text_dark': '#2B2D42',
 
-    # Functional colors
-    'success': '#10B981',      # Emerald green (fills / charts)
-    'warning': '#F59E0B',      # Amber (fills / charts)
-    'error': '#C81D25',        # Flag red
-    'on_success': '#062A20',   # Foreground on bright success fills
-    'on_warning': '#2B2D42',   # Foreground on bright warning fills
-    'focus_ring': '#8D99AE',   # Lavender grey - for accessibility focus indicators
+# Canonical role map.  Keeping light and dark values together makes role
+# reversals (especially the primary accent) explicit and reviewable.
+MODE_COLOR_ROLES = {
+    'light': {
+        # Neutral ramp / elevation
+        'canvas': '#F8FAFC',
+        'surface': '#FFFFFF',
+        'surface_alt': '#F1F5F9',
+        'stroke': '#E2E8F0',
+        'stroke_subtle': '#F1F5F9',
 
-    # Accessible foreground variants.  Bright semantic fills do not provide
-    # sufficient contrast as text on the light app canvas, so foreground roles
-    # are deliberately separate from chart/fill colors.
-    'success_text_light': '#047857',
-    'success_text_dark': '#6EE7B7',
-    'warning_text_light': '#8A4B08',
-    'warning_text_dark': '#FCD34D',
-    'error_text_light': '#B4232C',
-    'error_text_dark': '#FDA4AF',
-    'focus_ring_light': '#46548A',
-    'focus_ring_dark': '#C3CCE0',
+        # Brand interaction ramp
+        'accent': '#2B2D42',
+        'accent_hover': '#3D405B',
+        'accent_pressed': '#202234',
+        'accent_text': '#FFFFFF',
+        'focus_ring': '#4338CA',
 
-    # Text colors
-    'text_primary_dark': '#E0E0E0',    # Light gray for dark theme
-    'text_primary_light': '#1F2937',   # Dark gray for light theme
-    'text_secondary': '#6B7280',       # Gray for secondary text
-    'text_tertiary': '#9CA3AF',        # Light gray for tertiary text
-    'text_white': '#FFFFFF',           # Pure white for high contrast
+        # Text roles
+        'text_primary': '#0F172A',
+        'text_secondary': '#475569',
+        'text_tertiary': '#64748B',
+        'text_disabled': '#CBD5E1',
 
-    # Theme-aware text roles (preferred over non-specific grays)
-    'text_secondary_dark': '#BFC4CC',   # Secondary text on dark surfaces
-    'text_secondary_light': '#596273',  # Secondary text on light surfaces
-    'text_tertiary_dark': '#9CA3AF',    # Tertiary text on dark surfaces
-    'text_tertiary_light': '#596273',   # Tertiary text on light surfaces
+        # Neutral interaction states
+        'hover_layer': 'rgba(0, 0, 0, 0.04)',
+        'pressed_layer': 'rgba(0, 0, 0, 0.08)',
+        'selected_surface': '#E0E7FF',
+        'disabled_surface': '#F1F5F9',
 
-    # Background colors
-    'bg_dark': '#1B1E2B',              # Dark app canvas
-    'bg_light': '#FFFFFF',             # Light background
-    'bg_alt_dark': '#292D40',           # Alternate dark surface
-    'bg_alt_light': '#F7F9FB',          # Alternate light surface
+        # Semantic fills and accessible foregrounds
+        'success_fill': '#10B981',
+        'success_text': '#047857',
+        'success_on_fill': '#062A20',
+        'warning_fill': '#F59E0B',
+        'warning_text': '#8A4B08',
+        'warning_on_fill': '#2B2D42',
+        'error_fill': '#DC2626',
+        'error_text': '#B4232C',
+        'error_on_fill': '#FFFFFF',
+        'info_fill': '#3B82F6',
+        'info_text': '#1D4ED8',
+        'info_on_fill': '#0F172A',
+        'success_bg': '#ECFDF5',
+        'warning_bg': '#FFFBEB',
+        'error_bg': '#FEF2F2',
+        'info_bg': '#EFF6FF',
+    },
+    'dark': {
+        # Neutral ramp / elevation
+        'canvas': '#13151F',
+        'surface': '#1F2332',
+        'surface_alt': '#282C3F',
+        'stroke': '#2E344A',
+        'stroke_subtle': '#222636',
 
-    # Border colors
-    'border_dark': '#3A4058',
-    'border_light': '#E5E7EB',
+        # The accent deliberately reverses brightness in dark mode.
+        'accent': '#9DA8B9',
+        'accent_hover': '#B8C2D1',
+        'accent_pressed': '#8793A6',
+        'accent_text': '#13151F',
+        'focus_ring': '#A5B0C1',
+
+        # Text roles
+        'text_primary': '#F1F5F9',
+        'text_secondary': '#94A3B8',
+        'text_tertiary': '#64748B',
+        'text_disabled': '#475569',
+
+        # Neutral interaction states
+        'hover_layer': 'rgba(255, 255, 255, 0.06)',
+        'pressed_layer': 'rgba(255, 255, 255, 0.12)',
+        'selected_surface': '#2E3558',
+        'disabled_surface': '#282C3F',
+
+        # Semantic fills and accessible foregrounds
+        'success_fill': '#10B981',
+        'success_text': '#6EE7B7',
+        'success_on_fill': '#062A20',
+        'warning_fill': '#F59E0B',
+        'warning_text': '#FCD34D',
+        'warning_on_fill': '#2B2D42',
+        'error_fill': '#EF4444',
+        'error_text': '#FDA4AF',
+        'error_on_fill': '#13151F',
+        'info_fill': '#60A5FA',
+        'info_text': '#93C5FD',
+        'info_on_fill': '#13151F',
+        'success_bg': 'rgba(16, 185, 129, 0.12)',
+        'warning_bg': 'rgba(245, 158, 11, 0.12)',
+        'error_bg': 'rgba(239, 68, 68, 0.12)',
+        'info_bg': 'rgba(96, 165, 250, 0.12)',
+    },
+}
+
+
+# Ordered data-visualization scale: no activity, then four increasing levels.
+# These are opaque by design. Alpha-composited lavender steps collapsed into
+# nearly identical greys on dark surfaces and made the heatmap unreadable.
+ACTIVITY_HEATMAP_LEVELS = {
+    'light': ('#E2E8F0', '#CBD5E1', '#A5B4FC', '#818CF8', '#4338CA'),
+    'dark': ('#30384F', '#49597A', '#697DA5', '#91A4CF', '#C2CCE0'),
+}
+
+
+# QColor roles used by Qt/Fluent APIs.  The top-level mode key prevents a dark
+# screen from accidentally receiving the light-only Space Indigo primary.
+THEME_COLORS = {
+    mode: {
+        'primary': QColor(roles['accent']),
+        'primary_hover': QColor(roles['accent_hover']),
+        'primary_pressed': QColor(roles['accent_pressed']),
+        'on_primary': QColor(roles['accent_text']),
+        'canvas': QColor(roles['canvas']),
+        'surface': QColor(roles['surface']),
+        'secondary_text': QColor(roles['text_secondary']),
+        'focus_ring': QColor(roles['focus_ring']),
+    }
+    for mode, roles in MODE_COLOR_ROLES.items()
+}
+
+
+# Flat stylesheet tokens.  Mode-aware roles are generated from the canonical
+# map; the aliases at the bottom remain for gradual migration of older screens.
+COLORS = {
+    **CORE_SWATCHES,
+    **{
+        f'{role}_{mode}': value
+        for mode, roles in MODE_COLOR_ROLES.items()
+        for role, value in roles.items()
+    },
+
+    # Legacy aliases (prefer the explicit role helpers in new code).
+    'success': MODE_COLOR_ROLES['light']['success_fill'],
+    'warning': MODE_COLOR_ROLES['light']['warning_fill'],
+    'error': MODE_COLOR_ROLES['light']['error_fill'],
+    'info': MODE_COLOR_ROLES['light']['info_fill'],
+    'on_success': MODE_COLOR_ROLES['light']['success_on_fill'],
+    'on_warning': MODE_COLOR_ROLES['light']['warning_on_fill'],
+    'on_error': MODE_COLOR_ROLES['light']['error_on_fill'],
+    'on_info': MODE_COLOR_ROLES['light']['info_on_fill'],
+    'focus_ring': MODE_COLOR_ROLES['light']['focus_ring'],
+    'text_white': '#FFFFFF',
+    'bg_dark': MODE_COLOR_ROLES['dark']['canvas'],
+    'bg_light': MODE_COLOR_ROLES['light']['surface'],
+    'bg_alt_dark': MODE_COLOR_ROLES['dark']['surface_alt'],
+    'bg_alt_light': MODE_COLOR_ROLES['light']['surface_alt'],
+    'border_dark': MODE_COLOR_ROLES['dark']['stroke'],
+    'border_light': MODE_COLOR_ROLES['light']['stroke'],
 
     # Excel export colors (for consistency)
     'excel_header_bg': '#2B2D42',
@@ -188,10 +258,14 @@ COLORS = {
     'card_bg_opacity_light': '0.02',
 
     # Status background tints (for validation/highlight states)
-    'status_success_bg_light': '#ECFDF5',
-    'status_success_bg_dark': 'rgba(16, 185, 129, 0.12)',
-    'status_error_bg_light': '#FEF2F2',
-    'status_error_bg_dark': 'rgba(200, 29, 37, 0.12)',
+    'status_success_bg_light': MODE_COLOR_ROLES['light']['success_bg'],
+    'status_success_bg_dark': MODE_COLOR_ROLES['dark']['success_bg'],
+    'status_warning_bg_light': MODE_COLOR_ROLES['light']['warning_bg'],
+    'status_warning_bg_dark': MODE_COLOR_ROLES['dark']['warning_bg'],
+    'status_error_bg_light': MODE_COLOR_ROLES['light']['error_bg'],
+    'status_error_bg_dark': MODE_COLOR_ROLES['dark']['error_bg'],
+    'status_info_bg_light': MODE_COLOR_ROLES['light']['info_bg'],
+    'status_info_bg_dark': MODE_COLOR_ROLES['dark']['info_bg'],
 }
 
 # Shared layout/shape tokens (avoid magic numbers in QSS)
@@ -220,7 +294,7 @@ PADDINGS = {
 def get_text_color(is_dark: bool, role: str = 'primary') -> str:
     """Return a theme-aware text color.
 
-    Roles: primary | secondary | tertiary | inverse
+    Roles: primary | secondary | tertiary/muted | disabled | inverse
     """
     role = (role or 'primary').strip().lower()
 
@@ -228,8 +302,10 @@ def get_text_color(is_dark: bool, role: str = 'primary') -> str:
         return COLORS['text_primary_dark'] if is_dark else COLORS['text_primary_light']
     if role == 'secondary':
         return COLORS['text_secondary_dark'] if is_dark else COLORS['text_secondary_light']
-    if role == 'tertiary':
+    if role in ('tertiary', 'muted'):
         return COLORS['text_tertiary_dark'] if is_dark else COLORS['text_tertiary_light']
+    if role in ('disabled', 'inactive'):
+        return COLORS['text_disabled_dark'] if is_dark else COLORS['text_disabled_light']
     if role == 'inverse':
         return COLORS['text_white']
 
@@ -251,7 +327,37 @@ def get_status_text_color(status: str, is_dark: bool = False) -> str:
         return COLORS['warning_text_dark'] if is_dark else COLORS['warning_text_light']
     if status in ('error', 'danger', 'invalid'):
         return COLORS['error_text_dark'] if is_dark else COLORS['error_text_light']
+    if status in ('info', 'information', 'neutral'):
+        return COLORS['info_text_dark'] if is_dark else COLORS['info_text_light']
     return get_text_color(is_dark, 'tertiary')
+
+
+def get_semantic_colors(status: str, is_dark: bool = False) -> dict[str, str]:
+    """Return fill, text, on-fill, and subtle-background semantic roles."""
+    status = (status or '').strip().lower()
+    aliases = {
+        'ok': 'success',
+        'valid': 'success',
+        'saved_manually': 'success',
+        'warn': 'warning',
+        'mixed': 'warning',
+        'ready_for_review': 'warning',
+        'danger': 'error',
+        'invalid': 'error',
+        'failed': 'error',
+        'information': 'info',
+        'neutral': 'info',
+    }
+    semantic = aliases.get(status, status)
+    if semantic not in ('success', 'warning', 'error', 'info'):
+        semantic = 'info'
+    suffix = 'dark' if is_dark else 'light'
+    return {
+        'fill': COLORS[f'{semantic}_fill_{suffix}'],
+        'text': COLORS[f'{semantic}_text_{suffix}'],
+        'on_fill': COLORS[f'{semantic}_on_fill_{suffix}'],
+        'background': COLORS[f'{semantic}_bg_{suffix}'],
+    }
 
 
 def get_status_row_style(is_dark: bool, status: str) -> str:
@@ -259,9 +365,13 @@ def get_status_row_style(is_dark: bool, status: str) -> str:
     status = (status or '').strip().lower()
 
     if status in ('success', 'saved_manually', 'ok', 'valid'):
-        bg = COLORS['status_success_bg_dark'] if is_dark else COLORS['status_success_bg_light']
+        bg = get_semantic_colors('success', is_dark)['background']
+    elif status in ('ready_for_review', 'warning', 'warn', 'mixed'):
+        bg = get_semantic_colors('warning', is_dark)['background']
     elif status in ('error', 'failed', 'danger', 'invalid'):
-        bg = COLORS['status_error_bg_dark'] if is_dark else COLORS['status_error_bg_light']
+        bg = get_semantic_colors('error', is_dark)['background']
+    elif status in ('info', 'information', 'neutral'):
+        bg = get_semantic_colors('info', is_dark)['background']
     else:
         bg = 'transparent'
 
@@ -386,44 +496,44 @@ FONTS = {
 # Component-specific colors (for consistent theming)
 COMPONENT_COLORS = {
     'input': {
-        'bg_dark': '#292D40',
-        'bg_light': '#FFFFFF',
-        'border_dark': '#3A4058',
-        'border_light': '#D1D5DB',
-        'text_dark': '#E7EAF0',
-        'text_light': '#1F2937',
-        'placeholder_dark': '#9CA3AF',
-        'placeholder_light': '#6B7280',
+        'bg_dark': COLORS['surface_alt_dark'],
+        'bg_light': COLORS['surface_light'],
+        'border_dark': COLORS['stroke_dark'],
+        'border_light': COLORS['stroke_light'],
+        'text_dark': COLORS['text_primary_dark'],
+        'text_light': COLORS['text_primary_light'],
+        'placeholder_dark': COLORS['text_secondary_dark'],
+        'placeholder_light': COLORS['text_tertiary_light'],
     },
     'button': {
         # Legacy static values. New code should use get_accent_colors().
-        'primary_bg': '#2B2D42',
-        'primary_hover': '#3B3E59',
-        'primary_text': '#FFFFFF',
-        'secondary_bg_dark': '#292D40',
-        'secondary_bg_light': '#F3F4F6',
-        'secondary_hover_dark': '#34384F',
-        'secondary_hover_light': '#E5E7EB',
-        'secondary_text_dark': '#E7EAF0',
-        'secondary_text_light': '#374151',
+        'primary_bg': COLORS['accent_light'],
+        'primary_hover': COLORS['accent_hover_light'],
+        'primary_text': COLORS['accent_text_light'],
+        'secondary_bg_dark': COLORS['surface_alt_dark'],
+        'secondary_bg_light': COLORS['surface_alt_light'],
+        'secondary_hover_dark': COLORS['selected_surface_dark'],
+        'secondary_hover_light': COLORS['selected_surface_light'],
+        'secondary_text_dark': COLORS['text_primary_dark'],
+        'secondary_text_light': COLORS['text_primary_light'],
     },
     'card': {
-        'bg_dark': '#242737',
-        'bg_light': '#FFFFFF',
-        'border_dark': '#363B52',
-        'border_light': '#E5E7EB',
+        'bg_dark': COLORS['surface_dark'],
+        'bg_light': COLORS['surface_light'],
+        'border_dark': COLORS['stroke_dark'],
+        'border_light': COLORS['stroke_light'],
     },
     'table': {
-        'header_bg_dark': '#34384F',
-        'header_bg_light': '#2B2D42',
-        'header_text_dark': '#F7F9FB',
-        'header_text_light': '#FFFFFF',
-        'row_bg_dark': '#242737',
-        'row_bg_light': '#FFFFFF',
-        'row_alt_bg_dark': '#292D40',
-        'row_alt_bg_light': '#F7F9FB',
-        'border_dark': '#3A4058',
-        'border_light': '#E5E7EB',
+        'header_bg_dark': COLORS['surface_alt_dark'],
+        'header_bg_light': COLORS['accent_light'],
+        'header_text_dark': COLORS['text_primary_dark'],
+        'header_text_light': COLORS['accent_text_light'],
+        'row_bg_dark': COLORS['surface_dark'],
+        'row_bg_light': COLORS['surface_light'],
+        'row_alt_bg_dark': COLORS['surface_alt_dark'],
+        'row_alt_bg_light': COLORS['surface_alt_light'],
+        'border_dark': COLORS['stroke_dark'],
+        'border_light': COLORS['stroke_light'],
     },
 }
 
@@ -439,6 +549,16 @@ def get_accent_colors(is_dark: bool) -> dict[str, str]:
     }
 
 
+def get_theme_colors(is_dark: bool) -> dict[str, QColor]:
+    """Return QColor theme roles without flattening light and dark values."""
+    return THEME_COLORS['dark' if is_dark else 'light']
+
+
+def get_activity_heatmap_colors(is_dark: bool) -> tuple[str, ...]:
+    """Return five clearly separated activity levels for the active mode."""
+    return ACTIVITY_HEATMAP_LEVELS['dark' if is_dark else 'light']
+
+
 def get_surface_color(is_dark: bool, role: str = 'surface') -> str:
     """Return a canvas/surface role for the active theme."""
     role = (role or 'surface').strip().lower()
@@ -447,14 +567,44 @@ def get_surface_color(is_dark: bool, role: str = 'surface') -> str:
         return COLORS[f'canvas_{suffix}']
     if role in ('alternate', 'alt', 'subtle'):
         return COLORS[f'surface_alt_{suffix}']
+    if role in ('stroke', 'border', 'separator'):
+        return COLORS[f'stroke_{suffix}']
+    if role in ('stroke_subtle', 'border_subtle', 'separator_subtle'):
+        return COLORS[f'stroke_subtle_{suffix}']
+    if role in ('selected', 'selection'):
+        return COLORS[f'selected_surface_{suffix}']
+    if role in ('disabled', 'inactive'):
+        return COLORS[f'disabled_surface_{suffix}']
     return COLORS[f'surface_{suffix}']
 
 def apply_theme(app):
     """Apply Fluent Design theme to the application"""
     setTheme(Theme.AUTO)  # Respects system light/dark mode
-    # A deeper indigo keeps QFluent's white button/icon foregrounds accessible.
-    # Theme-aware custom controls use get_accent_colors() in dark mode.
-    setThemeColor(QColor(COLORS['focus_ring_light']))
+    setThemeColor(QColor(get_accent_colors(isDarkTheme())['base']))
+
+
+def set_mode_aware_theme(is_dark: bool, *, lazy: bool = True) -> bool:
+    """Switch mode and accent with one QFluent stylesheet refresh.
+
+    Priming ``themeColor`` before ``setTheme`` avoids the usual second full
+    widget-tree restyle that would otherwise be caused by ``setThemeColor``.
+    Returns whether the light/dark mode itself changed.
+    """
+
+    is_dark = bool(is_dark)
+    accent = QColor(get_accent_colors(is_dark)['base'])
+    current_accent = QColor(qconfig.get(qconfig.themeColor))
+
+    if is_dark == isDarkTheme():
+        if current_accent != accent:
+            setThemeColor(accent, lazy=lazy)
+        return False
+
+    if current_accent != accent:
+        # setTheme() below performs the stylesheet update using this value.
+        qconfig.set(qconfig.themeColor, accent)
+    setTheme(Theme.DARK if is_dark else Theme.LIGHT, lazy=lazy)
+    return True
 
 def get_input_style(is_dark: bool, has_error: bool = False, is_valid: bool = False) -> str:
     """Generate consistent input field stylesheet"""
@@ -484,9 +634,9 @@ def get_form_input_style(is_dark: bool, selector: str, *, calendar: bool = False
     """Return a complete themed style for spin/date controls in form dialogs."""
     input_colors = COMPONENT_COLORS['input']
     input_text = input_colors['text_dark'] if is_dark else input_colors['text_light']
-    disabled_bg = COLORS['bg_alt_dark'] if is_dark else '#F1F3F5'
+    disabled_bg = get_surface_color(is_dark, 'disabled')
+    disabled_text = get_text_color(is_dark, 'disabled')
     border = COLORS['border_dark'] if is_dark else COLORS['border_light']
-    secondary_text = get_text_color(is_dark, 'secondary')
     focus = get_focus_color(is_dark)
     calendar_rules = ""
     if calendar:
@@ -516,7 +666,7 @@ def get_form_input_style(is_dark: bool, selector: str, *, calendar: bool = False
             QCalendarWidget QAbstractItemView {{
                 color: {get_text_color(is_dark, 'primary')};
                 background-color: {COLORS['bg_dark'] if is_dark else COLORS['bg_light']};
-                selection-background-color: {get_selection_bg()};
+                selection-background-color: {get_selection_bg(is_dark)};
                 selection-color: {get_text_color(is_dark, 'primary')};
                 outline: none;
             }}
@@ -526,7 +676,7 @@ def get_form_input_style(is_dark: bool, selector: str, *, calendar: bool = False
         {selector} {{
             {get_input_style(is_dark)}
             padding: 0 {SPACING['md']}px;
-            selection-background-color: {get_selection_bg()};
+            selection-background-color: {get_selection_bg(is_dark)};
             selection-color: {input_text};
         }}
 
@@ -540,7 +690,7 @@ def get_form_input_style(is_dark: bool, selector: str, *, calendar: bool = False
 
         {selector}:disabled {{
             background-color: {disabled_bg};
-            color: {secondary_text};
+            color: {disabled_text};
             border-color: {border};
         }}
 
@@ -575,8 +725,8 @@ def get_dialog_button_style(is_dark: bool, *, primary: bool) -> str:
             }}
             PrimaryPushButton:focus {{ border: 2px solid {focus}; }}
             PrimaryPushButton:disabled {{
-                color: {get_text_color(is_dark, 'tertiary')};
-                background-color: {COLORS['bg_alt_dark'] if is_dark else '#E6E9ED'};
+                color: {get_text_color(is_dark, 'disabled')};
+                background-color: {get_surface_color(is_dark, 'disabled')};
                 border-color: {border};
             }}
         """
@@ -609,11 +759,11 @@ def get_dialog_button_style(is_dark: bool, *, primary: bool) -> str:
             background-color: {secondary_hover};
             border-color: {get_subtle_border(is_dark)};
         }}
-        PushButton:pressed {{ background-color: {border}; }}
+        PushButton:pressed {{ background-color: {get_pressed_bg(is_dark)}; }}
         PushButton:focus {{ border: 2px solid {focus}; }}
         PushButton:disabled {{
-            color: {get_text_color(is_dark, 'tertiary')};
-            background-color: {COLORS['bg_alt_dark'] if is_dark else '#E6E9ED'};
+            color: {get_text_color(is_dark, 'disabled')};
+            background-color: {get_surface_color(is_dark, 'disabled')};
             border-color: {border};
         }}
     """
@@ -644,8 +794,8 @@ def get_dialog_danger_button_style(is_dark: bool) -> str:
         }}
         PushButton:focus {{ border: 2px solid {focus}; }}
         PushButton:disabled {{
-            color: {get_text_color(is_dark, 'tertiary')};
-            background-color: {COLORS['bg_alt_dark'] if is_dark else '#E6E9ED'};
+            color: {get_text_color(is_dark, 'disabled')};
+            background-color: {get_surface_color(is_dark, 'disabled')};
             border-color: {border};
         }}
     """
@@ -689,7 +839,7 @@ def get_dialog_table_style(is_dark: bool) -> str:
             border-radius: {RADII['md']}px;
             gridline-color: transparent;
             outline: none;
-            selection-background-color: {get_selection_bg()};
+            selection-background-color: {get_selection_bg(is_dark)};
             selection-color: {text};
         }}
         QTableWidget::viewport {{
@@ -704,7 +854,7 @@ def get_dialog_table_style(is_dark: bool) -> str:
         QTableWidget::item:hover {{ background-color: {hover}; }}
         QTableWidget::item:selected {{
             color: {text};
-            background-color: {get_selection_bg()};
+            background-color: {get_selection_bg(is_dark)};
         }}
         QHeaderView::section {{
             color: {header_text};
@@ -804,7 +954,7 @@ def get_calendar_popup_style(is_dark: bool, object_name: str) -> str:
             border: 1px solid {input_border};
             border-radius: {RADII['sm']}px;
             padding: 0 {SPACING['sm']}px;
-            selection-background-color: {get_selection_bg()};
+            selection-background-color: {get_selection_bg(is_dark)};
             selection-color: {text};
         }}
 

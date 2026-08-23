@@ -8,9 +8,11 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QAbstractAnimation
+from PySide6.QtCore import QAbstractAnimation, Qt
+from PySide6.QtGui import QPalette
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QWidget
+from qfluentwidgets import Theme, isDarkTheme, setTheme
 
 from Database.DatabaseManager import DatabaseManager
 from Database.SettingsManager import SettingsManager
@@ -23,6 +25,7 @@ from GUI_Qt.earnings.widgets import (
 )
 from GUI_Qt.i18n import translate
 from GUI_Qt.screens.EarningsScreen import EarningsScreen
+from GUI_Qt.styles.theme_config import get_surface_color, get_text_color
 from Managers.EarningsManager import EarningsManager
 
 
@@ -157,3 +160,43 @@ def test_manual_submit_updates_live_session_batch_badge_and_heatmap(earnings_con
     screen.deleteLater()
     main.deleteLater()
     app.processEvents()
+
+
+def test_dark_theme_keeps_earnings_metric_text_readable_and_transparent(
+    earnings_context,
+):
+    app, db, settings, manager = earnings_context
+    original_theme = Theme.DARK if isDarkTheme() else Theme.LIGHT
+    main = _Main(db, settings, manager)
+    screen = None
+
+    try:
+        setTheme(Theme.LIGHT)
+        screen = EarningsScreen(main)
+        setTheme(Theme.DARK)
+        screen._apply_theme()
+        app.processEvents()
+
+        expected = get_text_color(True, "primary").lower()
+        metric_value = screen.metric_today.value
+        assert (
+            metric_value.palette().color(QPalette.ColorRole.WindowText).name().lower()
+            == expected
+        )
+        assert not metric_value.testAttribute(Qt.WidgetAttribute.WA_StyledBackground)
+        assert not screen.metric_today.title.testAttribute(
+            Qt.WidgetAttribute.WA_StyledBackground
+        )
+        assert (
+            screen.activity_summary_cards[0].background_color.name().lower()
+            == get_surface_color(True, "alternate").lower()
+        )
+    finally:
+        if screen is not None:
+            screen._tick_timer.stop()
+            screen.close()
+            screen.deleteLater()
+        main.close()
+        main.deleteLater()
+        setTheme(original_theme)
+        app.processEvents()

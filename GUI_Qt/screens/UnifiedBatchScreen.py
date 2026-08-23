@@ -74,6 +74,7 @@ from GUI_Qt.styles.theme_config import (
     RADII,
     SIZES,
     SPACING,
+    get_text_color,
 )
 from GUI_Qt.styles.screen_theme import (
     PAGE_MARGINS,
@@ -260,7 +261,7 @@ class _ColumnPickerView(FlyoutViewBase):
 
         for group_i18n, keys in COLUMN_GROUPS:
             grp_label = CaptionLabel(self._tr(group_i18n))
-            grp_label.setStyleSheet(f"color: {COLORS['text_secondary']}; margin-top: 4px;")
+            grp_label.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')}; margin-top: 4px;")
             root.addWidget(grp_label)
 
             row_layout = QGridLayout()
@@ -499,7 +500,7 @@ class UnifiedBatchScreen(ResponsiveWidget):
         self.template_btn = TransparentToolButton(FluentIcon.DOWNLOAD, self)
         self.template_btn.clicked.connect(self._download_template)
         self.excel_file_label = CaptionLabel("")
-        self.excel_file_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self.excel_file_label.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')};")
         self.excel_file_label.setMaximumWidth(SIZES["col_w_260"])
 
         bot_row.addWidget(self.browse_btn)
@@ -553,7 +554,7 @@ class UnifiedBatchScreen(ResponsiveWidget):
         self.setup_title = title
         subtitle = CaptionLabel("")
         self.setup_subtitle = subtitle
-        subtitle.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        subtitle.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')};")
         layout.addWidget(title, alignment=Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(subtitle, alignment=Qt.AlignmentFlag.AlignCenter)
 
@@ -576,7 +577,7 @@ class UnifiedBatchScreen(ResponsiveWidget):
             desc = CaptionLabel("")
             desc.setProperty("_i18n_key", desc_key)
             desc.setWordWrap(True)
-            desc.setStyleSheet(f"color: {COLORS['text_secondary']};")
+            desc.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')};")
             cl.addWidget(ic, alignment=Qt.AlignmentFlag.AlignCenter)
             cl.addWidget(lbl, alignment=Qt.AlignmentFlag.AlignCenter)
             cl.addWidget(desc, alignment=Qt.AlignmentFlag.AlignCenter)
@@ -667,7 +668,7 @@ class UnifiedBatchScreen(ResponsiveWidget):
         empty_icon.setFixedSize(SIZES["icon_huge"], SIZES["icon_huge"])
         self._fresh_title = StrongBodyLabel("")
         self._fresh_subtitle = CaptionLabel("")
-        self._fresh_subtitle.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self._fresh_subtitle.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')};")
         self._fresh_btn = PushButton("")
         self._fresh_btn.setIcon(FluentIcon.SETTING)
         self._fresh_btn.clicked.connect(self._open_column_picker)
@@ -815,7 +816,7 @@ class UnifiedBatchScreen(ResponsiveWidget):
                 background-color: {bg};
                 alternate-background-color: {alt_bg};
                 border: none;
-                selection-background-color: {get_selection_bg()};
+                selection-background-color: {get_selection_bg(is_dark)};
                 color: {text_color};
             }}
             QTableWidget::viewport {{

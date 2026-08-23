@@ -97,6 +97,7 @@ from GUI_Qt.styles.theme_config import (
     get_calendar_popup_style,
     get_form_dialog_style,
     get_form_input_style,
+    get_activity_heatmap_colors,
     get_selection_bg,
     get_status_text_color,
     get_subtle_border,
@@ -134,7 +135,7 @@ class EarningsChart(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         text = QColor(COLORS["text_primary_dark"] if isDarkTheme() else COLORS["text_primary_light"])
-        secondary = QColor(COLORS["text_secondary"])
+        secondary = QColor(get_text_color(isDarkTheme(), "secondary"))
         accent = QColor(COLORS.get("primary", COLORS["space_indigo"]))
         grid = QColor(COLORS["border_dark"] if isDarkTheme() else COLORS["border_light"])
         plot = self.rect().adjusted(54, 16, -16, -42)
@@ -715,6 +716,31 @@ class PerformanceTargetWidget(QWidget):
         )
 
 
+class ActivityMetricTile(QWidget):
+    """Small summary tile with deterministic theme surface painting."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._background_color = QColor("#FFFFFF")
+        self._border_color = QColor("#E2E8F0")
+
+    @property
+    def background_color(self) -> QColor:
+        return QColor(self._background_color)
+
+    def set_theme_colors(self, background: str, border: str) -> None:
+        self._background_color = QColor(background)
+        self._border_color = QColor(border)
+        self.update()
+
+    def paintEvent(self, event):  # noqa: N802
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(QPen(self._border_color, 1.0))
+        painter.setBrush(self._background_color)
+        painter.drawRoundedRect(QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5), 8, 8)
+
+
 class ActivityLegend(QWidget):
     """Plain-language heatmap scale with real color swatches."""
 
@@ -725,9 +751,9 @@ class ActivityLegend(QWidget):
         self._translate = translate
         self._fewer = "Fewer SKUs"
         self._more = "More SKUs"
-        self.setFixedHeight(22)
-        self.setMinimumWidth(190)
-        self.setMaximumWidth(230)
+        self.setFixedHeight(24)
+        self.setMinimumWidth(200)
+        self.setMaximumWidth(240)
         self.setAccessibleName("Activity intensity: fewer to more SKUs")
         self.retranslate_ui()
 
@@ -749,8 +775,7 @@ class ActivityLegend(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         dark = isDarkTheme()
         text = QColor(get_text_color(dark, "secondary"))
-        base = QColor(COLORS["border_dark" if dark else "border_light"])
-        accent = QColor(COLORS["lavender_grey" if dark else "space_indigo"])
+        levels = tuple(QColor(value) for value in get_activity_heatmap_colors(dark))
         metrics = painter.fontMetrics()
         fewer_width = metrics.horizontalAdvance(self._fewer)
         painter.setPen(text)
@@ -760,14 +785,11 @@ class ActivityLegend(QWidget):
             self._fewer,
         )
         x = fewer_width + 8
-        size = 9.0
+        size = 10.0
         gap = 3.0
         for level in range(self.LEVELS):
-            color = QColor(base) if level == 0 else QColor(accent)
-            if level:
-                color.setAlphaF((0.24, 0.44, 0.68, 0.95)[level - 1])
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(color)
+            painter.setBrush(levels[level])
             painter.drawRoundedRect(QRectF(x, (self.height() - size) / 2, size, size), 2, 2)
             x += size + gap
         painter.setPen(text)
@@ -848,8 +870,7 @@ class ActivityHeatmap(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         dark = isDarkTheme()
-        base = QColor(COLORS["border_dark" if dark else "border_light"])
-        accent = QColor(COLORS["lavender_grey" if dark else "space_indigo"])
+        levels = tuple(QColor(value) for value in get_activity_heatmap_colors(dark))
         text = QColor(get_text_color(dark, "secondary"))
         maximum = max((int(item.get("count", 0)) for item in self._data), default=0)
         columns = math.ceil(max(1, len(self._data)) / self.ROWS)
@@ -870,11 +891,10 @@ class ActivityHeatmap(QWidget):
             self._cell_rects.append(rect)
             count = int(item.get("count", 0))
             if count <= 0 or maximum <= 0:
-                color = base
+                color = levels[0]
             else:
                 level = max(1, min(4, math.ceil(count * 4 / maximum)))
-                color = QColor(accent)
-                color.setAlphaF((0.24, 0.44, 0.68, 0.95)[level - 1])
+                color = levels[level]
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(color)
             painter.drawRoundedRect(rect, 3, 3)

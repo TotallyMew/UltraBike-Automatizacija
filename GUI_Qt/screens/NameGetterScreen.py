@@ -48,6 +48,7 @@ from qfluentwidgets import (
     ComboBox,
     TitleLabel,
     isDarkTheme,
+    qconfig,
 )
 
 from GUI_Qt.widgets import enable_table_copy, show_file_saved_bar
@@ -462,6 +463,17 @@ class NameGetterScreen(ResponsiveWidget):
 
         self._build_ui()
         self.retranslate_ui()
+        qconfig.themeChangedFinished.connect(self._on_theme_changed)
+
+    def _on_theme_changed(self):
+        apply_screen_theme(
+            self, "NameGetterScreen", scroll=self._scroll, content=self._container
+        )
+        secondary = get_text_color(isDarkTheme(), "secondary")
+        for label in (self._subtitle, self._file_label, self._progress_label):
+            label.setStyleSheet(f"color: {secondary}; background: transparent; border: none;")
+        self._update_table_theme()
+        enforce_transparent_labels(self)
 
     # -- UI construction -----------------------------------------------------
 
@@ -499,7 +511,7 @@ class NameGetterScreen(ResponsiveWidget):
         title_col.setSpacing(2)
         self._title = TitleLabel("")
         self._subtitle = CaptionLabel("")
-        self._subtitle.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self._subtitle.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')};")
         title_col.addWidget(self._title)
         title_col.addWidget(self._subtitle)
         header.addLayout(title_col)
@@ -519,7 +531,7 @@ class NameGetterScreen(ResponsiveWidget):
         self._template_btn.clicked.connect(self._download_template)
 
         self._file_label = CaptionLabel("")
-        self._file_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self._file_label.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')};")
 
         # Browser count selector
         self._browser_label = BodyLabel("")
@@ -555,7 +567,7 @@ class NameGetterScreen(ResponsiveWidget):
 
         # -- Progress label --------------------------------------------------
         self._progress_label = CaptionLabel("")
-        self._progress_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self._progress_label.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')};")
         self._layout.addWidget(self._progress_label)
 
         # -- Results table ---------------------------------------------------
@@ -601,7 +613,7 @@ class NameGetterScreen(ResponsiveWidget):
                 border: 1px solid {border};
                 border-radius: {RADII['md']}px;
                 gridline-color: {border};
-                selection-background-color: {get_selection_bg()};
+                selection-background-color: {get_selection_bg(is_dark)};
                 color: {text_color};
             }}
             QTableWidget::viewport {{
@@ -624,7 +636,7 @@ class NameGetterScreen(ResponsiveWidget):
                 outline: none;
             }}
             QTableWidget::item:selected {{
-                background-color: {get_selection_bg()};
+                background-color: {get_selection_bg(is_dark)};
                 color: {text_color};
             }}
             QHeaderView::section {{
@@ -730,7 +742,7 @@ class NameGetterScreen(ResponsiveWidget):
                 self._table.setItem(i, 0, QTableWidgetItem(str(i + 1)))
                 self._table.setItem(i, 1, QTableWidgetItem(code))
                 item = QTableWidgetItem(self.tr("batchdesc.status.pending"))
-                item.setForeground(QColor(COLORS['text_secondary']))
+                item.setForeground(QColor(get_text_color(isDarkTheme(), 'secondary')))
                 self._table.setItem(i, 2, item)
                 self._table.setItem(i, 3, QTableWidgetItem(""))
 
@@ -803,7 +815,7 @@ class NameGetterScreen(ResponsiveWidget):
         # Reset table statuses
         for i in range(self._table.rowCount()):
             item = QTableWidgetItem(self.tr("batchdesc.status.pending"))
-            item.setForeground(QColor(COLORS['text_secondary']))
+            item.setForeground(QColor(get_text_color(isDarkTheme(), 'secondary')))
             self._table.setItem(i, 2, item)
             self._table.setItem(i, 3, QTableWidgetItem(""))
 

@@ -12,12 +12,13 @@ from PySide6.QtCore import Qt, QThread, Signal, QTimer, QProcess
 from qfluentwidgets import (
     CardWidget, TitleLabel, StrongBodyLabel, BodyLabel, CaptionLabel,
     ComboBox, SwitchButton, FluentIcon, InfoBar, InfoBarPosition,
-    isDarkTheme, setTheme, Theme, PushButton, LineEdit, ScrollArea, MessageBox,
+    isDarkTheme, PushButton, LineEdit, ScrollArea, MessageBox,
     PrimaryPushButton, TransparentToolButton, qconfig, IconWidget
 )
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
 from GUI_Qt.styles.theme_config import (
     COLORS, FONTS, RADII, SIZES, get_surface_color, get_text_color, rgba_from_hex,
+    set_mode_aware_theme,
 )
 from GUI_Qt.styles.screen_theme import (
     PAGE_MARGINS, PAGE_SPACING, CARD_MARGINS, CARD_SPACING, ICON_TEXT_GAP, FOOTER_MARGINS,
@@ -33,6 +34,8 @@ from Utilities.BackupManager import BackupManager
 
 class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
     """Settings screen with language and theme options"""
+
+    THEME_PREVIEW_DEBOUNCE_MS = 180
 
     def __init__(self, main_window, parent=None):
         super().__init__(parent)
@@ -52,6 +55,11 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
         self.scroll = None
         self.content_widget = None
         self._preview_theme_is_dark = isDarkTheme()
+        self._pending_theme_is_dark: bool | None = None
+        self._theme_preview_timer = QTimer(self)
+        self._theme_preview_timer.setSingleShot(True)
+        self._theme_preview_timer.setInterval(self.THEME_PREVIEW_DEBOUNCE_MS)
+        self._theme_preview_timer.timeout.connect(self._commit_queued_theme_preview)
 
         # Store references for theme updates
         self.scroll = None
@@ -147,13 +155,14 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
     def _apply_global_theme(self, is_dark: bool) -> bool:
         """Apply qfluentwidgets theme globally (used for preview + saved apply)."""
         try:
+            self._cancel_queued_theme_preview()
             # Only flip if needed to avoid extra signals.
             if is_dark == isDarkTheme():
                 return False
 
-            # Lazy QFluent updates defer individual widget stylesheet work until
-            # paint time instead of blocking this interaction on the full tree.
-            setTheme(Theme.DARK if is_dark else Theme.LIGHT, lazy=True)
+            # Prime the mode-aware accent and flip the theme in one QFluent
+            # stylesheet pass. Lazy updates skip hidden widgets until paint.
+            set_mode_aware_theme(is_dark, lazy=True)
 
             # Keep the main window's custom controls consistent with the preview.
             # qconfig.themeChangedFinished already refreshes container backgrounds
@@ -168,6 +177,23 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
             return True
         except Exception:
             return False
+
+    def _cancel_queued_theme_preview(self) -> None:
+        timer = getattr(self, "_theme_preview_timer", None)
+        if timer is not None and timer.isActive():
+            timer.stop()
+        self._pending_theme_is_dark = None
+
+    def _commit_queued_theme_preview(self) -> None:
+        target = self._pending_theme_is_dark
+        self._pending_theme_is_dark = None
+        if target is None:
+            return
+        self._preview_theme_is_dark = bool(target)
+        # A rapid double click that returns to the active mode needs no restyle.
+        if bool(target) == isDarkTheme():
+            return
+        self._apply_theme_preview(bool(target))
 
     def _revert_preview_to_saved(self) -> None:
         """Revert any preview-only state back to saved global settings."""
@@ -211,7 +237,7 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
         is_dark = self._preview_theme_is_dark
         bg_color = get_surface_color(is_dark, 'canvas')
         text_primary = COLORS['text_primary_dark'] if is_dark else COLORS['text_primary_light']
-        text_caption = COLORS['lavender_grey'] if is_dark else COLORS['text_secondary']
+        text_caption = get_text_color(is_dark, 'secondary')
         self.setStyleSheet(
             f"""
             SettingsScreen {{
@@ -1059,13 +1085,17 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
     def _on_theme_change(self, checked):
         """Handle theme toggle.
 
-        Theme changes are applied only after user clicks Save.
+        The global preview is applied after a short debounce and remains
+        provisional until the user saves Settings.
         """
         if self._loading:
             return
 
-        # Live preview ONLY within Settings screen.
-        self._apply_theme_preview(bool(checked))
+        # Coalesce rapid clicks before starting QFluent's expensive global
+        # stylesheet refresh. The switch itself responds immediately.
+        self._pending_theme_is_dark = bool(checked)
+        self._preview_theme_is_dark = bool(checked)
+        self._theme_preview_timer.start()
 
         # Mark as dirty
         self._mark_dirty()
@@ -1360,7 +1390,7 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
         bg_color = get_surface_color(is_dark, 'canvas')
 
         text_primary = COLORS['text_primary_dark'] if is_dark else COLORS['text_primary_light']
-        text_caption = COLORS['lavender_grey'] if is_dark else COLORS['text_secondary']
+        text_caption = get_text_color(is_dark, 'secondary')
 
         # Update main background
         self.setStyleSheet(

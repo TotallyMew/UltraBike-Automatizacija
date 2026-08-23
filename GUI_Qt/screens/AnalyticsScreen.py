@@ -21,7 +21,7 @@ from openpyxl.styles import Font, PatternFill
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
 from GUI_Qt.styles.theme_config import (
     COLORS, FONTS, RADII, SPACING, SIZES, rgba_from_hex,
-    get_status_text_color, get_surface_color,
+    get_status_text_color, get_surface_color, get_text_color,
 )
 from GUI_Qt.styles.screen_theme import (
     apply_screen_theme, PAGE_MARGINS, PAGE_SPACING, CARD_MARGINS, CARD_SPACING,
@@ -58,7 +58,7 @@ class MetricCard(CardWidget):
 
         # Keep title explicit and readable (icons alone are ambiguous)
         self.title_label = BodyLabel(str(title))
-        self.title_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-weight: 600; background: transparent; background-color: transparent;")
+        self.title_label.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')}; font-weight: 600; background: transparent; background-color: transparent;")
 
         header.addWidget(icon_widget)
         header.addWidget(self.title_label)
@@ -78,7 +78,7 @@ class MetricCard(CardWidget):
         # Subtitle with optional trend
         bottom_layout = QHBoxLayout()
         self.subtitle_label = CaptionLabel(str(subtitle))
-        self.subtitle_label.setStyleSheet(f"color: {COLORS['text_secondary']}; background: transparent; background-color: transparent;")
+        self.subtitle_label.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')}; background: transparent; background-color: transparent;")
         bottom_layout.addWidget(self.subtitle_label)
 
         self.trend_label = CaptionLabel("")
@@ -176,7 +176,7 @@ class SimpleBarChart(QWidget):
                 painter.drawText(int(x), int(y + 4), int(bar_width), label_h, Qt.AlignmentFlag.AlignCenter, value_text)
 
             # Label at bottom
-            painter.setPen(QColor(COLORS['text_secondary']))
+            painter.setPen(QColor(get_text_color(isDarkTheme(), 'secondary')))
             font = QFont("Segoe UI", 9)
             painter.setFont(font)
             painter.drawText(int(x), height - 30, int(bar_width), 20, Qt.AlignmentFlag.AlignCenter, label)
@@ -214,7 +214,7 @@ class DonutChart(QWidget):
         bg_hex = COLORS['space_indigo'] if isDarkTheme() else COLORS['platinum']
 
         # Background ring
-        painter.setBrush(_blend(COLORS['text_tertiary'], bg_hex, 0.85))
+        painter.setBrush(_blend(get_text_color(isDarkTheme(), 'tertiary'), bg_hex, 0.85))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawEllipse(cx - outer_radius, cy - outer_radius, outer_radius * 2, outer_radius * 2)
 
@@ -373,7 +373,7 @@ class AnalyticsScreen(ResponsiveWidget):
         success_chart_layout.addWidget(self.success_donut, 0, Qt.AlignmentFlag.AlignCenter)
 
         self.success_caption = CaptionLabel("Last 30 days")
-        self.success_caption.setStyleSheet(f"color: {COLORS['text_tertiary']}; background: transparent; background-color: transparent;")
+        self.success_caption.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'tertiary')}; background: transparent; background-color: transparent;")
         success_chart_layout.addWidget(self.success_caption, 0, Qt.AlignmentFlag.AlignCenter)
 
         self.charts_layout.addWidget(self.success_chart_card, 1)
@@ -752,7 +752,7 @@ class AnalyticsScreen(ResponsiveWidget):
                 dt = timestamp
             time_ago = self._time_ago(dt)
             time_label = CaptionLabel(time_ago)
-            time_label.setStyleSheet(f"color: {COLORS['text_tertiary']}; background: transparent; background-color: transparent; border: none;")
+            time_label.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'tertiary')}; background: transparent; background-color: transparent; border: none;")
             layout.addWidget(time_label)
         except:
             pass
@@ -770,14 +770,14 @@ class AnalyticsScreen(ResponsiveWidget):
         # Count badge
         count_label = StrongBodyLabel(f"{count}×")
         count_label.setFixedWidth(50)
-        count_label.setStyleSheet(f"color: {COLORS['error']}; font-weight: 700; background: transparent; background-color: transparent; border: none;")
+        count_label.setStyleSheet(f"color: {get_status_text_color('error', isDarkTheme())}; font-weight: 700; background: transparent; background-color: transparent; border: none;")
         layout.addWidget(count_label)
 
         # Error message (truncated)
         display_error = error_msg if len(error_msg) <= 80 else error_msg[:77] + "..."
         error_label = BodyLabel(display_error)
         error_label.setWordWrap(False)
-        error_label.setStyleSheet(f"color: {COLORS['text_secondary']}; background: transparent; background-color: transparent; border: none;")
+        error_label.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')}; background: transparent; background-color: transparent; border: none;")
         layout.addWidget(error_label, 1)
 
         return item

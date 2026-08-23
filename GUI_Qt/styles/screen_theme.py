@@ -12,13 +12,20 @@ from __future__ import annotations
 
 from typing import Optional
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QLabel, QSizePolicy, QWidget
 
 from qfluentwidgets import ScrollArea, isDarkTheme
 
-from GUI_Qt.styles.theme_config import COLORS, FONTS, SPACING, SIZES, get_surface_color
+from GUI_Qt.styles.theme_config import (
+    COLORS,
+    FONTS,
+    SPACING,
+    SIZES,
+    get_surface_color,
+    get_text_color,
+)
 
 
 # =====================
@@ -83,9 +90,6 @@ def _normalize_label_widget(label: QLabel) -> None:
         if bool(label.property("ubAllowBg")):
             return
 
-        label.setAutoFillBackground(False)
-        label.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
-
         current = label.styleSheet() or ""
         override = "\n".join(
             [
@@ -99,6 +103,13 @@ def _normalize_label_widget(label: QLabel) -> None:
                 label.setStyleSheet(current.rstrip() + "\n" + override)
         else:
             label.setStyleSheet(override)
+
+        # Setting a stylesheet makes Qt re-enable WA_StyledBackground. Clear
+        # it afterwards or transparent labels paint their Window palette role
+        # (the page canvas) as a visible rectangle over elevated cards.
+        label.setAutoFillBackground(False)
+        label.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
+        label.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, False)
     except Exception:
         return
 
@@ -123,7 +134,27 @@ def enforce_transparent_labels(root: QWidget) -> None:
                 checkbox.setStyleSheet("QCheckBox { background: transparent; } QCheckBox::indicator { background: transparent; }")
             except Exception:
                 pass
+
+        # Qt may polish a stylesheet on the next event-loop turn and restore
+        # WA_StyledBackground. Clear only the paint flags once that deferred
+        # polish has completed; changing the flags does not trigger restyling.
+        QTimer.singleShot(0, lambda: _clear_transparent_label_paint_flags(root))
     except Exception:
+        return
+
+
+def _clear_transparent_label_paint_flags(root: QWidget) -> None:
+    """Finish label normalization after Qt's deferred stylesheet polish."""
+
+    try:
+        for label in root.findChildren(QLabel):
+            if bool(label.property("ubAllowBg")):
+                continue
+            label.setAutoFillBackground(False)
+            label.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
+            label.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, False)
+    except RuntimeError:
+        # The page may have been destroyed before the queued normalization.
         return
 
 
@@ -153,9 +184,32 @@ def apply_screen_palette(root: QWidget) -> None:
     ``apply_screen_theme`` themselves. Explicit card and table styles still win.
     """
     try:
-        color = QColor(get_surface_color(isDarkTheme(), 'canvas'))
+        is_dark = isDarkTheme()
+        canvas = QColor(get_surface_color(is_dark, 'canvas'))
+        surface = QColor(get_surface_color(is_dark))
+        alternate = QColor(get_surface_color(is_dark, 'alternate'))
+        selected = QColor(get_surface_color(is_dark, 'selected'))
+        primary = QColor(get_text_color(is_dark, 'primary'))
+        secondary = QColor(get_text_color(is_dark, 'secondary'))
+        disabled = QColor(get_text_color(is_dark, 'disabled'))
         palette = root.palette()
-        palette.setColor(QPalette.ColorRole.Window, color)
+        palette.setColor(QPalette.ColorRole.Window, canvas)
+        palette.setColor(QPalette.ColorRole.WindowText, primary)
+        palette.setColor(QPalette.ColorRole.Text, primary)
+        palette.setColor(QPalette.ColorRole.ButtonText, primary)
+        palette.setColor(QPalette.ColorRole.Base, surface)
+        palette.setColor(QPalette.ColorRole.AlternateBase, alternate)
+        palette.setColor(QPalette.ColorRole.ToolTipBase, surface)
+        palette.setColor(QPalette.ColorRole.ToolTipText, primary)
+        palette.setColor(QPalette.ColorRole.PlaceholderText, secondary)
+        palette.setColor(QPalette.ColorRole.Highlight, selected)
+        palette.setColor(QPalette.ColorRole.HighlightedText, primary)
+        for role in (
+            QPalette.ColorRole.WindowText,
+            QPalette.ColorRole.Text,
+            QPalette.ColorRole.ButtonText,
+        ):
+            palette.setColor(QPalette.ColorGroup.Disabled, role, disabled)
         root.setPalette(palette)
         root.setAutoFillBackground(True)
     except Exception:
@@ -237,7 +291,10 @@ def apply_screen_theme(
         transparent_labels: When True, forces QLabel-like widgets to be transparent.
     """
 
+    is_dark = isDarkTheme()
     bg_color = get_screen_background()
+    text_color = get_text_color(is_dark, 'primary')
+    secondary_text = get_text_color(is_dark, 'secondary')
 
     # Ensure the widget actually paints its background, including when a local
     # selector stops matching after a subclass is introduced.
@@ -251,8 +308,12 @@ def apply_screen_theme(
             {selector} CaptionLabel,
             {selector} StrongBodyLabel,
             {selector} TitleLabel {{
+                color: {text_color};
                 {('background: transparent; background-color: transparent; border: none;' if transparent_labels else '')}
                 {f'border-radius: {int(label_radius_px)}px;' if label_radius_px is not None else ''}
+            }}
+            {selector} CaptionLabel {{
+                color: {secondary_text};
             }}
         """
 
@@ -260,6 +321,7 @@ def apply_screen_theme(
         f"""
             {selector} {{
                 background-color: {bg_color};
+                color: {text_color};
                 font-family: {FONTS['family']};
             }}
             {label_rules}
@@ -273,15 +335,17 @@ def apply_screen_theme(
                 QScrollArea {{
                     border: none;
                     background-color: {bg_color};
+                    color: {text_color};
                 }}
                 QScrollArea QWidget#qt_scrollarea_viewport {{
                     background-color: {bg_color};
+                    color: {text_color};
                 }}
             """
         )
 
     if content is not None:
-        content.setStyleSheet(f"background-color: {bg_color};")
+        content.setStyleSheet(f"background-color: {bg_color}; color: {text_color};")
 
     # Enforce transparent labels even when individual widgets override styles
     if transparent_labels:

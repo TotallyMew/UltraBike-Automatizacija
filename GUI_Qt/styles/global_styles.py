@@ -29,7 +29,9 @@ def get_global_stylesheet():
     focus = get_focus_color(is_dark)
     text_primary = get_text_color(is_dark, 'primary')
     text_secondary = get_text_color(is_dark, 'secondary')
+    text_disabled = get_text_color(is_dark, 'disabled')
     surface = get_surface_color(is_dark)
+    surface_disabled = get_surface_color(is_dark, 'disabled')
     border = COLORS['border_dark'] if is_dark else COLORS['border_light']
     table_colors = COMPONENT_COLORS['table']
 
@@ -38,9 +40,13 @@ def get_global_stylesheet():
            into a fill with a more specific per-widget rule. */
         QLabel, FluentLabelBase, BodyLabel, CaptionLabel,
         StrongBodyLabel, TitleLabel, SubtitleLabel {{
+            color: {text_primary};
             background: transparent;
             background-color: transparent;
             border: none;
+        }}
+        CaptionLabel {{
+            color: {text_secondary};
         }}
 
         /* =====================
@@ -68,8 +74,8 @@ def get_global_stylesheet():
         }}
 
         LineEdit:disabled, PasswordLineEdit:disabled, SearchLineEdit:disabled, QLineEdit:disabled {{
-            background-color: {COLORS['bg_alt_dark'] if is_dark else '#F1F3F5'};
-            color: {text_secondary};
+            background-color: {surface_disabled};
+            color: {text_disabled};
             border-color: {border};
         }}
 
@@ -96,18 +102,18 @@ def get_global_stylesheet():
         }}
 
         ComboBox:disabled, QComboBox:disabled {{
-            background-color: {COLORS['bg_alt_dark'] if is_dark else '#F1F3F5'};
-            color: {text_secondary};
+            background-color: {surface_disabled};
+            color: {text_disabled};
             border-color: {border};
         }}
 
         /* ComboBox dropdown list */
         QComboBox QAbstractItemView {{
-            background-color: {COLORS['bg_dark'] if is_dark else COLORS['bg_light']};
-            color: {COLORS['text_primary_dark'] if is_dark else COLORS['text_primary_light']};
+            background-color: {surface};
+            color: {text_primary};
             border: 1px solid {COLORS['border_dark'] if is_dark else COLORS['border_light']};
             selection-background-color: {btn_colors['secondary_bg_dark'] if is_dark else btn_colors['secondary_bg_light']};
-            selection-color: {COLORS['text_primary_dark'] if is_dark else COLORS['text_primary_light']};
+            selection-color: {text_primary};
             outline: 0;
         }}
 
@@ -138,8 +144,8 @@ def get_global_stylesheet():
 
         PushButton:disabled, PrimaryPushButton:disabled, QPushButton:disabled,
         QToolButton:disabled {{
-            color: {text_secondary};
-            background-color: {COLORS['bg_alt_dark'] if is_dark else '#E6E9ED'};
+            color: {text_disabled};
+            background-color: {surface_disabled};
             border-color: {border};
         }}
 

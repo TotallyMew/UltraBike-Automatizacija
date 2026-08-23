@@ -11,11 +11,11 @@ from typing import List, Optional, Callable
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel
 from PySide6.QtGui import QIcon, QPixmap
-from qfluentwidgets import LineEdit
+from qfluentwidgets import LineEdit, isDarkTheme
 from qfluentwidgets import FluentIcon as FIF
 
 from .validators import BaseValidator, ValidationResult
-from GUI_Qt.styles.theme_config import COLORS
+from GUI_Qt.styles.theme_config import get_semantic_colors
 
 
 class ValidatedLineEdit(QWidget):
@@ -144,48 +144,51 @@ class ValidatedLineEdit(QWidget):
 
     def _show_error(self, error_message: str):
         """Display error state."""
+        error = get_semantic_colors('error', isDarkTheme())
         # Set error border on LineEdit
         self.line_edit.setStyleSheet(f"""
             LineEdit {{
-                border: 2px solid {COLORS['error']};
+                border: 2px solid {error['fill']};
                 border-radius: 6px;
             }}
         """)
 
         # Show error icon (X)
         self.validation_icon.setText("✗")
-        self.validation_icon.setStyleSheet(f"color: {COLORS['error']}; font-weight: bold; font-size: 16px;")
+        self.validation_icon.setStyleSheet(f"color: {error['text']}; font-weight: bold; font-size: 16px;")
         self.validation_icon.show()
 
         # Show error message
         self.error_label.setText(error_message)
-        self.error_label.setStyleSheet(f"color: {COLORS['error']}; font-size: 12px;")
+        self.error_label.setStyleSheet(f"color: {error['text']}; font-size: 12px;")
         self.error_label.show()
 
     def _show_warning(self, warning_message: str):
         """Display warning state."""
+        warning = get_semantic_colors('warning', isDarkTheme())
         # No border change for warnings
         self.line_edit.setStyleSheet("")
 
         # Show warning icon (!)
         self.validation_icon.setText("⚠")
-        self.validation_icon.setStyleSheet(f"color: {COLORS['warning']}; font-weight: bold; font-size: 16px;")
+        self.validation_icon.setStyleSheet(f"color: {warning['text']}; font-weight: bold; font-size: 16px;")
         self.validation_icon.show()
 
         # Show warning message
         self.error_label.setText(warning_message)
-        self.error_label.setStyleSheet(f"color: {COLORS['warning']}; font-size: 12px;")
+        self.error_label.setStyleSheet(f"color: {warning['text']}; font-size: 12px;")
         self.error_label.show()
 
     def _show_success(self):
         """Display success state."""
+        success = get_semantic_colors('success', isDarkTheme())
         # Remove any error styling
         self.line_edit.setStyleSheet("")
 
         # Show success icon (checkmark) only if field has content
         if self.line_edit.text().strip():
             self.validation_icon.setText("✓")
-            self.validation_icon.setStyleSheet(f"color: {COLORS['success']}; font-weight: bold; font-size: 16px;")
+            self.validation_icon.setStyleSheet(f"color: {success['text']}; font-weight: bold; font-size: 16px;")
             self.validation_icon.show()
         else:
             self.validation_icon.hide()

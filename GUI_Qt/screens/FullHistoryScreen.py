@@ -19,7 +19,10 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
 from GUI_Qt.widgets import enable_table_copy
-from GUI_Qt.styles.theme_config import COLORS, FONTS, RADII, SPACING, SIZES, rgba_from_hex, get_text_color
+from GUI_Qt.styles.theme_config import (
+    COLORS, FONTS, RADII, SPACING, SIZES, rgba_from_hex,
+    get_status_text_color, get_text_color,
+)
 from GUI_Qt.styles.theme_config import COMPONENT_COLORS, PADDINGS, get_selection_bg
 from GUI_Qt.styles.screen_theme import (
     apply_screen_theme,
@@ -348,7 +351,7 @@ class FullHistoryScreen(ResponsiveWidget):
         header_bg = table_colors['header_bg_dark' if is_dark else 'header_bg_light']
         header_text = table_colors['header_text_dark' if is_dark else 'header_text_light']
 
-        selection_bg = get_selection_bg()
+        selection_bg = get_selection_bg(is_dark)
 
         scrollbar_handle = rgba_from_hex(COLORS['lavender_grey'], 0.35) if is_dark else rgba_from_hex(COLORS['space_indigo'], 0.22)
         scrollbar_handle_hover = rgba_from_hex(COLORS['lavender_grey'], 0.55) if is_dark else rgba_from_hex(COLORS['space_indigo'], 0.32)
@@ -671,7 +674,7 @@ class FullHistoryScreen(ResponsiveWidget):
             # Column 0: Row number
             item = QTableWidgetItem(str(row_idx + 1))
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            item.setForeground(QColor(COLORS['text_tertiary']))
+            item.setForeground(QColor(get_text_color(isDarkTheme(), 'tertiary')))
             self.table.setItem(row_idx, 0, item)
 
             # Column 1: Type
@@ -702,13 +705,13 @@ class FullHistoryScreen(ResponsiveWidget):
             item = QTableWidgetItem(status_labels.get(status, str(status or '')))
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             if status in ('success', 'saved_manually'):
-                item.setForeground(QColor(COLORS['success']))
+                item.setForeground(QColor(get_status_text_color('success', isDarkTheme())))
             elif status == 'ready_for_review':
-                item.setForeground(QColor(COLORS['warning']))
+                item.setForeground(QColor(get_status_text_color('warning', isDarkTheme())))
             elif status in ('blocked_non_draft', 'discarded'):
-                item.setForeground(QColor(COLORS['text_tertiary']))
+                item.setForeground(QColor(get_text_color(isDarkTheme(), 'tertiary')))
             else:
-                item.setForeground(QColor(COLORS['error']))
+                item.setForeground(QColor(get_status_text_color('error', isDarkTheme())))
             self.table.setItem(row_idx, 4, item)
 
             # Column 5: Duration
@@ -734,14 +737,14 @@ class FullHistoryScreen(ResponsiveWidget):
             item = QTableWidgetItem(error[:200] + '...' if len(error) > 200 else error)
             item.setToolTip(error)
             if error:
-                item.setForeground(QColor(COLORS['error']))
+                item.setForeground(QColor(get_status_text_color('error', isDarkTheme())))
             self.table.setItem(row_idx, 8, item)
 
             # Column 9: Failed Stage
             failed_stage = record['failed_stage'] or ''
             item = QTableWidgetItem(failed_stage)
             if failed_stage:
-                item.setForeground(QColor(COLORS['warning']))
+                item.setForeground(QColor(get_status_text_color('warning', isDarkTheme())))
             self.table.setItem(row_idx, 9, item)
 
             # Column 10: URL/Code

@@ -6,6 +6,7 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QCoreApplication, QEvent
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 from qfluentwidgets import Theme, isDarkTheme, setTheme
 
@@ -66,13 +67,26 @@ def test_settings_save_skips_redundant_global_refreshes(tmp_path, monkeypatch) -
         assert theme_calls == []
         assert language_calls == []
 
+        # Returning the switch to its original state inside the debounce window
+        # must not launch either expensive global theme pass.
+        original_dark = isDarkTheme()
+        screen.theme_switch.toggleChecked()
+        screen.theme_switch.toggleChecked()
+        QTest.qWait(screen.THEME_PREVIEW_DEBOUNCE_MS + 30)
+        _pump(app)
+        assert screen.theme_switch.isChecked() == original_dark
+        assert isDarkTheme() == original_dark
+        assert theme_calls == []
+
         # Theme changes are already applied by the live preview. Language is
         # applied once after persistence and must not write to the DB again.
         target_dark = not isDarkTheme()
         screen.theme_switch.toggleChecked()
+        QTest.qWait(screen.THEME_PREVIEW_DEBOUNCE_MS + 30)
         _pump(app)
         assert screen.theme_switch.isChecked() == target_dark
         assert isDarkTheme() == target_dark
+        assert theme_calls == [target_dark]
         target_language = "lt" if window.i18n.language.code == "en" else "en"
         target_index = screen.language_combo.findData(target_language)
         assert target_index >= 0

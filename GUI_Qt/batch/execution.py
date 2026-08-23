@@ -74,6 +74,7 @@ from GUI_Qt.styles.theme_config import (
     RADII,
     SIZES,
     SPACING,
+    get_text_color,
 )
 from GUI_Qt.styles.screen_theme import (
     PAGE_MARGINS,
@@ -180,7 +181,7 @@ class BatchExecutionController:
             status_w = self._get_inner_widget(row, COL["status"])
             if status_w and isinstance(status_w, BodyLabel):
                 status_w.setText("Pending")
-                status_w.setStyleSheet(f"color: {COLORS['text_secondary']};")
+                status_w.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')};")
             error_w = self._get_inner_widget(row, COL["error"])
             if error_w and isinstance(error_w, LineEdit):
                 error_w.setText("")

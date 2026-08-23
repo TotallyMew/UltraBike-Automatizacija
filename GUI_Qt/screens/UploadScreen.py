@@ -28,7 +28,7 @@ from GUI_Qt.components.accessibility import KeyboardNavigationMixin
 from GUI_Qt.components.dialogs import DestructiveActionDialog
 from GUI_Qt.styles.theme_config import (
     COLORS, COMPONENT_COLORS, FONTS, RADII, SIZES, SPACING,
-    rgba_from_hex, get_accent_colors, get_input_style, get_status_text_color,
+    rgba_from_hex, get_accent_colors, get_input_style, get_status_text_color, get_text_color,
 )
 from GUI_Qt.styles.screen_theme import (
     PAGE_MARGINS,
@@ -1353,7 +1353,7 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
         is_dark = isDarkTheme()
         # Make labels readable on light theme (avoid faint grey-on-white)
         label_color = COLORS['text_primary_dark'] if is_dark else COLORS['text_primary_light']
-        caption_color = COLORS['lavender_grey'] if is_dark else COLORS['text_secondary']
+        caption_color = get_text_color(is_dark, 'secondary')
 
         # Title
         if hasattr(self, 'title_label') and self.title_label is not None:

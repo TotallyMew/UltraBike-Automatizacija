@@ -25,7 +25,7 @@ from GUI_Qt.widgets import enable_table_copy
 from GUI_Qt.styles.theme_config import (
     COLORS, COMPONENT_COLORS, FONTS, RADII, PADDINGS, SIZES,
     get_accent_colors, get_selection_bg, get_subtle_item_hover_bg,
-    get_surface_color, rgba_from_hex,
+    get_surface_color, get_text_color, rgba_from_hex,
 )
 from GUI_Qt.styles.screen_theme import (
     PAGE_MARGINS,
@@ -40,6 +40,7 @@ from GUI_Qt.styles.screen_theme import (
     get_responsive_margins,
     get_responsive_spacing,
     apply_screen_theme,
+    enforce_transparent_labels,
 )
 
 
@@ -66,7 +67,7 @@ class EditTranslationDialog(MessageBox):
 
         # Category (editable)
         category_label = CaptionLabel(self.tr("translations.edit_dialog.category"))
-        category_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        category_label.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')};")
         self.category_combo = ComboBox()
         self.category_combo.addItems(self.categories)
         if category:
@@ -76,14 +77,14 @@ class EditTranslationDialog(MessageBox):
 
         # Base word (editable)
         base_label = CaptionLabel(self.tr("translations.edit_dialog.base"))
-        base_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        base_label.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')};")
         self.base_input = LineEdit()
         self.base_input.setText(original)
         self.base_input.setPlaceholderText(self.tr("translations.edit_dialog.base.placeholder"))
 
         # Translation (editable)
         translation_label = CaptionLabel(self.tr("translations.translation"))
-        translation_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        translation_label.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')};")
         self.translation_input = LineEdit()
         self.translation_input.setText(translation)
         self.translation_input.setPlaceholderText(self.tr("translations.translation.placeholder"))
@@ -131,20 +132,20 @@ class AddTranslationDialog(MessageBox):
 
         # Category selector
         category_label = CaptionLabel(self.tr("translations.add_dialog.category"))
-        category_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        category_label.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')};")
         self.category_combo = ComboBox()
         self.category_combo.addItems(categories)
         self.category_combo.setPlaceholderText(self.tr("translations.brand.placeholder"))
 
         # Original text
         original_label = CaptionLabel(self.tr("translations.original"))
-        original_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        original_label.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')};")
         self.original_input = LineEdit()
         self.original_input.setPlaceholderText(self.tr("translations.original.placeholder"))
 
         # Translation text
         translation_label = CaptionLabel(self.tr("translations.translation"))
-        translation_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        translation_label.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')};")
         self.translation_input = LineEdit()
         self.translation_input.setPlaceholderText(self.tr("translations.translation.placeholder"))
 
@@ -275,7 +276,7 @@ class TranslationsScreen(ResponsiveWidget):
         # Brand filter - flexible width
         self.brand_label = BodyLabel("")
         brand_label = self.brand_label
-        brand_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        brand_label.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')};")
 
         self.brand_filter = ComboBox()
         self._populate_brand_filter()
@@ -330,7 +331,7 @@ class TranslationsScreen(ResponsiveWidget):
         self.empty_state_label = BodyLabel(self.main.i18n.tr("translations.empty_state"))
         self.empty_state_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.empty_state_label.setStyleSheet(f"""
-            color: {COLORS['text_secondary']};
+            color: {get_text_color(isDarkTheme(), 'secondary')};
             padding: 60px 20px;
         """)
         self.empty_state_label.setVisible(False)
@@ -354,7 +355,7 @@ class TranslationsScreen(ResponsiveWidget):
         pagination_layout.setSpacing(CONTENT_SPACING)
 
         self.page_info = BodyLabel("")
-        self.page_info.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self.page_info.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')};")
 
         self.prev_btn = TransparentToolButton(FluentIcon.LEFT_ARROW, self)
         self.prev_btn.clicked.connect(self._prev_page)
@@ -464,7 +465,7 @@ class TranslationsScreen(ResponsiveWidget):
                 border-bottom: 1px solid {border_color};
             }}
             QTableWidget::item:selected {{
-                background-color: {get_selection_bg()};
+                background-color: {get_selection_bg(is_dark)};
                 color: {text_color};
             }}
             QTableWidget::item:hover {{
@@ -824,15 +825,11 @@ class TranslationsScreen(ResponsiveWidget):
 
     def _on_theme_changed(self):
         """Handle theme change event"""
-        is_dark = isDarkTheme()
-        bg_color = get_surface_color(is_dark, 'canvas')
-
-        self.setStyleSheet(f"""
-            TranslationsScreen {{
-                background-color: {bg_color};
-                font-family: {FONTS['family']};
-            }}
-        """)
-
-        # Update table theme
+        apply_screen_theme(
+            self,
+            "TranslationsScreen",
+            scroll=self.scroll,
+            content=self.content_widget,
+        )
         self._update_table_theme()
+        enforce_transparent_labels(self)

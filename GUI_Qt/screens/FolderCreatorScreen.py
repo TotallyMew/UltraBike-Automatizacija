@@ -51,7 +51,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
 from GUI_Qt.components.dialogs import DestructiveActionDialog
 from GUI_Qt.styles.theme_config import (
-    COLORS, FONTS, RADII, PADDINGS, SIZES, get_surface_color, rgba_from_hex,
+    COLORS, FONTS, RADII, PADDINGS, SIZES, get_surface_color, get_text_color, rgba_from_hex,
 )
 from GUI_Qt.styles.screen_theme import (
     PAGE_MARGINS,
@@ -65,6 +65,7 @@ from GUI_Qt.styles.screen_theme import (
     get_responsive_margins,
     get_responsive_spacing,
     apply_screen_theme,
+    enforce_transparent_labels,
 )
 
 
@@ -205,17 +206,47 @@ class FolderCreatorScreen(ResponsiveWidget):
 
     def _apply_theme(self):
         is_dark = isDarkTheme()
-        bg_color = get_surface_color(is_dark, 'canvas')
-        self.setStyleSheet(f"""
-            FolderCreatorScreen {{
-                background-color: {bg_color};
-                font-family: {FONTS['family']};
-            }}
-        """)
+        apply_screen_theme(
+            self,
+            "FolderCreatorScreen",
+            scroll=self.__dict__.get("scroll"),
+            content=self.__dict__.get("content_widget"),
+        )
 
         panel_bg = get_surface_color(is_dark)
         panel_border = COLORS['border_dark'] if is_dark else COLORS['border_light']
+        primary_text = get_text_color(is_dark, 'primary')
+        secondary_text = get_text_color(is_dark, 'secondary')
         item_divider = rgba_from_hex(COLORS['text_white'], 0.08) if is_dark else rgba_from_hex(COLORS['space_indigo'], 0.10)
+
+        panel_style = f"""
+            CardWidget {{
+                background-color: {panel_bg};
+                color: {primary_text};
+                border: 1px solid {panel_border};
+                border-radius: {RADII['md']}px;
+            }}
+        """
+        for panel_name in ('left_panel', 'right_panel'):
+            panel = getattr(self, panel_name, None)
+            if panel is not None:
+                panel.setStyleSheet(panel_style)
+
+        for label_name in ('title_label', 'subtitle_label', 'path_label'):
+            label = getattr(self, label_name, None)
+            if label is not None:
+                label.setStyleSheet(
+                    f"color: {primary_text}; background: transparent; border: none;"
+                )
+        for label_name in (
+            'list_title', 'list_hint', 'preview_title', 'preview_hint', 'path_caption'
+        ):
+            label = getattr(self, label_name, None)
+            if label is not None:
+                weight = 'font-weight: 600;' if label_name in ('list_title', 'preview_title') else ''
+                label.setStyleSheet(
+                    f"color: {secondary_text}; {weight} background: transparent; border: none;"
+                )
 
         if hasattr(self, 'products_list') and self.products_list is not None:
             self.products_list.setStyleSheet(f"""
@@ -251,6 +282,8 @@ class FolderCreatorScreen(ResponsiveWidget):
                     padding: {PADDINGS['tree_item']};
                 }}
             """)
+
+        enforce_transparent_labels(self)
 
     def _init_ui(self):
         self._apply_theme()
@@ -305,7 +338,7 @@ class FolderCreatorScreen(ResponsiveWidget):
 
         list_header = QHBoxLayout()
         self.list_title = BodyLabel("")
-        self.list_title.setStyleSheet(f"font-weight: 600; color: {COLORS['text_secondary']}; background: transparent; background-color: transparent;")
+        self.list_title.setStyleSheet(f"font-weight: 600; color: {get_text_color(isDarkTheme(), 'secondary')}; background: transparent; background-color: transparent;")
 
         self.scrape_btn = PrimaryPushButton("")
         self.scrape_btn.setIcon(FluentIcon.SYNC.icon())
@@ -321,7 +354,7 @@ class FolderCreatorScreen(ResponsiveWidget):
         left_layout.addWidget(self.products_list, 1)
 
         self.list_hint = CaptionLabel("")
-        self.list_hint.setStyleSheet(f"color: {COLORS['text_secondary']}; background: transparent; background-color: transparent;")
+        self.list_hint.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')}; background: transparent; background-color: transparent;")
         left_layout.addWidget(self.list_hint)
 
         self.left_panel = left_panel
@@ -342,11 +375,11 @@ class FolderCreatorScreen(ResponsiveWidget):
 
         # Preview
         self.preview_title = BodyLabel("")
-        self.preview_title.setStyleSheet(f"font-weight: 600; color: {COLORS['text_secondary']}; background: transparent; background-color: transparent;")
+        self.preview_title.setStyleSheet(f"font-weight: 600; color: {get_text_color(isDarkTheme(), 'secondary')}; background: transparent; background-color: transparent;")
         right_layout.addWidget(self.preview_title)
 
         self.preview_hint = CaptionLabel("")
-        self.preview_hint.setStyleSheet(f"color: {COLORS['text_secondary']}; background: transparent; background-color: transparent;")
+        self.preview_hint.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')}; background: transparent; background-color: transparent;")
         right_layout.addWidget(self.preview_hint)
 
         self.preview_tree = QTreeWidget()
@@ -360,7 +393,7 @@ class FolderCreatorScreen(ResponsiveWidget):
         # Path chooser card-like block
         self.path_label = BodyLabel("")
         self.path_caption = CaptionLabel("")
-        self.path_caption.setStyleSheet(f"color: {COLORS['text_secondary']}; background: transparent; background-color: transparent;")
+        self.path_caption.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')}; background: transparent; background-color: transparent;")
         right_layout.addWidget(self.path_label)
         right_layout.addWidget(self.path_caption)
 
@@ -404,12 +437,7 @@ class FolderCreatorScreen(ResponsiveWidget):
         main_layout.addLayout(self.content_layout, 1)
 
         # Apply theme
-        apply_screen_theme(
-            self,
-            "FolderCreatorScreen",
-            scroll=self.scroll,
-            content=self.content_widget
-        )
+        self._apply_theme()
 
         self.retranslate_ui()
 

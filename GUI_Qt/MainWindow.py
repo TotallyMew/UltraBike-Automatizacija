@@ -6,7 +6,7 @@ Manages navigation, state, and screen switching
 from PySide6.QtWidgets import QWidget, QStackedWidget, QHBoxLayout, QApplication, QMessageBox
 from PySide6.QtCore import Qt, QTimer, QThread
 from PySide6.QtGui import QFont, QFontMetrics, QColor, QKeySequence, QShortcut
-from qfluentwidgets import FluentWindow, NavigationItemPosition, FluentIcon, MessageBox, InfoBar, InfoBarPosition
+from qfluentwidgets import FluentWindow, NavigationItemPosition, FluentIcon, MessageBox, InfoBar, InfoBarPosition, isDarkTheme
 
 import threading
 import time
@@ -518,7 +518,7 @@ class MainWindow(FluentWindow):
             version_icon.setIcon(FluentIcon.APPLICATION)
             version_icon.setFixedSize(SIZES['icon_xs'], SIZES['icon_xs'])
             try:
-                version_icon.setStyleSheet(f"color: {COLORS['text_secondary']};")
+                version_icon.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')};")
             except Exception:
                 pass
             version_layout.addWidget(version_icon, 0, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
@@ -527,7 +527,7 @@ class MainWindow(FluentWindow):
             version_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             try:
                 version_label.setStyleSheet(
-                    f"color: {COLORS['text_secondary']};"
+                    f"color: {get_text_color(isDarkTheme(), 'secondary')};"
                 )
             except Exception:
                 pass
@@ -840,11 +840,57 @@ class MainWindow(FluentWindow):
     def _on_global_theme_changed(self):
         """Re-apply theme-dependent window chrome after theme switches."""
         try:
+            from qfluentwidgets import isDarkTheme
+            from GUI_Qt.styles.theme_config import set_mode_aware_theme
+
+            # Normally Settings primes the accent before changing mode. This is
+            # also a fallback for theme changes initiated elsewhere.
+            set_mode_aware_theme(isDarkTheme(), lazy=True)
+        except Exception:
+            pass
+        try:
+            from GUI_Qt.styles.global_styles import get_global_stylesheet
+
+            app = QApplication.instance()
+            if app is not None:
+                stylesheet = get_global_stylesheet()
+                if app.styleSheet() != stylesheet:
+                    app.setStyleSheet(stylesheet)
+        except Exception:
+            pass
+        try:
             self.update_container_backgrounds()
         except Exception:
             pass
         self._apply_titlebar_theme()
         self._sync_navigation_for_width(force=True)
+
+        # Restarting one owned timer coalesces any external rapid theme signals
+        # and cannot leave callbacks behind after this window is destroyed.
+        timer = getattr(self, "_theme_polish_timer", None)
+        if timer is None:
+            timer = QTimer(self)
+            timer.setSingleShot(True)
+            timer.timeout.connect(self._polish_all_screens_after_theme)
+            self._theme_polish_timer = timer
+        timer.start(0)
+
+    def _polish_all_screens_after_theme(self) -> None:
+        """Finalize inherited palettes after all page-specific handlers."""
+        try:
+            stack = getattr(self, "content_stack", None)
+            count = stack.count() if stack is not None else 0
+        except RuntimeError:
+            return
+        for index in range(count):
+            try:
+                screen = stack.widget(index)
+                if screen is None:
+                    continue
+                apply_screen_palette(screen)
+                enforce_transparent_labels(screen)
+            except RuntimeError:
+                return
 
     def _init_shortcuts(self) -> None:
         """Install a compact set of predictable desktop keyboard shortcuts."""
@@ -1618,8 +1664,9 @@ class MainWindow(FluentWindow):
 
     def _apply_saved_theme(self):
         """Apply saved theme from settings"""
-        from qfluentwidgets import Theme, isDarkTheme, setTheme
+        from qfluentwidgets import isDarkTheme
         from GUI_Qt.styles.global_styles import get_global_stylesheet
+        from GUI_Qt.styles.theme_config import set_mode_aware_theme
 
         theme = self.settings.get('theme', 'light')
         desired_dark = theme == 'dark'
@@ -1627,7 +1674,7 @@ class MainWindow(FluentWindow):
         # when setTheme() receives the already-active theme. Avoid that costly
         # no-op, especially when this helper is called after Settings preview.
         if desired_dark != isDarkTheme():
-            setTheme(Theme.DARK if desired_dark else Theme.LIGHT)
+            set_mode_aware_theme(desired_dark, lazy=True)
 
         # Apply global stylesheet for consistent styling (set at app-level so it
         # reliably affects all widgets/screens).

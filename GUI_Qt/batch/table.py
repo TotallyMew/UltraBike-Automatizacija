@@ -74,6 +74,7 @@ from GUI_Qt.styles.theme_config import (
     RADII,
     SIZES,
     SPACING,
+    get_text_color,
 )
 from GUI_Qt.styles.screen_theme import (
     PAGE_MARGINS,
@@ -263,7 +264,7 @@ class BatchTableController:
 
         # Status
         status_lbl = BodyLabel("")
-        status_lbl.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        status_lbl.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')};")
         self.table.setCellWidget(row, COL["status"], self._wrap_widget(status_lbl, row, COL["status"]))
 
         # Error

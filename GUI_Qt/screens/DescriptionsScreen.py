@@ -152,7 +152,7 @@ class DescriptionsScreen(ResponsiveWidget):
         list_header = QHBoxLayout()
         self.list_title = BodyLabel("")
         list_title = self.list_title
-        list_title.setStyleSheet(f"font-weight: 600; color: {COLORS['text_secondary']}; background: transparent; background-color: transparent;")
+        list_title.setStyleSheet(f"font-weight: 600; color: {get_text_color(isDarkTheme(), 'secondary')}; background: transparent; background-color: transparent;")
 
         self.refresh_btn = TransparentToolButton(FluentIcon.SYNC, self)
         self.refresh_btn.setFixedSize(SIZES['icon_action'], SIZES['icon_action'])
@@ -521,7 +521,7 @@ class DescriptionsScreen(ResponsiveWidget):
             }}
             QTabBar::tab {{
                 background-color: {COLORS['bg_alt_dark'] if is_dark else COLORS['bg_light']};
-                color: {COLORS['text_secondary'] if not is_dark else COLORS['text_primary_dark']};
+                color: {get_text_color(is_dark, 'secondary')};
                 padding: {PADDINGS['tab']};
                 border: 1px solid {COLORS['border_dark'] if is_dark else COLORS['border_light']};
                 border-bottom: none;

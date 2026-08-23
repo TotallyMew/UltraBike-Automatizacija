@@ -65,8 +65,10 @@ from GUI_Qt.styles.theme_config import (
     RADII,
     get_accent_colors,
     get_selection_bg,
+    get_status_text_color,
     get_subtle_border,
     get_subtle_item_hover_bg,
+    get_text_color,
     rgba_from_hex,
 )
 from GUI_Qt.widgets import enable_table_copy
@@ -156,8 +158,19 @@ class OrbeaScreen(ResponsiveWidget):
         self._load_paths()
         self.retranslate_ui()
         self._update_action_states()
-        qconfig.themeChangedFinished.connect(self._update_table_theme)
+        qconfig.themeChangedFinished.connect(self._on_theme_changed)
         QTimer.singleShot(0, self._auto_refresh_filters)
+
+    def _on_theme_changed(self):
+        apply_screen_theme(
+            self, "OrbeaScreen", scroll=self._scroll, content=self._container
+        )
+        self._subtitle.setStyleSheet(
+            f"color: {get_text_color(isDarkTheme(), 'secondary')}; "
+            "background: transparent; border: none;"
+        )
+        self._update_table_theme()
+        enforce_transparent_labels(self)
 
     # ------------------------------------------------------------------ UI
 
@@ -182,7 +195,7 @@ class OrbeaScreen(ResponsiveWidget):
         title_col.setSpacing(2)
         self._title = TitleLabel("")
         self._subtitle = CaptionLabel("")
-        self._subtitle.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self._subtitle.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')};")
         title_col.addWidget(self._title)
         title_col.addWidget(self._subtitle)
         header.addLayout(title_col)
@@ -309,7 +322,7 @@ class OrbeaScreen(ResponsiveWidget):
         self._downloads_hint.setVisible(False)
         self._downloads_hint.setWordWrap(True)
         self._downloads_hint.setStyleSheet(
-            f"color: {COLORS['text_secondary']};"
+            f"color: {get_text_color(isDarkTheme(), 'secondary')};"
         )
         layout.addWidget(self._downloads_hint)
 
@@ -329,7 +342,7 @@ class OrbeaScreen(ResponsiveWidget):
         self._filters_title = BodyLabel("")
         self._filters_title.setStyleSheet("font-size: 15px; font-weight: 600;")
         self._filter_state_label = CaptionLabel("")
-        self._filter_state_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self._filter_state_label.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')};")
         self._refresh_btn = PushButton(FluentIcon.SYNC, "")
         self._refresh_btn.clicked.connect(self.refresh_filter_options)
         top.addWidget(self._filters_title)
@@ -449,7 +462,7 @@ class OrbeaScreen(ResponsiveWidget):
         self._stage_label = BodyLabel("")
         self._stage_label.setStyleSheet("font-size: 15px; font-weight: 600;")
         self._eta_label = CaptionLabel("")
-        self._eta_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self._eta_label.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')};")
         self._progress_stop_btn = PushButton(FluentIcon.CLOSE, "")
         self._progress_stop_btn.setObjectName("orbeaDangerAction")
         self._progress_stop_btn.clicked.connect(self._on_start_stop)
@@ -463,7 +476,7 @@ class OrbeaScreen(ResponsiveWidget):
         self._progress.setValue(0)
         layout.addWidget(self._progress)
         self._progress_label = CaptionLabel("")
-        self._progress_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self._progress_label.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')};")
         layout.addWidget(self._progress_label)
 
         stats = QGridLayout()
@@ -477,7 +490,7 @@ class OrbeaScreen(ResponsiveWidget):
             stat_layout.setContentsMargins(8, 4, 8, 4)
             stat_layout.setSpacing(2)
             label = CaptionLabel("")
-            label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+            label.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')};")
             value = BodyLabel("0")
             value.setStyleSheet("font-size: 20px; font-weight: 600;")
             stat_layout.addWidget(label)
@@ -499,7 +512,7 @@ class OrbeaScreen(ResponsiveWidget):
         self._description_title = BodyLabel("")
         self._description_title.setStyleSheet("font-size: 15px; font-weight: 600;")
         self._description_subtitle = CaptionLabel("")
-        self._description_subtitle.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self._description_subtitle.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')};")
         layout.addWidget(self._description_title)
         layout.addWidget(self._description_subtitle)
 
@@ -546,7 +559,7 @@ class OrbeaScreen(ResponsiveWidget):
         self._description_progress.setValue(0)
         layout.addWidget(self._description_progress)
         self._description_progress_label = CaptionLabel("")
-        self._description_progress_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self._description_progress_label.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')};")
         layout.addWidget(self._description_progress_label)
 
         self._description_log = PlainTextEdit()
@@ -570,7 +583,7 @@ class OrbeaScreen(ResponsiveWidget):
         self._table_image_subtitle = CaptionLabel("")
         self._table_image_subtitle.setWordWrap(True)
         self._table_image_subtitle.setStyleSheet(
-            f"color: {COLORS['text_secondary']};"
+            f"color: {get_text_color(isDarkTheme(), 'secondary')};"
         )
         layout.addWidget(self._table_image_title)
         layout.addWidget(self._table_image_subtitle)
@@ -587,7 +600,7 @@ class OrbeaScreen(ResponsiveWidget):
         self._table_image_urls_hint = CaptionLabel("")
         self._table_image_urls_hint.setWordWrap(True)
         self._table_image_urls_hint.setStyleSheet(
-            f"color: {COLORS['text_secondary']};"
+            f"color: {get_text_color(isDarkTheme(), 'secondary')};"
         )
         layout.addWidget(self._table_image_urls_hint)
 
@@ -659,7 +672,7 @@ class OrbeaScreen(ResponsiveWidget):
         self._table_image_progress_label = CaptionLabel("")
         self._table_image_progress_label.setWordWrap(True)
         self._table_image_progress_label.setStyleSheet(
-            f"color: {COLORS['text_secondary']};"
+            f"color: {get_text_color(isDarkTheme(), 'secondary')};"
         )
         layout.addWidget(self._table_image_progress_label)
 
@@ -690,7 +703,7 @@ class OrbeaScreen(ResponsiveWidget):
         self._photo_title.setStyleSheet("font-size: 15px; font-weight: 600;")
         self._photo_subtitle = CaptionLabel("")
         self._photo_subtitle.setWordWrap(True)
-        self._photo_subtitle.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self._photo_subtitle.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')};")
         layout.addWidget(self._photo_title)
         layout.addWidget(self._photo_subtitle)
 
@@ -703,7 +716,7 @@ class OrbeaScreen(ResponsiveWidget):
         layout.addWidget(self._photo_url_edit)
         self._photo_urls_hint = CaptionLabel("")
         self._photo_urls_hint.setWordWrap(True)
-        self._photo_urls_hint.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self._photo_urls_hint.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')};")
         layout.addWidget(self._photo_urls_hint)
 
         output_row = QGridLayout()
@@ -743,7 +756,7 @@ class OrbeaScreen(ResponsiveWidget):
         layout.addWidget(self._photo_progress)
         self._photo_progress_label = CaptionLabel("")
         self._photo_progress_label.setWordWrap(True)
-        self._photo_progress_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self._photo_progress_label.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')};")
         layout.addWidget(self._photo_progress_label)
 
         self._photo_log = PlainTextEdit()
@@ -763,7 +776,7 @@ class OrbeaScreen(ResponsiveWidget):
 
     def _build_results_table(self):
         self._results_label = CaptionLabel("")
-        self._results_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self._results_label.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')};")
         toolbar = QGridLayout()
         toolbar.setHorizontalSpacing(ROW_SPACING)
         toolbar.setVerticalSpacing(ROW_SPACING)
@@ -2183,7 +2196,8 @@ class OrbeaScreen(ResponsiveWidget):
                 item = QTableWidgetItem(value)
                 if column == 2:
                     lower = value.lower()
-                    item.setForeground(QColor(COLORS["success"] if "code" in lower or lower == "match" else COLORS["warning"]))
+                    status_role = "success" if "code" in lower or lower == "match" else "warning"
+                    item.setForeground(QColor(get_status_text_color(status_role, isDarkTheme())))
                 self._table.setItem(row_index, column, item)
         self._table.setUpdatesEnabled(True)
         self._results_label.setText(
@@ -2648,6 +2662,7 @@ class OrbeaScreen(ResponsiveWidget):
         border = table["border_dark"] if dark else table["border_light"]
         text = COLORS["text_primary_dark"] if dark else COLORS["text_primary_light"]
         muted = COLORS["text_secondary_dark"] if dark else COLORS["text_secondary_light"]
+        disabled_text = COLORS["text_disabled_dark"] if dark else COLORS["text_disabled_light"]
         header_bg = table["header_bg_dark" if dark else "header_bg_light"]
         header_text = table["header_text_dark" if dark else "header_text_light"]
         accent_colors = get_accent_colors(dark)
@@ -2658,13 +2673,13 @@ class OrbeaScreen(ResponsiveWidget):
         accent_soft = rgba_from_hex(accent, 0.16 if dark else 0.07)
         outline = get_subtle_border(dark)
         hover = get_subtle_item_hover_bg(dark)
-        disabled_bg = COLORS["bg_alt_dark"] if dark else "#E6E9ED"
+        disabled_bg = COLORS["disabled_surface_dark"] if dark else COLORS["disabled_surface_light"]
         danger = COLORS["error_text_dark"] if dark else COLORS["error_text_light"]
 
         self._section_tabs.setStyleSheet(f"""
             QTabBar::tab {{
                 background: transparent;
-                color: {muted};
+                color: {disabled_text};
                 padding: {PADDINGS['tab']};
                 border: none;
                 border-bottom: 3px solid transparent;
@@ -2723,7 +2738,7 @@ class OrbeaScreen(ResponsiveWidget):
             QTableWidget::viewport {{ background: {bg}; border-radius: {RADII['md']}px; }}
             QTableWidget::item {{ padding: {PADDINGS['table_cell']}; border: none; border-bottom: 1px solid {border}; }}
             QTableWidget::item:hover {{ background: {hover}; }}
-            QTableWidget::item:selected {{ background: {get_selection_bg()}; color: {text}; }}
+            QTableWidget::item:selected {{ background: {get_selection_bg(dark)}; color: {text}; }}
             QHeaderView::section {{ background: {header_bg}; color: {header_text}; padding: {PADDINGS['table_header']}; border: none; font-weight: 600; font-size: {FONTS['size_body_sm']}; }}
         """)
         self._style_filter_buttons()
