@@ -12,12 +12,13 @@ from __future__ import annotations
 
 from typing import Optional
 
-from PySide6.QtCore import QEvent, QObject, Qt
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QLabel, QSizePolicy, QWidget
 
 from qfluentwidgets import ScrollArea, isDarkTheme
 
-from GUI_Qt.styles.theme_config import COLORS, FONTS, SPACING, SIZES
+from GUI_Qt.styles.theme_config import COLORS, FONTS, SPACING, SIZES, get_surface_color
 
 
 # =====================
@@ -74,29 +75,8 @@ NAV_VERSION_MARGINS = (SPACING["base"], SPACING["xs"], SPACING["base"], 6)
 NAV_VERSION_SPACING = 6
 
 
-class _TransparentLabelEventFilter(QObject):
-    """Keeps label widgets transparent even if QFluent re-styles them."""
-
-    def __init__(self, owner: QWidget):
-        super().__init__(owner)
-        self._owner = owner
-
-    def eventFilter(self, watched, event):  # noqa: N802 (Qt naming)
-        if isinstance(watched, QLabel):
-            t = event.type()
-            if t in (
-                QEvent.Type.Polish,
-                QEvent.Type.StyleChange,
-                QEvent.Type.PaletteChange,
-                QEvent.Type.Show,
-                QEvent.Type.DynamicPropertyChange,
-            ):
-                _normalize_label_widget(watched)
-        return super().eventFilter(watched, event)
-
-
 def _normalize_label_widget(label: QLabel) -> None:
-    """Apply the strongest safe transparency settings to a label."""
+    """Apply label transparency without re-entering Qt style events."""
 
     try:
         # Some labels (badges/counters) intentionally use backgrounds.
@@ -105,7 +85,6 @@ def _normalize_label_widget(label: QLabel) -> None:
 
         label.setAutoFillBackground(False)
         label.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
-        label.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
 
         current = label.styleSheet() or ""
         override = "\n".join(
@@ -134,18 +113,9 @@ def enforce_transparent_labels(root: QWidget) -> None:
     try:
         from qfluentwidgets import CheckBox
 
-        flt = getattr(root, "_ub_transparent_label_filter", None)
-        if flt is None:
-            flt = _TransparentLabelEventFilter(root)
-            setattr(root, "_ub_transparent_label_filter", flt)
-
         # Normalize all QLabel widgets (includes BodyLabel, CaptionLabel, etc.)
         for label in root.findChildren(QLabel):
             _normalize_label_widget(label)
-            try:
-                label.installEventFilter(flt)
-            except Exception:
-                pass
 
         # Also normalize all CheckBox widgets
         for checkbox in root.findChildren(CheckBox):
@@ -176,8 +146,24 @@ def enforce_responsive_text(root: QWidget) -> None:
         return
 
 
+def apply_screen_palette(root: QWidget) -> None:
+    """Give every page a theme canvas without replacing local stylesheets.
+
+    This is a fallback for older and inherited pages that do not call
+    ``apply_screen_theme`` themselves. Explicit card and table styles still win.
+    """
+    try:
+        color = QColor(get_surface_color(isDarkTheme(), 'canvas'))
+        palette = root.palette()
+        palette.setColor(QPalette.ColorRole.Window, color)
+        root.setPalette(palette)
+        root.setAutoFillBackground(True)
+    except Exception:
+        return
+
+
 def get_screen_background() -> str:
-    return COLORS["space_indigo"] if isDarkTheme() else COLORS["platinum"]
+    return get_surface_color(isDarkTheme(), 'canvas')
 
 
 def get_responsive_margins(breakpoint: str) -> tuple:
@@ -253,11 +239,9 @@ def apply_screen_theme(
 
     bg_color = get_screen_background()
 
-    # Ensure the widget actually paints its background.
-    try:
-        screen.setAutoFillBackground(True)
-    except Exception:
-        pass
+    # Ensure the widget actually paints its background, including when a local
+    # selector stops matching after a subclass is introduced.
+    apply_screen_palette(screen)
 
     label_rules = ""
     if transparent_labels or label_radius_px is not None:

@@ -95,7 +95,31 @@ class CaptureAvailabilityTests(unittest.TestCase):
         ), patch.object(
             downloader,
             "capture_geometry",
-            return_value=((640, 480), "Low", True),
+            return_value=(
+                (640, 480),
+                "Low",
+                True,
+                [
+                    {
+                        "size": "XS",
+                        "wheel_size": '27.5"',
+                        "filename": "geometry-xs.png",
+                        "status": "downloaded",
+                        "dimensions": [640, 480],
+                        "position": "Low",
+                        "error": "",
+                    },
+                    {
+                        "size": "M",
+                        "wheel_size": '29"',
+                        "filename": "geometry-m.png",
+                        "status": "downloaded",
+                        "dimensions": [640, 480],
+                        "position": "Low",
+                        "error": "",
+                    },
+                ],
+            ),
         ) as geometry_capture:
             result = self.capture(driver)
 
@@ -103,8 +127,56 @@ class CaptureAvailabilityTests(unittest.TestCase):
         self.assertEqual(result["size_guide_status"], "not_available")
         self.assertFalse(result["retryable"])
         self.assertEqual(result["geometry_position"], "Low")
+        self.assertTrue(result["geometry_size_selector_supported"])
+        self.assertEqual(
+            [variant["size"] for variant in result["geometry_variants"]],
+            ["XS", "M"],
+        )
         self.assertEqual(geometry_capture.call_args.kwargs["selector_timeout"], 5.0)
         self.assertEqual(geometry_capture.call_args.args[2], 8.0)
+
+    def test_one_failed_geometry_size_keeps_the_page_retryable(self) -> None:
+        driver = FakeDriver()
+        with patch.object(
+            downloader,
+            "discover_table_controls",
+            return_value={"geometry": object(), "size_guide": None},
+        ), patch.object(
+            downloader,
+            "capture_geometry",
+            return_value=(
+                (640, 480),
+                "",
+                False,
+                [
+                    {
+                        "size": "XS",
+                        "filename": "geometry-xs.png",
+                        "status": "downloaded",
+                        "error": "",
+                    },
+                    {
+                        "size": "M",
+                        "filename": "geometry-m.png",
+                        "status": "transient_error",
+                        "error": "table did not update",
+                    },
+                ],
+            ),
+        ):
+            result = self.capture(driver)
+
+        self.assertEqual(result["geometry_status"], "transient_error")
+        self.assertFalse(result["geometry_ok"])
+        self.assertTrue(result["retryable"])
+        self.assertIn("geometry M", result["geometry_error"])
+
+    def test_geometry_variant_filename_is_marked_with_the_size(self) -> None:
+        path = downloader.geometry_variant_path(
+            self.root / "geometry.png", "S / M"
+        )
+
+        self.assertEqual(path.name, "geometry-s-m.png")
 
     def test_navigation_failure_is_retryable_for_both_tables(self) -> None:
         driver = FakeDriver(RuntimeError("network down"))
@@ -213,6 +285,17 @@ class CheckpointStatusTests(unittest.TestCase):
         self.assertFalse(downloader.record_needs_processing(self.record))
         self.assertTrue(geometry.exists())
         self.assertTrue(size.exists())
+
+    def test_previous_single_geometry_capture_is_scheduled_for_upgrade(self) -> None:
+        self.record["availability_probe_version"] = (
+            downloader.AVAILABILITY_PROBE_VERSION
+        )
+        self.record["geometry_capture_version"] = (
+            downloader.GEOMETRY_CAPTURE_VERSION - 1
+        )
+        self.record["geometry_status"] = "downloaded"
+
+        self.assertTrue(downloader.record_needs_processing(self.record))
 
     def test_cli_allows_only_one_retry(self) -> None:
         with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):

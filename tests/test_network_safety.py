@@ -1,8 +1,14 @@
 import os
+import tempfile
 import unittest
 from unittest.mock import patch
 
-from Utilities.Updater import download_to_temp, fetch_update_manifest
+from Utilities.Updater import (
+    UpdateManifest,
+    download_to_temp,
+    download_verified_update,
+    fetch_update_manifest,
+)
 from Utilities.URLHandler import URLHandler
 
 
@@ -79,6 +85,20 @@ class NetworkSafetyTest(unittest.TestCase):
                     os.remove(path)
                 except OSError:
                     pass
+
+    def test_hash_mismatch_removes_downloaded_installer(self):
+        handle, path = tempfile.mkstemp(suffix=".exe")
+        os.write(handle, b"installer")
+        os.close(handle)
+        manifest = UpdateManifest(
+            version="9.0.0",
+            url="https://updates.example/app.exe",
+            sha256="0" * 64,
+        )
+        with patch("Utilities.Updater.download_to_temp", return_value=path):
+            with self.assertRaisesRegex(RuntimeError, "SHA256"):
+                download_verified_update(manifest, "setup.exe")
+        self.assertFalse(os.path.exists(path))
 
 
 if __name__ == "__main__":

@@ -2,9 +2,10 @@
 """Download Orbea geometry and centimetre size-guide tables as PNG images.
 
 The script reads the ``Orbea URL`` column from the Pimbo match workbook,
-deduplicates repeated URLs, and stores one pair of images per bike page. Runs
-are resumable: a checkpoint is updated after every URL and already-valid PNGs
-are not downloaded again unless ``--force`` or ``--fresh`` is used.
+deduplicates repeated URLs, and stores one labelled geometry image per available
+frame size plus the size guide for each bike page. Runs are resumable: a
+checkpoint is updated after every URL and already-valid PNGs are not downloaded
+again unless ``--force`` or ``--fresh`` is used.
 """
 
 from __future__ import annotations
@@ -31,7 +32,7 @@ from xml.etree import ElementTree as ET
 
 
 SCRIPT_VERSION = 1
-GEOMETRY_CAPTURE_VERSION = 2
+GEOMETRY_CAPTURE_VERSION = 3
 AVAILABILITY_PROBE_VERSION = 2
 DEFAULT_SHEET = "Matches"
 GEOMETRY_CAPTION = "Geometry chart by size"
@@ -604,6 +605,145 @@ def geometry_position_details(driver, table) -> tuple[Any | None, dict[str, Any]
     return None, {"value": "", "text": "", "options": []}
 
 
+def geometry_size_details(driver, table) -> tuple[Any | None, dict[str, Any]]:
+    """Return the frame-size selector and every geometry size it offers.
+
+    Orbea currently labels this selector ``TALLA`` even on some English pages.
+    Identifying it as the non-POSITION selector keeps the logic independent of
+    that translated label and supports pages that also expose HIGH/LOW geometry.
+    """
+
+    from selenium.webdriver.common.by import By
+
+    root = driver.execute_script(
+        "return arguments[0].closest('#geometry-data');", table
+    )
+    if root is None:
+        return None, {"value": "", "text": "", "options": []}
+
+    for select in root.find_elements(By.CSS_SELECTOR, "select"):
+        details = driver.execute_script(
+            """
+            const select = arguments[0];
+            const group = select.closest('.select-container') || select.parentElement;
+            const label = group?.querySelector('label')?.textContent?.trim() || '';
+            const options = Array.from(select.options).map(option => ({
+              value: option.value,
+              text: option.textContent.trim(),
+              selected: option.selected
+            }));
+            const selected = select.options[select.selectedIndex];
+            return {
+              label,
+              value: select.value || '',
+              text: selected?.textContent?.trim() || '',
+              options
+            };
+            """,
+            select,
+        )
+        option_names = {
+            clean_text(option.get("text")).casefold()
+            for option in details.get("options", [])
+        }
+        is_position = details.get("label", "").casefold() == "position" or {
+            "low",
+            "high",
+        }.issubset(option_names)
+        if not is_position and details.get("options"):
+            return select, details
+
+    return None, {"value": "", "text": "", "options": []}
+
+
+def set_geometry_size(
+    driver, table, requested_value: str, timeout: float
+) -> tuple[Any, str]:
+    """Select one frame size and return the refreshed geometry table."""
+
+    from selenium.webdriver.support.ui import WebDriverWait
+
+    select, details = geometry_size_details(driver, table)
+    if select is None:
+        raise RuntimeError("The geometry SIZE selector is not available")
+
+    target = clean_text(requested_value)
+    matching_option = next(
+        (
+            option
+            for option in details.get("options", [])
+            if clean_text(option.get("value")).casefold() == target.casefold()
+            or clean_text(option.get("text")).casefold() == target.casefold()
+        ),
+        None,
+    )
+    if matching_option is None:
+        raise RuntimeError(f"The geometry SIZE selector does not offer {target}")
+
+    target_value = clean_text(matching_option.get("value"))
+    if clean_text(details.get("value")).casefold() != target_value.casefold():
+        driver.execute_script(
+            """
+            const select = arguments[0];
+            const value = arguments[1];
+            if (select.tomselect) {
+              select.tomselect.setValue(value);
+            } else {
+              select.value = value;
+              select.dispatchEvent(new Event('input', {bubbles: true}));
+              select.dispatchEvent(new Event('change', {bubbles: true}));
+            }
+            """,
+            select,
+            target_value,
+        )
+
+        def size_changed(_current) -> bool:
+            try:
+                current_table = wait_for_geometry_table(driver, 1.0)
+                _select, current = geometry_size_details(driver, current_table)
+                return (
+                    clean_text(current.get("value")).casefold()
+                    == target_value.casefold()
+                )
+            except Exception:
+                return False
+
+        WebDriverWait(driver, timeout).until(
+            size_changed,
+            message=f"The geometry table did not switch to size {target}",
+        )
+        # Orbea updates the table just after Tom Select changes its value.
+        time.sleep(0.6)
+        table = wait_for_geometry_table(driver, timeout)
+
+    _select, final_details = geometry_size_details(driver, table)
+    actual = clean_text(final_details.get("text") or final_details.get("value"))
+    if clean_text(final_details.get("value")).casefold() != target_value.casefold():
+        raise RuntimeError(
+            f"Expected geometry size {target}, got {actual or 'blank'}"
+        )
+    return table, actual or clean_text(matching_option.get("text")) or target
+
+
+def geometry_variant_path(destination: Path, size_label: str) -> Path:
+    """Return a visibly size-labelled filename such as geometry-xs.png."""
+
+    size_slug = slugify(size_label, "size")
+    return destination.with_name(
+        f"{destination.stem}-{size_slug}{destination.suffix}"
+    )
+
+
+def geometry_wheel_size(table) -> str:
+    """Read the wheel-size heading paired with the selected frame size."""
+
+    from selenium.webdriver.common.by import By
+
+    headers = table.find_elements(By.CSS_SELECTOR, "thead th")
+    return clean_text(headers[-1].text) if len(headers) > 1 else ""
+
+
 def set_geometry_position(
     driver, table, requested_position: str, timeout: float
 ) -> tuple[Any, str, bool]:
@@ -815,27 +955,125 @@ def capture_geometry(
     *,
     control=None,
     selector_timeout: float | None = None,
-) -> tuple[tuple[int, int], str, bool]:
+) -> tuple[tuple[int, int], str, bool, list[dict[str, Any]]]:
+    """Capture one geometry PNG per available frame size.
+
+    The legacy ``geometry.png`` is retained as a compatibility copy of the
+    first successful size. Every authoritative capture is saved with its size
+    in the filename and includes the visible selector in the screenshot.
+    """
+
     if control is None:
         click_named_button(driver, "View geometry", timeout)
     else:
         click_control(driver, control)
     table = wait_for_geometry_table(driver, timeout)
+    effective_selector_timeout = (
+        selector_timeout if selector_timeout is not None else timeout
+    )
     try:
-        table, actual_position, has_position_selector = set_geometry_position(
-            driver,
-            table,
-            requested_position,
-            selector_timeout if selector_timeout is not None else timeout,
-        )
-        capture_target = table
-        if has_position_selector:
+        _size_select, size_details = geometry_size_details(driver, table)
+        size_options = [
+            option
+            for option in size_details.get("options", [])
+            if clean_text(option.get("value") or option.get("text"))
+        ]
+        if not size_options:
+            table, actual_position, has_position_selector = set_geometry_position(
+                driver,
+                table,
+                requested_position,
+                effective_selector_timeout,
+            )
             capture_target = driver.execute_script(
                 "return arguments[0].closest('#geometry-data') || arguments[0];",
                 table,
             )
-        dimensions = screenshot_element(driver, capture_target, destination)
-        return dimensions, actual_position, has_position_selector
+            dimensions = screenshot_element(driver, capture_target, destination)
+            return dimensions, actual_position, has_position_selector, []
+
+        variants: list[dict[str, Any]] = []
+        primary_path: Path | None = None
+        primary_position = ""
+        has_any_position_selector = False
+        for option in size_options:
+            requested_size = clean_text(option.get("value") or option.get("text"))
+            display_size = clean_text(option.get("text") or requested_size)
+            variant_path = geometry_variant_path(destination, display_size)
+            variant: dict[str, Any] = {
+                "size": display_size,
+                "wheel_size": "",
+                "filename": variant_path.name,
+                "status": TABLE_STATUS_TRANSIENT_ERROR,
+                "dimensions": None,
+                "position": "",
+                "error": "",
+            }
+            try:
+                table, actual_size = set_geometry_size(
+                    driver, table, requested_size, effective_selector_timeout
+                )
+                table, actual_position, has_position_selector = set_geometry_position(
+                    driver,
+                    table,
+                    requested_position,
+                    effective_selector_timeout,
+                )
+                capture_target = driver.execute_script(
+                    "return arguments[0].closest('#geometry-data') || arguments[0];",
+                    table,
+                )
+                dimensions = screenshot_element(driver, capture_target, variant_path)
+                variant.update(
+                    {
+                        "size": actual_size or display_size,
+                        "wheel_size": geometry_wheel_size(table),
+                        "status": TABLE_STATUS_DOWNLOADED,
+                        "dimensions": list(dimensions),
+                        "position": actual_position,
+                    }
+                )
+                if primary_path is None:
+                    primary_path = variant_path
+                    primary_position = actual_position
+                has_any_position_selector = (
+                    has_any_position_selector or has_position_selector
+                )
+            except KeyboardInterrupt:
+                raise
+            except Exception as error:
+                variant["error"] = concise_error(error)
+                try:
+                    table = wait_for_geometry_table(driver, 1.0)
+                except Exception:
+                    pass
+            variants.append(variant)
+
+        if primary_path is None:
+            errors = "; ".join(
+                f"{variant['size']}: {variant['error']}"
+                for variant in variants
+                if variant.get("error")
+            )
+            raise RuntimeError(
+                f"No size-specific geometry could be captured{': ' + errors if errors else ''}"
+            )
+
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        temporary = destination.with_name(
+            f".{destination.stem}.compat.tmp{destination.suffix}"
+        )
+        shutil.copy2(primary_path, temporary)
+        os.replace(temporary, destination)
+        dimensions = png_dimensions(destination)
+        if dimensions is None:
+            raise RuntimeError("The compatibility geometry PNG is invalid")
+        return (
+            dimensions,
+            primary_position,
+            has_any_position_selector,
+            variants,
+        )
     finally:
         close_table_dialog(driver, table)
 
@@ -909,6 +1147,8 @@ def capture_orbea_tables(
         "size_guide_dimensions": size_dimensions,
         "geometry_position": None,
         "geometry_position_supported": None,
+        "geometry_size_selector_supported": None,
+        "geometry_variants": [],
         "geometry_error": "",
         "size_guide_error": "",
         "errors": [],
@@ -958,7 +1198,7 @@ def capture_orbea_tables(
             result["geometry_status"] = TABLE_STATUS_NOT_AVAILABLE
         else:
             try:
-                dimensions, actual_position, position_supported = capture_geometry(
+                capture = capture_geometry(
                     driver,
                     geometry_path,
                     timeouts.table_render,
@@ -966,11 +1206,32 @@ def capture_orbea_tables(
                     control=controls["geometry"],
                     selector_timeout=timeouts.selector,
                 )
-                result["geometry_status"] = TABLE_STATUS_DOWNLOADED
-                result["geometry_ok"] = True
+                dimensions, actual_position, position_supported = capture[:3]
+                variants = list(capture[3]) if len(capture) > 3 else []
+                failed_variants = [
+                    variant
+                    for variant in variants
+                    if variant.get("status") != TABLE_STATUS_DOWNLOADED
+                ]
+                result["geometry_status"] = (
+                    TABLE_STATUS_TRANSIENT_ERROR
+                    if failed_variants
+                    else TABLE_STATUS_DOWNLOADED
+                )
+                result["geometry_ok"] = not failed_variants
                 result["geometry_dimensions"] = dimensions
                 result["geometry_position"] = actual_position
                 result["geometry_position_supported"] = position_supported
+                result["geometry_size_selector_supported"] = bool(variants)
+                result["geometry_variants"] = variants
+                if failed_variants:
+                    messages = [
+                        f"geometry {variant.get('size') or 'unknown size'}: "
+                        f"{variant.get('error') or 'capture failed'}"
+                        for variant in failed_variants
+                    ]
+                    result["geometry_error"] = " | ".join(messages)
+                    result["errors"].extend(messages)
             except KeyboardInterrupt:
                 raise
             except Exception as error:
@@ -1080,6 +1341,7 @@ def page_record(
     record.setdefault("availability_probe_version", 0)
     record.setdefault("geometry_status", TABLE_STATUS_PENDING)
     record.setdefault("size_guide_status", TABLE_STATUS_PENDING)
+    record.setdefault("geometry_variants", [])
     return record
 
 
@@ -1115,6 +1377,12 @@ def update_record_status(record: dict[str, Any]) -> str:
 def record_needs_processing(record: dict[str, Any]) -> bool:
     if record.get("availability_probe_version") != AVAILABILITY_PROBE_VERSION:
         return True
+    if (
+        _normalise_table_status(record.get("geometry_status"))
+        == TABLE_STATUS_DOWNLOADED
+        and record.get("geometry_capture_version") != GEOMETRY_CAPTURE_VERSION
+    ):
+        return True
     return any(
         _normalise_table_status(record.get(key)) not in TERMINAL_TABLE_STATUSES
         for key in ("geometry_status", "size_guide_status")
@@ -1136,6 +1404,16 @@ def refresh_record_from_files(
             geometry_ok
             and record.get("geometry_capture_version") == GEOMETRY_CAPTURE_VERSION
             and record.get("geometry_position_requested") == required_geometry_position
+        )
+    variants = list(record.get("geometry_variants", []) or [])
+    if geometry_ok and record.get("geometry_size_selector_supported"):
+        geometry_ok = bool(variants) and all(
+            variant.get("status") == TABLE_STATUS_DOWNLOADED
+            and png_dimensions(
+                geometry.parent / clean_text(variant.get("filename"))
+            )
+            is not None
+            for variant in variants
         )
     probe_is_current = (
         record.get("availability_probe_version") == AVAILABILITY_PROBE_VERSION
@@ -1197,6 +1475,12 @@ def apply_capture_result(
     record["errors"] = list(result.get("errors", []))
     record["geometry_error"] = clean_text(result.get("geometry_error"))
     record["size_guide_error"] = clean_text(result.get("size_guide_error"))
+    if "geometry_variants" in result:
+        record["geometry_variants"] = list(result.get("geometry_variants") or [])
+    if result.get("geometry_size_selector_supported") is not None:
+        record["geometry_size_selector_supported"] = bool(
+            result.get("geometry_size_selector_supported")
+        )
     geometry_dimensions = result.get("geometry_dimensions")
     size_dimensions = result.get("size_guide_dimensions")
     if geometry_dimensions is not None:
@@ -1264,6 +1548,9 @@ def write_manifests(
         "Image Folder",
         "Geometry Status",
         "Geometry PNG",
+        "Geometry Sizes",
+        "Geometry Wheel Sizes",
+        "Geometry PNGs",
         "Geometry Position",
         "Size Guide Status",
         "Size Guide CM PNG",
@@ -1283,6 +1570,12 @@ def write_manifests(
                 if record.get("geometry_image")
                 else None
             )
+            geometry_variants = list(record.get("geometry_variants", []) or [])
+            geometry_variant_paths = [
+                output_dir / record["folder"] / clean_text(variant.get("filename"))
+                for variant in geometry_variants
+                if record.get("folder") and clean_text(variant.get("filename"))
+            ]
             size_guide = (
                 output_dir / record["size_guide_cm_image"]
                 if record.get("size_guide_cm_image")
@@ -1296,6 +1589,19 @@ def write_manifests(
                     "Image Folder": str(image_folder.resolve()) if image_folder else "",
                     "Geometry Status": record.get("geometry_status", ""),
                     "Geometry PNG": str(geometry.resolve()) if geometry else "",
+                    "Geometry Sizes": "; ".join(
+                        clean_text(variant.get("size"))
+                        for variant in geometry_variants
+                        if clean_text(variant.get("size"))
+                    ),
+                    "Geometry Wheel Sizes": "; ".join(
+                        clean_text(variant.get("wheel_size"))
+                        for variant in geometry_variants
+                        if clean_text(variant.get("wheel_size"))
+                    ),
+                    "Geometry PNGs": "; ".join(
+                        str(path.resolve()) for path in geometry_variant_paths
+                    ),
                     "Geometry Position": record.get("geometry_position", ""),
                     "Size Guide Status": record.get("size_guide_status", ""),
                     "Size Guide CM PNG": str(size_guide.resolve()) if size_guide else "",
@@ -1341,8 +1647,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     project_root = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(
         description=(
-            "Save Orbea geometry and centimetre size-guide tables as PNG files, "
-            "one pair per unique Orbea URL."
+            "Save every size-specific Orbea geometry and the centimetre "
+            "size-guide table as labelled PNG files."
         )
     )
     parser.add_argument(
@@ -1486,7 +1792,7 @@ def run(args: argparse.Namespace) -> int:
     valid_rows = len(source_rows) - len(invalid_rows)
     print(
         f"Workbook rows: {len(source_rows)} | Valid URLs: {valid_rows} | "
-        f"Unique Orbea pages: {len(jobs)} | Images when complete: {len(jobs) * 2}"
+        f"Unique Orbea pages: {len(jobs)} | Geometry: every available frame size"
     )
     if invalid_rows:
         print(f"Rows skipped because the Orbea URL is blank/invalid: {len(invalid_rows)}")

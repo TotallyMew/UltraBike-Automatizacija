@@ -10,12 +10,7 @@ Behavior (based on the user's provided new script):
 - If an image exceeds 7000x4900, resizes by 50%
 - Saves all downloaded images as PNG
 
-Public API kept for compatibility with the existing GUI:
-- download_pinarello_variants(...)
-- download_pinarello_variants_in_existing_browser(...)
-
-Note: `driver`, `browser`, `headless`, `wait_s` are accepted for backwards
-compatibility but are no longer required.
+The GUI and command-line entry point use ``PinarelloScraper`` directly.
 """
 
 from __future__ import annotations
@@ -540,40 +535,13 @@ class PinarelloScraper:
         }
 
 
-def download_pinarello_variants(
-    url: str,
-    output_dir: str,
-    browser: str = "chrome",
-    headless: bool = False,
-    wait_s: int = 20,
-    log: Callable[[str], None] | None = None,
-) -> dict:
-    # Backwards compatible signature; Selenium is no longer used.
-    _ = (browser, headless, wait_s)
-    scraper = PinarelloScraper(url, log=log)
-    return scraper.run(output_dir=output_dir)
-
-
-def download_pinarello_variants_in_existing_browser(
-    driver,
-    url: str,
-    output_dir: str,
-    wait_s: int = 20,
-    log: Callable[[str], None] | None = None,
-) -> dict:
-    # Backwards compatible signature; Selenium driver is ignored.
-    _ = (driver, wait_s)
-    scraper = PinarelloScraper(url, log=log)
-    return scraper.run(output_dir=output_dir)
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description="Download Pinarello product images into per-color-variant folders.")
     parser.add_argument("url", help="Pinarello product URL")
     parser.add_argument("--out", default="_pinarello_images", help="Output directory")
     args = parser.parse_args()
 
-    download_pinarello_variants(url=args.url, output_dir=args.out)
+    PinarelloScraper(args.url).run(output_dir=args.out)
 
 
 if __name__ == "__main__":

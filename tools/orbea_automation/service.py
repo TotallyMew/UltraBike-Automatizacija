@@ -82,11 +82,14 @@ class OrbeaAutomationService:
         self,
         pimbo_driver: Any,
         image_driver_factory: Callable[..., Any] | None = None,
+        photo_service_factory: Callable[[], Any] | None = None,
     ) -> None:
         self.pimbo_driver = pimbo_driver
         self.image_driver_factory = image_driver_factory
+        self.photo_service_factory = photo_service_factory
         self._cancellation = CancellationToken()
         self._image_driver: Any = None
+        self._photo_service: Any = None
 
     def cancel(self) -> None:
         self._cancellation.cancel()
@@ -94,6 +97,12 @@ class OrbeaAutomationService:
         if driver is not None:
             try:
                 driver.quit()
+            except Exception:
+                pass
+        photo_service = self._photo_service
+        if photo_service is not None:
+            try:
+                photo_service.cancel()
             except Exception:
                 pass
 
@@ -211,6 +220,7 @@ class OrbeaAutomationService:
     ) -> None:
         from tools.orbea_table_image_downloader import (
             AVAILABILITY_PROBE_VERSION,
+            GEOMETRY_CAPTURE_VERSION,
             CaptureTimeouts,
             apply_capture_result,
             capture_orbea_tables,
@@ -242,6 +252,12 @@ class OrbeaAutomationService:
                 "attempts": int(prior.get("attempts", 0)),
                 "errors": list(prior.get("errors", [])),
             }
+            if (
+                record.get("geometry_status") == "downloaded"
+                and record.get("geometry_capture_version")
+                != GEOMETRY_CAPTURE_VERSION
+            ):
+                record["geometry_status"] = "pending"
             legacy_probe_refresh = self._upgrade_probe_record(
                 record, AVAILABILITY_PROBE_VERSION
             )
@@ -350,6 +366,109 @@ class OrbeaAutomationService:
         checkpoint.data["images_completed_at"] = utc_now()
         checkpoint.save()
 
+    def _download_product_photos(
+        self,
+        checkpoint: RunCheckpoint,
+        reporter: _ProgressReporter,
+        token: Any,
+        log: LogCallback | None,
+    ) -> None:
+        """Download every published colour for each unique matched Orbea URL."""
+
+        urls = [
+            str(job.get("url") or "").strip()
+            for job in self._image_jobs(checkpoint)
+            if str(job.get("url") or "").strip()
+        ]
+        output_dir = checkpoint.run_dir / "product-photos"
+        if not urls:
+            checkpoint.data["product_photos"] = {
+                "completed": True,
+                "products": 0,
+                "variants": 0,
+                "views": 0,
+                "files": 0,
+                "unavailable": 0,
+                "failures": [],
+                "output_dir": relative_or_absolute(output_dir, checkpoint.run_dir),
+            }
+            checkpoint.data["product_photos_completed"] = True
+            checkpoint.save()
+            reporter.emit(
+                "product_photos", 0, 0, "No matched Orbea product links were found"
+            )
+            return
+
+        if self.photo_service_factory is None:
+            from .photos import OrbeaPhotoService
+
+            service = OrbeaPhotoService()
+        else:
+            service = self.photo_service_factory()
+        self._photo_service = service
+
+        def photo_progress(update: Any) -> None:
+            reporter.emit(
+                "product_photos",
+                int(getattr(update, "current", 0) or 0),
+                int(getattr(update, "total", 0) or 0),
+                str(getattr(update, "message", "") or "Downloading product photos"),
+            )
+
+        try:
+            result = service.run_many(
+                urls,
+                output_dir,
+                progress=photo_progress,
+                log=lambda message: self._log(log, message),
+                cancellation=token,
+            )
+        except Exception as error:
+            message = f"{type(error).__name__}: {error}"
+            checkpoint.data["product_photos"] = {
+                "completed": False,
+                "products": 0,
+                "variants": 0,
+                "views": 0,
+                "files": 0,
+                "unavailable": 0,
+                "failures": [message],
+                "output_dir": relative_or_absolute(output_dir, checkpoint.run_dir),
+            }
+            checkpoint.data["product_photos_completed"] = False
+            checkpoint.save()
+            self._log(log, f"Product photos could not be completed: {message}")
+            reporter.emit("product_photos", len(urls), len(urls), message)
+            self._check_cancelled(token)
+            return
+        finally:
+            self._photo_service = None
+
+        failures = [str(value) for value in getattr(result, "failures", ())]
+        cancelled = bool(getattr(result, "cancelled", False))
+        completed = not cancelled and not failures
+        checkpoint.data["product_photos"] = {
+            "completed": completed,
+            "products": int(getattr(result, "products", 0) or 0),
+            "variants": int(getattr(result, "variants", 0) or 0),
+            "views": int(getattr(result, "views", 0) or 0),
+            "files": len(getattr(result, "files", ()) or ()),
+            "unavailable": len(getattr(result, "unavailable", ()) or ()),
+            "failures": failures,
+            "output_dir": relative_or_absolute(output_dir, checkpoint.run_dir),
+            "completed_at": utc_now(),
+        }
+        checkpoint.data["product_photos_completed"] = completed
+        checkpoint.save()
+        self._log(
+            log,
+            "Product photos: "
+            f"{checkpoint.data['product_photos']['files']} files from "
+            f"{checkpoint.data['product_photos']['products']} products",
+        )
+        if cancelled:
+            raise RunCancelled("The Orbea product photo download was stopped")
+
     def run(
         self,
         config: OrbeaRunConfig,
@@ -420,13 +539,33 @@ class OrbeaAutomationService:
                 checkpoint.save()
 
             self._check_cancelled(token)
+            if config.download_product_photos:
+                checkpoint.set_phase("product_photos")
+                if checkpoint.data.get("product_photos_completed"):
+                    summary = checkpoint.data.get("product_photos", {})
+                    completed_files = int(summary.get("files", 0) or 0)
+                    reporter.emit(
+                        "product_photos",
+                        completed_files,
+                        completed_files,
+                        "Product photos are already complete",
+                    )
+                else:
+                    self._download_product_photos(checkpoint, reporter, token, log)
+            else:
+                checkpoint.data["product_photos_completed"] = True
+                checkpoint.save()
+
+            self._check_cancelled(token)
             checkpoint.set_phase("report")
             write_image_manifest(checkpoint)
             write_report(checkpoint)
             reporter.emit("report", 1, 1, "Excel report is ready")
 
-            complete = bool(checkpoint.data.get("scan_completed")) and bool(
-                checkpoint.data.get("images_completed")
+            complete = (
+                bool(checkpoint.data.get("scan_completed"))
+                and bool(checkpoint.data.get("images_completed"))
+                and bool(checkpoint.data.get("product_photos_completed"))
             )
             if complete:
                 checkpoint.mark_completed()
@@ -474,6 +613,7 @@ def run_pipeline(
     config: OrbeaRunConfig,
     *,
     image_driver_factory: Callable[..., Any] | None = None,
+    photo_service_factory: Callable[[], Any] | None = None,
     progress: ProgressCallback | None = None,
     log: LogCallback | None = None,
     cancellation: Any = None,
@@ -483,7 +623,9 @@ def run_pipeline(
     """Convenience entry point used by the Qt worker and standalone callers."""
 
     return OrbeaAutomationService(
-        pimbo_driver, image_driver_factory=image_driver_factory
+        pimbo_driver,
+        image_driver_factory=image_driver_factory,
+        photo_service_factory=photo_service_factory,
     ).run(
         config,
         progress=progress,

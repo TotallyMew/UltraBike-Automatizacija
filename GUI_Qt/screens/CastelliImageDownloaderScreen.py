@@ -300,6 +300,14 @@ class CastelliImageDownloaderScreen(CastelliUrlGetterScreen):
         self._worker.progress_update.connect(self._on_progress)
         self._worker.done.connect(self._on_done)
         self._worker.log.connect(lambda msg: print(f"[CastelliImageDownloader] {msg}"))
+        if hasattr(self.main, "track_worker"):
+            self.main.track_worker(
+                self._worker,
+                "image_tool",
+                "castelli_images",
+                total=len(self._rows),
+                output_path=self._output_dir,
+            )
         self._worker.start()
 
     def _on_row_update(self, row: int, status: str, count: str, folder: str):

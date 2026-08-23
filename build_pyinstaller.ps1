@@ -9,7 +9,7 @@ Write-Host "Building UltraBike (PyInstaller)" -ForegroundColor Cyan
 
 # Prefer the repo virtualenv by default to avoid permission issues with system Python.
 if (-not $PSBoundParameters.ContainsKey('Python') -or $Python -eq 'python') {
-  $venvPython = Join-Path (Get-Location) 'venv\Scripts\python.exe'
+  $venvPython = Join-Path (Get-Location) '.venv\Scripts\python.exe'
   if (Test-Path -LiteralPath $venvPython) {
     $Python = $venvPython
   }
@@ -39,6 +39,12 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host "Build complete." -ForegroundColor Green
 Write-Host "Output: .\\dist\\UltraBike_Automatizacija.exe" -ForegroundColor Green
+
+$smoke = Start-Process -FilePath ".\\dist\\UltraBike_Automatizacija.exe" -ArgumentList "--smoke-test" -Wait -PassThru -WindowStyle Hidden
+if ($smoke.ExitCode -ne 0) {
+  throw "Packaged smoke test failed with exit code $($smoke.ExitCode)"
+}
+Write-Host "Packaged smoke test passed." -ForegroundColor Green
 
 Write-Host "" 
 Write-Host "Tip: to simulate a fresh install, run with a temporary data dir:" -ForegroundColor Cyan

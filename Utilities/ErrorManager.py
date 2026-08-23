@@ -1,135 +1,134 @@
-﻿import queue
+"""Thread-safe user notifications and GUI-backed retry prompts."""
+
+from __future__ import annotations
+
+import queue
+from typing import Callable
 
 
 class ErrorManager:
-    """Manages user-facing error messages in Lithuanian"""
-    
-    # Error message templates
-    ERRORS = {
-        # Scraper errors
-        "SCRAPER_PAGE_STRUCTURE_CHANGED": "Svetainės struktūra pasikeitė. Prašome atnaujinti programą.",
-        "SCRAPER_URL_INVALID": "Neteisingas URL formatas. Patikrinkite adresą ir bandykite dar kartą.",
-        "SCRAPER_WEBSITE_UNREACHABLE": "Svetainė nepasiekiama. Patikrinkite interneto ryšį.",
-        "SCRAPER_HTTP_ERROR": "HTTP klaida: {status_code}. Svetainė grąžino klaidą.",
-        "SCRAPER_TIMEOUT": "Užklausa baigėsi laiko limitu. Bandykite dar kartą.",
-        "SCRAPER_NO_DATA": "Nerasta dviračio informacijos. Patikrinkite ar kodas/URL teisingas.",
-        "SCRAPER_LOGIN_REQUIRED": "Reikalingas prisijungimas prie svetainės.",
-        
-        # Translation errors
-        "TRANSLATION_FILE_NOT_FOUND": "Vertimo failas nerastas: {file_path}",
-        "TRANSLATION_KEY_MISSING": "Nerasta vertimo rakto: {key}",
-        "TRANSLATION_FAILED": "Vertimas nepavyko. Patikrinkite vertimo failus.",
-        
-        # Upload errors
-        "UPLOAD_PRODUCT_NOT_FOUND": "Prekė nerasta su kodu: {code}",
-        "UPLOAD_FEATURE_FAILED": "Nepavyko įkelti savybės: {feature}",
-        "UPLOAD_IMAGE_FAILED": "Nepavyko įkelti nuotraukų.",
-        "UPLOAD_BRAND_FAILED": "Nepavyko pridėti prekės ženklo.",
-        "UPLOAD_SAVE_FAILED": "Nepavyko išsaugoti pakeitimų.",
-        
-        # File system errors
-        "FILE_NOT_FOUND": "Failas nerastas: {path}",
-        "FILE_PERMISSION_ERROR": "Neturite teisių pasiekti failo: {path}",
-        "FILE_CREATE_ERROR": "Nepavyko sukurti failo: {path}",
-        "FOLDER_CREATE_ERROR": "Nepavyko sukurti aplanko: {path}",
-        
-        # Browser errors
-        "BROWSER_NOT_FOUND": "Naršyklė nerasta. Įdiekite {browser}.",
-        "BROWSER_DRIVER_ERROR": "Naršyklės tvarkyklės klaida.",
-        "BROWSER_ELEMENT_NOT_FOUND": "Elementas puslapyje nerastas.",
-        "BROWSER_TIMEOUT": "Laukimo laikas baigėsi. Puslapis neatsiliepė.",
-        
-        # Login errors
-        "LOGIN_FAILED": "Prisijungti nepavyko. Patikrinkite prisijungimo duomenis.",
-        "LOGIN_TIMEOUT": "Prisijungimo laikas baigėsi.",
-        
-        # Settings errors
-        "SETTINGS_FILE_ERROR": "Nustatymų failo klaida.",
-        "SETTINGS_INVALID_PATH": "Neteisingas kelias: {path}",
-        
-        # Excel errors
-        "EXCEL_FILE_NOT_FOUND": "Excel failas nerastas: {path}",
-        "EXCEL_SHEET_NOT_FOUND": "Lapas nerastas: {sheet}",
-        "EXCEL_READ_ERROR": "Nepavyko perskaityti Excel failo.",
-        
-        # General errors
-        "UNKNOWN_ERROR": "Įvyko nežinoma klaida.",
-        "NETWORK_ERROR": "Tinklo klaida. Patikrinkite interneto ryšį.",
-        "UNEXPECTED_ERROR": "Netikėta klaida: {error}"
+    """Bridge legacy worker notifications into the Qt event loop and log."""
+
+    _FALLBACK_ERRORS = {
+        "SCRAPER_PAGE_STRUCTURE_CHANGED": "The website structure changed. Update the app and try again.",
+        "SCRAPER_URL_INVALID": "The URL is invalid. Check it and try again.",
+        "SCRAPER_WEBSITE_UNREACHABLE": "The website is unavailable. Check your internet connection.",
+        "SCRAPER_HTTP_ERROR": "The website returned HTTP {status_code}.",
+        "SCRAPER_TIMEOUT": "The website did not respond in time.",
+        "SCRAPER_NO_DATA": "No product information was found.",
+        "SCRAPER_LOGIN_REQUIRED": "The website requires a login.",
+        "TRANSLATION_FILE_NOT_FOUND": "Translation file not found: {file_path}",
+        "TRANSLATION_KEY_MISSING": "Translation key not found: {key}",
+        "TRANSLATION_FAILED": "The local translation step failed.",
+        "UPLOAD_PRODUCT_NOT_FOUND": "Product not found: {code}",
+        "UPLOAD_FEATURE_FAILED": "Could not upload feature: {feature}",
+        "UPLOAD_IMAGE_FAILED": "Could not upload the images.",
+        "UPLOAD_BRAND_FAILED": "Could not set the brand.",
+        "UPLOAD_SAVE_FAILED": "Could not save the changes.",
+        "FILE_NOT_FOUND": "File not found: {path}",
+        "FILE_FORMAT_ERROR": "Unsupported file entry: {line}",
+        "FILE_PERMISSION_ERROR": "Permission denied: {path}",
+        "FILE_CREATE_ERROR": "Could not create file: {path}",
+        "FOLDER_CREATE_ERROR": "Could not create folder: {path}",
+        "BROWSER_NOT_FOUND": "Browser not found: {browser}",
+        "BROWSER_DRIVER_ERROR": "The browser driver could not be started.",
+        "BROWSER_ELEMENT_NOT_FOUND": "The required page element was not found.",
+        "BROWSER_TIMEOUT": "The browser operation timed out.",
+        "LOGIN_FAILED": "Login failed. Check the saved credentials.",
+        "LOGIN_TIMEOUT": "Login timed out.",
+        "SETTINGS_FILE_ERROR": "The settings could not be loaded.",
+        "SETTINGS_INVALID_PATH": "Invalid path: {path}",
+        "EXCEL_FILE_NOT_FOUND": "Excel file not found: {path}",
+        "EXCEL_SHEET_NOT_FOUND": "Excel sheet not found: {sheet}",
+        "EXCEL_READ_ERROR": "The Excel workbook could not be read.",
+        "UNKNOWN_ERROR": "An unknown error occurred.",
+        "NETWORK_ERROR": "A network error occurred. Check the connection.",
+        "UNEXPECTED_ERROR": "Unexpected error: {error}",
     }
-    
-    @staticmethod
-    def show_error(error_code, **kwargs):
-        """Display user-friendly error message (GUI/log only)"""
-        # GUI should handle displaying this error
-        pass
 
-    @staticmethod
-    def show_warning(message):
-        """Display warning message (GUI/log only)"""
-        pass
+    _prompt_queue: queue.Queue | None = None
+    _notification_queue: queue.Queue | None = None
+    _logger = None
+    _translator: Callable[..., str] | None = None
 
-    @staticmethod
-    def show_info(message):
-        """Display info message (GUI/log only)"""
-        pass
+    @classmethod
+    def configure(cls, notification_queue=None, logger=None, translator=None) -> None:
+        cls._notification_queue = notification_queue
+        cls._logger = logger
+        cls._translator = translator
 
-    @staticmethod
-    def show_success(message):
-        """Display success message (GUI/log only)"""
-        pass
-    
-    # Queue used to send prompt requests to the GUI. GUI should call `set_prompt_queue(q)` during startup.
-    _prompt_queue = None
+    @classmethod
+    def set_prompt_queue(cls, prompt_queue: queue.Queue) -> None:
+        cls._prompt_queue = prompt_queue
 
-    @staticmethod
-    def set_prompt_queue(q: "queue.Queue"):
-        """Register a Queue.Queue instance that GUI will poll for prompt requests.
-
-        Each prompt request is a tuple: (prompt_type, operation_name, response_queue)
-        Where `response_queue` is a Queue used by GUI to send back the result.
-        """
-        ErrorManager._prompt_queue = q
-
-    @staticmethod
-    def prompt_retry(operation_name="operacija"):
-        """Ask user if they want to retry after error.
-
-        If a GUI prompt queue is registered, this will synchronously wait for the GUI
-        to show a dialog and return the user's answer. Otherwise raises RuntimeError.
-        """
-        if ErrorManager._prompt_queue is None:
-            raise RuntimeError("CLI prompts disabled: GUI must handle retry prompts for '" + operation_name + "'.")
-
-        resp_q = queue.Queue()
-        ErrorManager._prompt_queue.put(("retry", operation_name, resp_q))
+    @classmethod
+    def _format_error(cls, error_code: str, **kwargs) -> str:
+        key = f"error.{error_code}"
+        if cls._translator is not None:
+            try:
+                translated = cls._translator(key, **kwargs)
+                if translated != key:
+                    return translated
+            except Exception:
+                pass
+        template = cls._FALLBACK_ERRORS.get(error_code, cls._FALLBACK_ERRORS["UNKNOWN_ERROR"])
         try:
-            return resp_q.get()
-        except Exception:
-            raise RuntimeError("No GUI response for retry prompt")
-    
-    @staticmethod
-    def prompt_continue():
-        """Ask user if they want to continue after error (GUI-backed)."""
-        if ErrorManager._prompt_queue is None:
-            raise RuntimeError("CLI prompts disabled: GUI must handle continuation prompts.")
+            return template.format(**kwargs)
+        except (KeyError, ValueError, IndexError):
+            return template
 
-        resp_q = queue.Queue()
-        ErrorManager._prompt_queue.put(("continue", None, resp_q))
-        try:
-            return resp_q.get()
-        except Exception:
-            raise RuntimeError("No GUI response for continue prompt")
-    
-    @staticmethod
-    def prompt_exit_or_retry():
-        """Ask user if they want to exit or retry (returns 'retry' or 'exit')."""
-        if ErrorManager._prompt_queue is None:
-            raise RuntimeError("CLI prompts disabled: GUI must handle exit/retry decisions.")
+    @classmethod
+    def _notify(cls, level: str, message: str, *, code: str = "") -> str:
+        text = str(message or "").strip() or cls._FALLBACK_ERRORS["UNKNOWN_ERROR"]
+        logger = cls._logger
+        if logger is not None:
+            try:
+                if level == "error":
+                    logger.error("Notification", text, code=code)
+                else:
+                    logger.log("Notification", text, level=level, code=code)
+            except Exception:
+                pass
+        if cls._notification_queue is not None:
+            cls._notification_queue.put(("notification", level, text, code))
+        return text
 
-        resp_q = queue.Queue()
-        ErrorManager._prompt_queue.put(("exit_or_retry", None, resp_q))
-        try:
-            return resp_q.get()
-        except Exception:
-            raise RuntimeError("No GUI response for exit/retry prompt")
+    @classmethod
+    def show_error(cls, error_code, **kwargs):
+        return cls._notify("error", cls._format_error(str(error_code), **kwargs), code=str(error_code))
+
+    @classmethod
+    def show_warning(cls, message):
+        return cls._notify("warning", str(message))
+
+    @classmethod
+    def show_info(cls, message):
+        return cls._notify("info", str(message))
+
+    @classmethod
+    def show_success(cls, message):
+        return cls._notify("success", str(message))
+
+    @classmethod
+    def prompt_retry(cls, operation_name="operation"):
+        if cls._prompt_queue is None:
+            raise RuntimeError(f"GUI retry prompt is unavailable for {operation_name!r}")
+        response = queue.Queue()
+        cls._prompt_queue.put(("retry", operation_name, response))
+        return response.get()
+
+    @classmethod
+    def prompt_continue(cls):
+        if cls._prompt_queue is None:
+            raise RuntimeError("GUI continuation prompt is unavailable")
+        response = queue.Queue()
+        cls._prompt_queue.put(("continue", None, response))
+        return response.get()
+
+    @classmethod
+    def prompt_exit_or_retry(cls):
+        if cls._prompt_queue is None:
+            raise RuntimeError("GUI exit/retry prompt is unavailable")
+        response = queue.Queue()
+        cls._prompt_queue.put(("exit_or_retry", None, response))
+        return response.get()

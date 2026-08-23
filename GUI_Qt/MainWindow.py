@@ -3,27 +3,25 @@ Main Application Window
 Manages navigation, state, and screen switching
 """
 
-from PySide6.QtWidgets import QWidget, QStackedWidget, QHBoxLayout, QApplication, QLineEdit, QMessageBox
+from PySide6.QtWidgets import QWidget, QStackedWidget, QHBoxLayout, QApplication, QMessageBox
 from PySide6.QtCore import Qt, QTimer, QThread
-from PySide6.QtGui import QFont, QColor, QKeySequence, QShortcut
+from PySide6.QtGui import QFont, QFontMetrics, QColor, QKeySequence, QShortcut
 from qfluentwidgets import FluentWindow, NavigationItemPosition, FluentIcon, MessageBox, InfoBar, InfoBarPosition
 
-import queue
-import os
 import threading
-from Utilities.ErrorManager import ErrorManager
+import time
 
-from Config.BrowserConfig.BrowserManager import BrowserManager
 from Config.LoginConfig.CredentialManager import CredentialManager
 from Database.DatabaseManager import DatabaseManager
 from Database.SettingsManager import SettingsManager
 from Managers.EarningsManager import EarningsManager
+from Managers.OperationTracker import OperationKind, OperationTracker
+from Managers.SpotifyManager import SpotifyManager
 from Utilities.Logger import Logger
 from Utilities.Version import get_app_version
-from Utilities.Updater import fetch_update_manifest, is_newer_version, download_to_temp, sha256_file, run_installer
 from Utilities.AppPaths import get_default_db_path, get_data_dir
 from GUI_Qt.styles.theme_config import FONTS
-from GUI_Qt.styles.theme_config import COLORS, get_text_color
+from GUI_Qt.styles.theme_config import COLORS, get_surface_color, get_text_color
 from GUI_Qt.styles.theme_config import SPACING
 from GUI_Qt.styles.theme_config import RADII
 from GUI_Qt.styles.theme_config import PADDINGS
@@ -31,38 +29,27 @@ from GUI_Qt.styles.theme_config import SIZES
 from GUI_Qt.styles.screen_theme import (
     NAV_VERSION_MARGINS,
     NAV_VERSION_SPACING,
+    apply_screen_palette,
+    enforce_transparent_labels,
     enforce_responsive_text,
 )
 from GUI_Qt.components.accessibility import apply_accessibility_defaults
 from GUI_Qt.i18n import I18nManager, translate
+from GUI_Qt.routes import NAV_GROUPS, ROUTES, ROUTE_REGISTRY
+from GUI_Qt.services import (
+    ErrorPresentationService,
+    NavigationService,
+    ShutdownService,
+    UpdateService,
+)
 
 
 class MainWindow(FluentWindow):
     """Main application window with Fluent Design navigation"""
 
-    SCREEN_ROUTES = {
-        0: "upload",
-        1: "batch",
-        2: "descriptions",
-        3: "folders",
-        4: "translations",
-        5: "basso_images",
-        6: "pinarello_images",
-        7: "history",
-        8: "account",
-        9: "settings",
-        10: "info",
-        11: "spec_checker",
-        12: "name_getter",
-        13: "code_getter",
-        14: "castelli_url_getter",
-        15: "castelli_images",
-        16: "abus_url_getter",
-        17: "oakley_url_getter",
-        18: "product_name_getter",
-        19: "orbea",
-        20: "earnings",
-    }
+    ROUTES = ROUTE_REGISTRY
+    NAVIGATION_EXPAND_WIDTH = 240
+    NAVIGATION_CLICK_GUARD_MS = 500
 
     def __init__(self):
         super().__init__()
@@ -88,6 +75,12 @@ class MainWindow(FluentWindow):
         self.settings = SettingsManager(self.db)
         self.earnings_manager = EarningsManager(self.db, self.settings)
         self.credential_manager = CredentialManager(self.db)
+        self.spotify_manager = SpotifyManager(
+            self.db,
+            self.settings,
+            self.credential_manager.session_manager,
+        )
+        self.operation_tracker = OperationTracker(self.db, self)
 
         # If installed via Inno Setup and this is a fresh install, start the app
         # in the language chosen in the installer wizard.
@@ -116,8 +109,8 @@ class MainWindow(FluentWindow):
             app_font.setFamilies(["Segoe UI Variable", "Segoe UI"])
             app.setFont(app_font)
 
-        # Center window on screen
-        self._center_on_screen()
+        # Restore a usable window placement, clamped to a connected monitor.
+        self._restore_window_state()
 
         # Initialize screens (lazy loading)
         self.login_screen = None
@@ -129,6 +122,8 @@ class MainWindow(FluentWindow):
         self.unified_batch_screen = None
         self.history_screen = None
         self.earnings_screen = None
+        self.spotify_screen = None
+        self.activity_screen = None
         self._full_history_screen = None  # Full detailed history view (accessed from Analytics)
         self.translations_screen = None
         self.descriptions_screen = None
@@ -152,8 +147,12 @@ class MainWindow(FluentWindow):
         self.top_bar = None
         self._main_container = None
         self.content_stack = None
-        self._current_screen_index = None
+        self._current_route = None
         self._last_navigation_compact = None
+        self.navigation_service = NavigationService(self)
+        self.shutdown_service = ShutdownService(self)
+        self.update_service = UpdateService(self)
+        self.error_service = ErrorPresentationService(self)
 
         # Update check (best-effort; won't block app startup)
         self._update_check_scheduled = False
@@ -169,12 +168,7 @@ class MainWindow(FluentWindow):
         self._init_window()
         self._init_shortcuts()
 
-        # Ensure the frameless title bar stays readable across themes
-        try:
-            from qfluentwidgets import qconfig
-            qconfig.themeChangedFinished.connect(self._on_global_theme_changed)
-        except Exception:
-            pass
+        # The title-bar theme signal is connected in _init_window().
         self._apply_titlebar_theme()
 
         # Apply translations to any static UI created above
@@ -222,11 +216,13 @@ class MainWindow(FluentWindow):
 
         # Only the heavy ones that typically lag on first visit.
         self._screen_preload_queue = [
-            1,  # Batch Upload
-            2,  # History
-            3,  # Translations
-            4,  # Descriptions
-            5,  # Batch Descriptions
+            "orbea",
+            "batch",
+            "history",
+            "translations",
+            "descriptions",
+            "activity",
+            "spotify",
         ]
 
         def _step() -> None:
@@ -239,9 +235,9 @@ class MainWindow(FluentWindow):
                 self._screen_preload_active = False
                 return
 
-            index = self._screen_preload_queue.pop(0)
+            route_key = self._screen_preload_queue.pop(0)
             try:
-                self._ensure_screen_created(index)
+                self._ensure_screen_created(route_key)
             except Exception:
                 # Preloading is best-effort; never crash the login flow.
                 pass
@@ -267,6 +263,8 @@ class MainWindow(FluentWindow):
                 (getattr(self, 'unified_batch_screen', None), "nav.batch"),
                 (getattr(self, 'history_screen', None), "nav.analytics"),
                 (getattr(self, 'earnings_screen', None), "nav.earnings"),
+                (getattr(self, 'spotify_screen', None), "nav.spotify"),
+                (getattr(self, 'activity_screen', None), "nav.activity"),
                 (getattr(self, 'translations_screen', None), "nav.translations"),
                 (getattr(self, 'descriptions_screen', None), "nav.descriptions"),
                 (getattr(self, 'folder_creator_screen', None), "nav.folders"),
@@ -292,273 +290,20 @@ class MainWindow(FluentWindow):
         except Exception:
             pass
 
-    def _ensure_screen_created(self, index: int):
-        """Create a screen if needed and add it to the content stack when possible.
-
-        Screen mapping (reorganized):
-        0: Upload
-        1: Batch Operations
-        2: Descriptions
-        3: Folder Creator
-        4: Translations
-        5: Basso Images
-        6: Pinarello Images
-        7: Analytics
-        8: Account
-        9: Settings
-        10: Info
-        11: Spec Checker
-        12: Name Getter
-        13: Code Getter
-        14: Castelli URL Getter
-        15: Castelli Image Downloader
-        16: ABUS URL Getter
-        17: Oakley URL Getter
-        18: Product Name Getter
-        19: Orbea Automation
-        20: Earnings
-        """
-        if index == 0:  # Upload
-            if not self.upload_screen:
-                from GUI_Qt.screens.UploadScreen import UploadScreen
-                self.upload_screen = UploadScreen(self)
-            self._add_screen_to_stack(self.upload_screen, self.i18n.tr("nav.upload"))
-            return self.upload_screen
-
-        if index == 1:  # Batch Operations (unified)
-            if not self.unified_batch_screen:
-                from GUI_Qt.screens.UnifiedBatchScreen import UnifiedBatchScreen
-                self.unified_batch_screen = UnifiedBatchScreen(self)
-            self._add_screen_to_stack(self.unified_batch_screen, self.i18n.tr("nav.batch"))
-            return self.unified_batch_screen
-
-        if index == 2:  # Descriptions
-            if not self.descriptions_screen:
-                from GUI_Qt.screens.DescriptionsScreen import DescriptionsScreen
-                self.descriptions_screen = DescriptionsScreen(self)
-            self._add_screen_to_stack(self.descriptions_screen, self.i18n.tr("nav.descriptions"))
-            return self.descriptions_screen
-
-        if index == 3:  # Folder Creator
-            if not self.folder_creator_screen:
-                from GUI_Qt.screens.FolderCreatorScreen import FolderCreatorScreen
-                self.folder_creator_screen = FolderCreatorScreen(self)
-            self._add_screen_to_stack(self.folder_creator_screen, self.i18n.tr("nav.folders"))
-            return self.folder_creator_screen
-
-        if index == 4:  # Translations
-            if not self.translations_screen:
-                from GUI_Qt.screens.TranslationsScreen import TranslationsScreen
-                self.translations_screen = TranslationsScreen(self)
-            self._add_screen_to_stack(self.translations_screen, self.i18n.tr("nav.translations"))
-            return self.translations_screen
-
-        if index == 5:  # Basso Images
-            if not self.basso_images_screen:
-                from GUI_Qt.screens.BassoImageScreen import BassoImageScreen
-                self.basso_images_screen = BassoImageScreen(self)
-            self._add_screen_to_stack(self.basso_images_screen, self.i18n.tr("nav.basso_images"))
-            return self.basso_images_screen
-
-        if index == 6:  # Pinarello Images
-            if not self.pinarello_images_screen:
-                from GUI_Qt.screens.PinarelloImageScreen import PinarelloImageScreen
-                self.pinarello_images_screen = PinarelloImageScreen(self)
-            self._add_screen_to_stack(self.pinarello_images_screen, self.i18n.tr("nav.pinarello_images"))
-            return self.pinarello_images_screen
-
-        if index == 7:  # Analytics (formerly History)
-            if not self.history_screen:
-                from GUI_Qt.screens.AnalyticsScreen import AnalyticsScreen
-                self.history_screen = AnalyticsScreen(self)
-            self._add_screen_to_stack(self.history_screen, self.i18n.tr("nav.analytics"))
-            return self.history_screen
-
-        if index == 8:  # Account
-            if not self.account_screen:
-                from GUI_Qt.screens.AccountScreen import AccountScreen
-                self.account_screen = AccountScreen(self)
-            self._add_screen_to_stack(self.account_screen, self.i18n.tr("nav.account"))
-            return self.account_screen
-
-        if index == 9:  # Settings
-            if not self.settings_screen:
-                from GUI_Qt.screens.SettingsScreen import SettingsScreen
-                self.settings_screen = SettingsScreen(self)
-            self._add_screen_to_stack(self.settings_screen, self.i18n.tr("nav.settings"))
-            return self.settings_screen
-
-        if index == 10:  # Info
-            if not self.info_screen:
-                from GUI_Qt.screens.InfoScreen import InfoScreen
-                self.info_screen = InfoScreen(self)
-            self._add_screen_to_stack(self.info_screen, self.i18n.tr("nav.info"))
-            return self.info_screen
-
-        if index == 11:  # Spec Checker
-            if not self.spec_checker_screen:
-                from GUI_Qt.screens.SpecCheckerScreen import SpecCheckerScreen
-                self.spec_checker_screen = SpecCheckerScreen(self)
-            self._add_screen_to_stack(self.spec_checker_screen, self.i18n.tr("nav.spec_checker"))
-            return self.spec_checker_screen
-
-        if index == 12:  # Name Getter
-            if not self.name_getter_screen:
-                from GUI_Qt.screens.NameGetterScreen import NameGetterScreen
-                self.name_getter_screen = NameGetterScreen(self)
-            self._add_screen_to_stack(self.name_getter_screen, self.i18n.tr("nav.name_getter"))
-            return self.name_getter_screen
-
-        if index == 13:  # Code Getter
-            if not self.code_getter_screen:
-                from GUI_Qt.screens.CodeGetterScreen import CodeGetterScreen
-                self.code_getter_screen = CodeGetterScreen(self)
-            self._add_screen_to_stack(self.code_getter_screen, self.i18n.tr("nav.code_getter"))
-            return self.code_getter_screen
-
-        if index == 14:  # Castelli URL Getter
-            if not self.castelli_url_getter_screen:
-                from GUI_Qt.screens.CastelliUrlGetterScreen import CastelliUrlGetterScreen
-                self.castelli_url_getter_screen = CastelliUrlGetterScreen(self)
-            self._add_screen_to_stack(self.castelli_url_getter_screen, self.i18n.tr("nav.castelli_url_getter"))
-            return self.castelli_url_getter_screen
-
-        if index == 15:  # Castelli Image Downloader
-            if not self.castelli_image_downloader_screen:
-                from GUI_Qt.screens.CastelliImageDownloaderScreen import CastelliImageDownloaderScreen
-                self.castelli_image_downloader_screen = CastelliImageDownloaderScreen(self)
-            self._add_screen_to_stack(self.castelli_image_downloader_screen, self.i18n.tr("nav.castelli_images"))
-            return self.castelli_image_downloader_screen
-
-        if index == 16:  # ABUS URL Getter
-            if not self.abus_url_getter_screen:
-                from GUI_Qt.screens.AbusUrlGetterScreen import AbusUrlGetterScreen
-                self.abus_url_getter_screen = AbusUrlGetterScreen(self)
-            self._add_screen_to_stack(self.abus_url_getter_screen, self.i18n.tr("nav.abus_url_getter"))
-            return self.abus_url_getter_screen
-
-        if index == 17:  # Oakley URL Getter
-            if not self.oakley_url_getter_screen:
-                from GUI_Qt.screens.OakleyUrlGetterScreen import OakleyUrlGetterScreen
-                self.oakley_url_getter_screen = OakleyUrlGetterScreen(self)
-            self._add_screen_to_stack(self.oakley_url_getter_screen, self.i18n.tr("nav.oakley_url_getter"))
-            return self.oakley_url_getter_screen
-
-        if index == 18:  # Product Name Getter
-            if not self.product_name_getter_screen:
-                from GUI_Qt.screens.ProductNameGetterScreen import ProductNameGetterScreen
-                self.product_name_getter_screen = ProductNameGetterScreen(self)
-            self._add_screen_to_stack(
-                self.product_name_getter_screen,
-                self.i18n.tr("nav.product_name_getter"),
-            )
-            return self.product_name_getter_screen
-
-        if index == 19:  # Orbea Automation
-            if not self.orbea_screen:
-                from GUI_Qt.screens.OrbeaScreen import OrbeaScreen
-                self.orbea_screen = OrbeaScreen(self)
-            self._add_screen_to_stack(self.orbea_screen, self.i18n.tr("nav.orbea"))
-            return self.orbea_screen
-
-        if index == 20:  # Earnings
-            if not self.earnings_screen:
-                from GUI_Qt.screens.EarningsScreen import EarningsScreen
-                self.earnings_screen = EarningsScreen(self)
-            self._add_screen_to_stack(self.earnings_screen, self.i18n.tr("nav.earnings"))
-            return self.earnings_screen
-
-        return None
+    def _ensure_screen_created(self, route_key: str):
+        """Create a registered page lazily and attach it to the content stack."""
+        spec = self.ROUTES.get(str(route_key))
+        if spec is None:
+            raise KeyError(f"Unknown application route: {route_key}")
+        screen = spec.screen_factory(self)
+        self._add_screen_to_stack(screen, self.i18n.tr(spec.label_key))
+        return screen
 
     def _init_prompt_handling(self):
-        """Initialize a request queue polled by the GUI to answer background prompt requests."""
-        self._prompt_queue = queue.Queue()
-        ErrorManager.set_prompt_queue(self._prompt_queue)
-
-        # Timer to poll the queue in the GUI thread
-        self._prompt_timer = QTimer(self)
-        self._prompt_timer.setInterval(150)  # 150ms polling
-        self._prompt_timer.timeout.connect(self._process_prompt_queue)
-        self._prompt_timer.start()
+        self.error_service.start()
 
     def _process_prompt_queue(self):
-        """Process pending prompt requests from background threads."""
-        try:
-            while not self._prompt_queue.empty():
-                prompt_type, operation_name, resp_q = self._prompt_queue.get_nowait()
-
-                if prompt_type == "retry":
-                    # Provide a textbox to optionally enter a new code to retry with
-                    dialog = MessageBox(
-                        self.i18n.tr("prompt.retry.title"),
-                        "",
-                        self
-                    )
-                    # Replace default content with input field
-                    try:
-                        dialog.textLayout.removeWidget(dialog.contentLabel)
-                        dialog.contentLabel.deleteLater()
-                    except Exception:
-                        pass
-                    input_widget = QLineEdit()
-                    input_widget.setPlaceholderText(self.i18n.tr("prompt.retry.placeholder"))
-                    # Style input to match Fluent color scheme
-                    input_widget.setStyleSheet(
-                        f"background-color: {COLORS['lavender_grey']}; color: white; padding: {PADDINGS['input']}; border-radius: {RADII['sm']}px;"
-                    )
-                    input_widget.setMinimumWidth(SIZES['panel_min_width'])
-                    dialog.textLayout.addWidget(input_widget)
-                    dialog.yesButton.setText(self.i18n.tr("prompt.retry.yes"))
-                    dialog.cancelButton.setText(self.i18n.tr("prompt.retry.cancel"))
-
-                    # Non-blocking: show dialog and push result to resp_q when closed
-                    def _on_finished(result_code, rq=resp_q, iw=input_widget):
-                        try:
-                            from PySide6.QtWidgets import QDialog
-                            if result_code == QDialog.Accepted:
-                                new_code = iw.text().strip()
-                                if new_code:
-                                    rq.put(new_code)
-                                else:
-                                    rq.put(True)
-                            else:
-                                rq.put(False)
-                        except Exception:
-                            rq.put(False)
-
-                    dialog.finished.connect(_on_finished)
-                    dialog.show()
-
-                elif prompt_type == "continue":
-                    dialog = MessageBox(
-                        self.i18n.tr("prompt.continue.title"),
-                        self.i18n.tr("prompt.continue.content"),
-                        self
-                    )
-                    dialog.yesButton.setText(self.i18n.tr("prompt.continue.yes"))
-                    dialog.cancelButton.setText(self.i18n.tr("prompt.continue.no"))
-                    result = bool(dialog.exec())
-                    resp_q.put(result)
-
-                elif prompt_type == "exit_or_retry":
-                    dialog = MessageBox(
-                        self.i18n.tr("prompt.exit_or_retry.title"),
-                        self.i18n.tr("prompt.exit_or_retry.content"),
-                        self
-                    )
-                    dialog.yesButton.setText(self.i18n.tr("prompt.exit_or_retry.retry"))
-                    dialog.cancelButton.setText(self.i18n.tr("prompt.exit_or_retry.exit"))
-                    if dialog.exec():
-                        resp_q.put("retry")
-                    else:
-                        resp_q.put("exit")
-                else:
-                    # Unknown prompt type
-                    resp_q.put(False)
-
-        except Exception:
-            # Don't let prompt handling crash the GUI
-            pass
+        self.error_service.process()
 
     def _center_on_screen(self):
         """Center the window on the screen"""
@@ -567,6 +312,57 @@ class MainWindow(FluentWindow):
         x = (screen.width() - self.width()) // 2
         y = (screen.height() - self.height()) // 2
         self.move(x, y)
+
+    def _restore_window_state(self) -> None:
+        """Restore normal geometry without allowing an off-screen window."""
+        try:
+            width = max(self.minimumWidth(), int(self.settings.get("window_width", 1400)))
+            height = max(self.minimumHeight(), int(self.settings.get("window_height", 900)))
+            screens = list(QApplication.screens())
+            primary = QApplication.primaryScreen()
+            if not screens or primary is None:
+                self.resize(width, height)
+                return
+            saved_x = int(self.settings.get("window_x", -1))
+            saved_y = int(self.settings.get("window_y", -1))
+            target = None
+            if saved_x >= 0 and saved_y >= 0:
+                from PySide6.QtCore import QPoint
+                point = QPoint(saved_x, saved_y)
+                target = next(
+                    (screen for screen in screens if screen.availableGeometry().contains(point)),
+                    None,
+                )
+            target = target or primary
+            available = target.availableGeometry()
+            width = min(width, available.width())
+            height = min(height, available.height())
+            self.resize(width, height)
+            if saved_x < 0 or saved_y < 0 or target is primary and not available.contains(saved_x, saved_y):
+                saved_x = available.x() + max(0, (available.width() - width) // 2)
+                saved_y = available.y() + max(0, (available.height() - height) // 2)
+            saved_x = max(available.left(), min(saved_x, available.right() - width + 1))
+            saved_y = max(available.top(), min(saved_y, available.bottom() - height + 1))
+            self.move(saved_x, saved_y)
+            if bool(self.settings.get("window_maximized", False)):
+                self.setWindowState(self.windowState() | Qt.WindowState.WindowMaximized)
+        except Exception:
+            self.resize(1400, 900)
+            self._center_on_screen()
+
+    def _save_window_state(self) -> None:
+        geometry = self.normalGeometry() if self.isMaximized() else self.geometry()
+        self.settings.set_many(
+            {
+                "window_x": geometry.x(),
+                "window_y": geometry.y(),
+                "window_width": geometry.width(),
+                "window_height": geometry.height(),
+                "window_maximized": self.isMaximized(),
+                "navigation_compact": bool(self._last_navigation_compact),
+                "last_authenticated_route": self._current_route or "upload",
+            }
+        )
 
     def try_acquire_browser_lease(self, owner) -> bool:
         """Return True when *owner* may exclusively use the shared driver."""
@@ -591,6 +387,7 @@ class MainWindow(FluentWindow):
 
         # Keep references to nav items so we can update text when language changes
         self._nav_items = {}
+        self._nav_item_last_click = {}
 
         def _set_route_emphasis(item, selected: bool) -> None:
             """Give the active route a strong accent and mute inactive routes."""
@@ -611,19 +408,27 @@ class MainWindow(FluentWindow):
                 font = item.font()
                 font.setWeight(QFont.Weight.DemiBold if selected else QFont.Weight.Normal)
                 item.setFont(font)
+                self._refresh_nav_item_text(item)
                 item.update()
             except Exception:
                 pass
 
-        def _add_group(route_key: str, icon, text_key: str, position=NavigationItemPosition.TOP):
+        def _add_group(
+            route_key: str,
+            icon,
+            text_key: str,
+            position=NavigationItemPosition.SCROLL,
+        ):
             item = self.navigationInterface.addItem(
                 routeKey=route_key,
                 icon=icon,
                 text=self.i18n.tr(text_key),
                 selectable=False,
                 position=position,
+                tooltip=self.i18n.tr(text_key),
             )
             self._nav_items[route_key] = item
+            MainWindow._install_navigation_item_click_guard(self, item, route_key)
             try:
                 item.setTextColor(
                     COLORS["text_primary_light"],
@@ -634,18 +439,30 @@ class MainWindow(FluentWindow):
                 item.setFont(font)
             except Exception:
                 pass
+            self._set_nav_item_text(route_key, self.i18n.tr(text_key))
 
-        def _add_item(route_key: str, icon, text_key: str, screen_index: int, parent_key: str, position=NavigationItemPosition.TOP):
+        def _add_item(
+            route_key: str,
+            icon,
+            text_key: str,
+            parent_key: str | None,
+            position=NavigationItemPosition.SCROLL,
+        ):
             item = self.navigationInterface.addItem(
                 routeKey=route_key,
                 icon=icon,
                 text=self.i18n.tr(text_key),
-                onClick=lambda: self._switch_to_screen(screen_index),
+                # NavigationWidget.clicked emits ``triggered_by_user``. Keep
+                # that Boolean separate from the route captured here.
+                onClick=lambda _triggered=False, key=route_key: self.open_route(key),
                 position=position,
                 parentRouteKey=parent_key,
+                tooltip=self.i18n.tr(text_key),
             )
             self._nav_items[route_key] = item
+            MainWindow._install_navigation_item_click_guard(self, item, route_key)
             _set_route_emphasis(item, bool(getattr(item, "isSelected", False)))
+            self._set_nav_item_text(route_key, self.i18n.tr(text_key))
             try:
                 item.selectedChanged.connect(
                     lambda selected, nav_item=item: _set_route_emphasis(nav_item, bool(selected))
@@ -653,44 +470,43 @@ class MainWindow(FluentWindow):
             except Exception:
                 pass
 
-        _add_group("nav_group_operations", FluentIcon.CLOUD_DOWNLOAD, "nav.group.operations")
-        _add_item("upload", FluentIcon.CLOUD_DOWNLOAD, "nav.upload", 0, "nav_group_operations")
-        _add_item("batch", FluentIcon.SYNC, "nav.batch", 1, "nav_group_operations")
-        _add_item("descriptions", FluentIcon.EDIT, "nav.descriptions", 2, "nav_group_operations")
-        _add_item("folders", FluentIcon.FOLDER, "nav.folders", 3, "nav_group_operations")
-        _add_item("translations", FluentIcon.LANGUAGE, "nav.translations", 4, "nav_group_operations")
+        for group in NAV_GROUPS:
+            parent_key = f"nav_group_{group.key}"
+            _add_group(parent_key, group.icon, group.label_key, group.position)
+            for route in (item for item in ROUTES if item.group == group.key):
+                _add_item(route.key, route.icon, route.label_key, parent_key, group.position)
 
-        _add_group("nav_group_review", FluentIcon.PIE_SINGLE, "nav.group.review")
-        _add_item("history", FluentIcon.PIE_SINGLE, "nav.analytics", 7, "nav_group_review")
-        _add_item("earnings", FluentIcon.DOCUMENT, "nav.earnings", 20, "nav_group_review")
-        _add_item("spec_checker", FluentIcon.CHECKBOX, "nav.spec_checker", 11, "nav_group_review")
+        # System destinations stay permanently visible and one click away.
+        for route in (item for item in ROUTES if item.group == "system"):
+            _add_item(
+                route.key,
+                route.icon,
+                route.label_key,
+                None,
+                position=NavigationItemPosition.BOTTOM,
+            )
 
-        _add_group("nav_group_product_tools", FluentIcon.SEARCH, "nav.group.product_tools")
-        _add_item("name_getter", FluentIcon.SEARCH, "nav.name_getter", 12, "nav_group_product_tools")
-        _add_item("code_getter", FluentIcon.DOCUMENT, "nav.code_getter", 13, "nav_group_product_tools")
-        _add_item("product_name_getter", FluentIcon.SEARCH, "nav.product_name_getter", 18, "nav_group_product_tools")
-
-        _add_group("nav_group_brand_tools", FluentIcon.PHOTO, "nav.group.brand_tools")
-        _add_item("basso_images", FluentIcon.PHOTO, "nav.basso_images", 5, "nav_group_brand_tools")
-        _add_item("pinarello_images", FluentIcon.ALBUM, "nav.pinarello_images", 6, "nav_group_brand_tools")
-        _add_item("castelli_url_getter", FluentIcon.DOCUMENT, "nav.castelli_url_getter", 14, "nav_group_brand_tools")
-        _add_item("castelli_images", FluentIcon.PHOTO, "nav.castelli_images", 15, "nav_group_brand_tools")
-        _add_item("abus_url_getter", FluentIcon.DOCUMENT, "nav.abus_url_getter", 16, "nav_group_brand_tools")
-        _add_item("oakley_url_getter", FluentIcon.DOCUMENT, "nav.oakley_url_getter", 17, "nav_group_brand_tools")
-        _add_item("orbea", FluentIcon.SYNC, "nav.orbea", 19, "nav_group_brand_tools")
-
-        _add_group("nav_group_system", FluentIcon.PEOPLE, "nav.group.system", position=NavigationItemPosition.BOTTOM)
-        _add_item("account", FluentIcon.PEOPLE, "nav.account", 8, "nav_group_system", position=NavigationItemPosition.BOTTOM)
-        _add_item("settings", FluentIcon.SETTING, "nav.settings", 9, "nav_group_system", position=NavigationItemPosition.BOTTOM)
-        _add_item("info", FluentIcon.INFO, "nav.info", 10, "nav_group_system", position=NavigationItemPosition.BOTTOM)
+        # Major sections get more breathing room than the child rows inside
+        # each native navigation tree. Keep a little trailing space so the
+        # final Brand tools row scrolls fully clear of the pinned footer.
+        try:
+            scroll_layout = self.navigationInterface.panel.scrollLayout
+            scroll_layout.setSpacing(SPACING["sm"])
+            margins = scroll_layout.contentsMargins()
+            scroll_layout.setContentsMargins(
+                margins.left(),
+                margins.top(),
+                margins.right(),
+                SPACING["sm"],
+            )
+        except Exception:
+            pass
 
         # Version label in navigation footer (under everything)
         try:
             from PySide6.QtWidgets import QHBoxLayout
             from qfluentwidgets import BodyLabel, IconWidget
             from qfluentwidgets.components.navigation.navigation_widget import NavigationWidget
-            from Utilities.Version import get_app_version
-
             self.navigationInterface.addSeparator(NavigationItemPosition.BOTTOM)
 
             version_widget = NavigationWidget(isSelectable=False)
@@ -729,6 +545,85 @@ class MainWindow(FluentWindow):
         except Exception:
             pass
 
+    def _install_navigation_item_click_guard(self, item, route_key: str) -> None:
+        """Make every navigation-tree click atomic and bounce-resistant."""
+        try:
+            # NavigationTreeWidget animates its geometry even for leaf routes.
+            # Replacing that private toggler prevents both parent and child rows
+            # from being left mid-animation by a duplicate mouse release.
+            original_handler = item._onClicked
+            item.itemWidget.itemClicked.disconnect(original_handler)
+        except Exception:
+            # Keep the library's normal behavior if its internal API changes.
+            return
+
+        try:
+            callback = (
+                lambda triggered=False, click_arrow=False, nav_item=item, key=route_key: (
+                    MainWindow._on_navigation_item_clicked(
+                        self,
+                        nav_item,
+                        key,
+                        bool(triggered),
+                        bool(click_arrow),
+                    )
+                )
+            )
+            item._ultrabike_click_guard = callback
+            item.itemWidget.itemClicked.connect(callback)
+        except Exception:
+            # Never leave an item without a click handler if reconnecting fails.
+            try:
+                item.itemWidget.itemClicked.connect(original_handler)
+            except Exception:
+                pass
+
+    def _on_navigation_item_clicked(
+        self,
+        item,
+        route_key: str,
+        triggered_by_user: bool,
+        click_arrow: bool,
+    ) -> None:
+        """Handle a sidebar item once per physical double-click burst."""
+        if triggered_by_user:
+            now = time.monotonic()
+            previous = self._nav_item_last_click.get(route_key, 0.0)
+            guard_seconds = self.NAVIGATION_CLICK_GUARD_MS / 1000.0
+            if now - previous < guard_seconds:
+                return
+            self._nav_item_last_click[route_key] = now
+
+        # Leaf routes have nothing to expand. QFluentWidgets still starts a
+        # geometry animation for them by default, which is the source of the
+        # selected child row overlapping its parent in the reported screenshot.
+        if not item.isCompacted and not item.isLeaf():
+            if item.isSelectable and not item.isSelected and not click_arrow:
+                item.setExpanded(True, ani=False)
+            else:
+                item.setExpanded(not item.isExpanded, ani=False)
+            MainWindow._finalize_navigation_item_layout(self, item)
+
+        if not click_arrow or item.isCompacted:
+            item.clicked.emit(triggered_by_user)
+
+    def _finalize_navigation_item_layout(self, item) -> None:
+        """Snap tree children and parent geometry to one completed state."""
+        try:
+            for child in item.childItems():
+                child.setVisible(item.isExpanded)
+                if item.isExpanded:
+                    child.setFixedSize(child.sizeHint())
+            item.setFixedSize(item.sizeHint())
+            item.updateGeometry()
+
+            layout = item.parentWidget().layout()
+            if layout is not None:
+                layout.invalidate()
+                layout.activate()
+        except Exception:
+            pass
+
     def apply_language_preview(self, lang_code: str) -> None:
         """Temporarily translate app chrome without changing persisted language.
 
@@ -736,30 +631,7 @@ class MainWindow(FluentWindow):
         """
         try:
             self.setWindowTitle(translate(lang_code, "app.title"))
-            self._set_nav_item_text("nav_group_operations", translate(lang_code, "nav.group.operations"))
-            self._set_nav_item_text("nav_group_review", translate(lang_code, "nav.group.review"))
-            self._set_nav_item_text("nav_group_product_tools", translate(lang_code, "nav.group.product_tools"))
-            self._set_nav_item_text("nav_group_brand_tools", translate(lang_code, "nav.group.brand_tools"))
-            self._set_nav_item_text("nav_group_system", translate(lang_code, "nav.group.system"))
-            self._set_nav_item_text("upload", translate(lang_code, "nav.upload"))
-            self._set_nav_item_text("batch", translate(lang_code, "nav.batch"))
-            self._set_nav_item_text("history", translate(lang_code, "nav.analytics"))
-            self._set_nav_item_text("earnings", translate(lang_code, "nav.earnings"))
-            self._set_nav_item_text("translations", translate(lang_code, "nav.translations"))
-            self._set_nav_item_text("descriptions", translate(lang_code, "nav.descriptions"))
-            self._set_nav_item_text("folders", translate(lang_code, "nav.folders"))
-            self._set_nav_item_text("basso_images", translate(lang_code, "nav.basso_images"))
-            self._set_nav_item_text("pinarello_images", translate(lang_code, "nav.pinarello_images"))
-            self._set_nav_item_text("account", translate(lang_code, "nav.account"))
-            self._set_nav_item_text("settings", translate(lang_code, "nav.settings"))
-            self._set_nav_item_text("info", translate(lang_code, "nav.info"))
-            self._set_nav_item_text("code_getter", translate(lang_code, "nav.code_getter"))
-            self._set_nav_item_text("product_name_getter", translate(lang_code, "nav.product_name_getter"))
-            self._set_nav_item_text("castelli_url_getter", translate(lang_code, "nav.castelli_url_getter"))
-            self._set_nav_item_text("castelli_images", translate(lang_code, "nav.castelli_images"))
-            self._set_nav_item_text("abus_url_getter", translate(lang_code, "nav.abus_url_getter"))
-            self._set_nav_item_text("oakley_url_getter", translate(lang_code, "nav.oakley_url_getter"))
-            self._set_nav_item_text("orbea", translate(lang_code, "nav.orbea"))
+            self._retranslate_navigation(lang_code)
         except Exception:
             pass
 
@@ -811,15 +683,69 @@ class MainWindow(FluentWindow):
         except Exception:
             return None
 
-    def _set_nav_item_text(self, route_key: str, text: str) -> None:
-        """Best-effort: update a navigation item's label text at runtime."""
-        item = getattr(self, "_nav_items", {}).get(route_key)
-        if item is not None and hasattr(item, "setText"):
+    def _apply_nav_item_text(self, item, text: str) -> None:
+        """Apply full accessible text and a width-aware visible label."""
+
+        full_text = str(text)
+        try:
+            item.setProperty("fullNavigationText", full_text)
+        except Exception:
+            pass
+        try:
+            setattr(item, "_full_navigation_text", full_text)
+        except Exception:
+            pass
+        try:
+            item.setAccessibleName(full_text)
+        except Exception:
+            pass
+        try:
+            item.setToolTip(full_text)
+        except Exception:
+            pass
+
+        visible_text = full_text
+        try:
+            # QFluentWidgets draws expanded items 10 px narrower than the
+            # panel. Its margins already include native tree indentation and
+            # the group arrow allowance.
+            item_width = self.NAVIGATION_EXPAND_WIDTH - 10
+            margins = item._margins()
+            icon = item.icon()
+            left = 44 + margins.left() if not icon.isNull() else margins.left() + 16
+            available = max(24, item_width - left - margins.right() - 13)
+            visible_text = QFontMetrics(item.font()).elidedText(
+                full_text,
+                Qt.TextElideMode.ElideRight,
+                available,
+            )
+        except Exception:
+            pass
+
+        if hasattr(item, "setText"):
             try:
-                item.setText(text)
-                return
+                item.setText(visible_text)
             except Exception:
                 pass
+
+    def _refresh_nav_item_text(self, item) -> None:
+        """Recalculate elision after a navigation item's font changes."""
+
+        full_text = getattr(item, "_full_navigation_text", None)
+        if full_text is None:
+            try:
+                full_text = item.property("fullNavigationText")
+            except Exception:
+                full_text = None
+        if full_text is not None:
+            self._apply_nav_item_text(item, full_text)
+
+    def _set_nav_item_text(self, route_key: str, text: str) -> None:
+        """Best-effort: update a navigation item's translated label."""
+        item = getattr(self, "_nav_items", {}).get(route_key)
+        if item is not None:
+            self._apply_nav_item_text(item, text)
+            return
 
         nav = getattr(self, "navigationInterface", None)
         if nav is not None and hasattr(nav, "setItemText"):
@@ -828,38 +754,25 @@ class MainWindow(FluentWindow):
             except Exception:
                 pass
 
+    def _retranslate_navigation(self, lang_code: str | None = None) -> None:
+        """Refresh every navigation label from the declarative registries."""
+
+        def translated(key: str) -> str:
+            return translate(lang_code, key) if lang_code else self.i18n.tr(key)
+
+        for group in NAV_GROUPS:
+            self._set_nav_item_text(
+                f"nav_group_{group.key}",
+                translated(group.label_key),
+            )
+        for route in ROUTES:
+            self._set_nav_item_text(route.key, translated(route.label_key))
+
     def _retranslate_ui(self, _lang_code: str | None = None) -> None:
         """Update static UI strings when the application language changes."""
         try:
             self.setWindowTitle(self.i18n.tr("app.title"))
-
-            self._set_nav_item_text("nav_group_operations", self.i18n.tr("nav.group.operations"))
-            self._set_nav_item_text("nav_group_review", self.i18n.tr("nav.group.review"))
-            self._set_nav_item_text("nav_group_product_tools", self.i18n.tr("nav.group.product_tools"))
-            self._set_nav_item_text("nav_group_brand_tools", self.i18n.tr("nav.group.brand_tools"))
-            self._set_nav_item_text("nav_group_system", self.i18n.tr("nav.group.system"))
-
-            self._set_nav_item_text("upload", self.i18n.tr("nav.upload"))
-            self._set_nav_item_text("batch", self.i18n.tr("nav.batch"))
-            self._set_nav_item_text("history", self.i18n.tr("nav.analytics"))
-            self._set_nav_item_text("earnings", self.i18n.tr("nav.earnings"))
-            self._set_nav_item_text("translations", self.i18n.tr("nav.translations"))
-            self._set_nav_item_text("descriptions", self.i18n.tr("nav.descriptions"))
-            self._set_nav_item_text("folders", self.i18n.tr("nav.folders"))
-            self._set_nav_item_text("basso_images", self.i18n.tr("nav.basso_images"))
-            self._set_nav_item_text("pinarello_images", self.i18n.tr("nav.pinarello_images"))
-            self._set_nav_item_text("account", self.i18n.tr("nav.account"))
-            self._set_nav_item_text("settings", self.i18n.tr("nav.settings"))
-            self._set_nav_item_text("info", self.i18n.tr("nav.info"))
-            self._set_nav_item_text("spec_checker", self.i18n.tr("nav.spec_checker"))
-            self._set_nav_item_text("name_getter", self.i18n.tr("nav.name_getter"))
-            self._set_nav_item_text("code_getter", self.i18n.tr("nav.code_getter"))
-            self._set_nav_item_text("product_name_getter", self.i18n.tr("nav.product_name_getter"))
-            self._set_nav_item_text("castelli_url_getter", self.i18n.tr("nav.castelli_url_getter"))
-            self._set_nav_item_text("castelli_images", self.i18n.tr("nav.castelli_images"))
-            self._set_nav_item_text("abus_url_getter", self.i18n.tr("nav.abus_url_getter"))
-            self._set_nav_item_text("oakley_url_getter", self.i18n.tr("nav.oakley_url_getter"))
-            self._set_nav_item_text("orbea", self.i18n.tr("nav.orbea"))
+            self._retranslate_navigation()
 
             # Notify screens if they implement live retranslation
             for screen in (
@@ -868,6 +781,8 @@ class MainWindow(FluentWindow):
                 getattr(self, "unified_batch_screen", None),
                 getattr(self, "history_screen", None),
                 getattr(self, "earnings_screen", None),
+                getattr(self, "spotify_screen", None),
+                getattr(self, "activity_screen", None),
                 getattr(self, "translations_screen", None),
                 getattr(self, "descriptions_screen", None),
                 getattr(self, "folder_creator_screen", None),
@@ -900,7 +815,7 @@ class MainWindow(FluentWindow):
         # FluentWindow automatically handles navigation layout
         # Use a desktop-sized label rail and collapse it automatically only
         # when the content area needs the space.
-        self.navigationInterface.setExpandWidth(240)
+        self.navigationInterface.setExpandWidth(self.NAVIGATION_EXPAND_WIDTH)
         try:
             self.navigationInterface.setMinimumExpandWidth(1100)
         except Exception:
@@ -941,7 +856,7 @@ class MainWindow(FluentWindow):
             shortcut.activated.connect(callback)
             self._shortcuts.append(shortcut)
 
-        _add("Ctrl+,", lambda: self._switch_to_screen(9))
+        _add("Ctrl+,", lambda: self.open_route("settings"))
         _add("Ctrl+Shift+R", self.reconnect_browser)
         _add("F6", lambda: self._cycle_focus(False))
         _add("Shift+F6", lambda: self._cycle_focus(True))
@@ -973,6 +888,11 @@ class MainWindow(FluentWindow):
     def _sync_navigation_for_width(self, force: bool = False) -> None:
         """Keep the navigation usable without crowding minimum-size pages."""
         compact = self.width() < 1120
+        if force and not compact:
+            try:
+                compact = bool(self.settings.get("navigation_compact", False))
+            except Exception:
+                pass
         if not force and compact == self._last_navigation_compact:
             return
         self._last_navigation_compact = compact
@@ -1078,71 +998,41 @@ class MainWindow(FluentWindow):
 
                 def _late_apply() -> None:
                     try:
+                        # Keep the guard set during the call so this deferred
+                        # pass cannot schedule itself forever.
+                        self._apply_titlebar_theme()
+                    finally:
                         self._titlebar_theme_deferred = False
-                    except Exception:
-                        pass
-                    self._apply_titlebar_theme()
 
                 QTimer.singleShot(0, _late_apply)
         except Exception:
             pass
-    def _switch_to_screen(self, index):
-        """Switch to a different screen"""
-        if not self._can_leave_current_screen():
-            self._restore_current_navigation_selection()
-            return
-        try:
-            screen = self._ensure_screen_created(index)
-        except Exception as error:
-            try:
-                self.logger.error("Navigation", f"Could not open screen {index}", exception=error)
-            except Exception:
-                pass
-            InfoBar.error(
-                title=self.i18n.tr("common.error"),
-                content=self.i18n.tr("navigation.load_error"),
-                orient=Qt.Orientation.Horizontal,
-                isClosable=True,
-                position=InfoBarPosition.TOP,
-                duration=5000,
-                parent=self,
-            )
-            self._restore_current_navigation_selection()
-            return
-        if screen is not None:
-            self._show_screen(screen)
-            self._current_screen_index = index
-            route = self.SCREEN_ROUTES.get(index)
-            if route:
-                try:
-                    self.navigationInterface.setCurrentItem(route)
-                except Exception:
-                    pass
+    def open_route(self, route_key: str) -> bool:
+        """Open a stable application route by key."""
+        return self.navigation_service.open(route_key)
 
-    def _can_leave_current_screen(self) -> bool:
-        """Give the current page a chance to save or discard pending edits."""
-        stack = getattr(self, "content_stack", None)
-        screen = stack.currentWidget() if stack is not None else None
-        guard = getattr(screen, "request_navigation_away", None)
-        if not callable(guard):
-            return True
+    def track_worker(self, worker, kind, source_route: str, **metadata):
+        """Attach a screen's QThread to the persistent Activity lifecycle."""
+        record = self.operation_tracker.track_qthread(
+            worker,
+            kind if isinstance(kind, OperationKind) else str(kind),
+            source_route,
+            **metadata,
+        )
         try:
-            return bool(guard())
-        except Exception as error:
-            try:
-                self.logger.error("Navigation", "Unsaved-change guard failed", exception=error)
-            except Exception:
-                pass
-            return False
-
-    def _restore_current_navigation_selection(self) -> None:
-        route = self.SCREEN_ROUTES.get(self._current_screen_index)
-        if not route:
-            return
-        try:
-            self.navigationInterface.setCurrentItem(route)
+            worker._operation_record_id = record.id
         except Exception:
             pass
+        return record
+
+    def _switch_to_screen(self, route_key: str):
+        return self.open_route(route_key)
+
+    def _can_leave_current_screen(self) -> bool:
+        return self.navigation_service.can_leave_current()
+
+    def _restore_current_navigation_selection(self) -> None:
+        self.navigation_service.restore_selection()
 
     def _add_screen_to_stack(self, screen, name):
         """Add screen to content stack if not already added"""
@@ -1163,6 +1053,8 @@ class MainWindow(FluentWindow):
     def _polish_screen(self, screen) -> None:
         """Apply cross-screen responsive and assistive-technology defaults."""
         def _apply() -> None:
+            apply_screen_palette(screen)
+            enforce_transparent_labels(screen)
             enforce_responsive_text(screen)
             apply_accessibility_defaults(screen)
 
@@ -1184,6 +1076,9 @@ class MainWindow(FluentWindow):
         if is_in_stack:
             self.content_stack.setCurrentWidget(screen)
             self._polish_screen(screen)
+            activated = getattr(screen, "on_activated", None)
+            if callable(activated):
+                QTimer.singleShot(0, activated)
 
     def _check_session(self):
         """Check for valid session and show appropriate screen"""
@@ -1252,51 +1147,7 @@ class MainWindow(FluentWindow):
 
     def _auto_login(self, email, password):
         """Auto-login with saved credentials"""
-        from GUI_Qt.widgets.LoadingWidget import LoadingWidget
-        from PySide6.QtCore import QThread, Signal
-        from Config.BrowserConfig.BrowserManager import BrowserManager
-        from Config.LoginConfig.LoginHandler import LoginHandler
-
-        class AutoLoginWorker(QThread):
-            finished = Signal(bool, object)  # success, driver
-
-            def __init__(self, email, password, settings, credential_manager):
-                super().__init__()
-                self.email = email
-                self.password = password
-                self.settings = settings
-                self.credential_manager = credential_manager
-
-            def run(self):
-                path = ''
-                try:
-                    browser_choice = self.settings.get_browser_choice()
-                    browser_manager = BrowserManager()
-                    driver = browser_manager.setup_browser(
-                        browser_choice,
-                        retry_callback=lambda: False
-                    )
-
-                    if driver is None:
-                        self.finished.emit(False, None)
-                        return
-
-                    login_handler = LoginHandler(driver, self.credential_manager)
-                    success = login_handler.login(
-                        credentials_callback=lambda: (self.email, self.password),
-                        retry_callback=lambda: False,
-                        max_attempts=1
-                    )
-
-                    if success:
-                        self.finished.emit(True, driver)
-                    else:
-                        if driver:
-                            driver.quit()
-                        self.finished.emit(False, None)
-
-                except Exception:
-                    self.finished.emit(False, None)
+        from GUI_Qt.workers.login_workers import PimboLoginWorker
 
         # Show loading
         self._show_loading(self.i18n.tr("loading.connecting"))
@@ -1309,9 +1160,15 @@ class MainWindow(FluentWindow):
             pass
 
         # Start auto-login worker
-        worker = AutoLoginWorker(email, password, self.settings, self.credential_manager)
+        worker = PimboLoginWorker(
+            email,
+            password,
+            self.settings.get_browser_choice() or "Chrome",
+            self.credential_manager,
+            self.i18n.tr,
+        )
 
-        def on_complete(success, driver):
+        def on_complete(success, _message, driver):
             if success:
                 self.current_user = email
                 self.driver = driver
@@ -1327,7 +1184,7 @@ class MainWindow(FluentWindow):
                     saved_login_failed=True,
                 )
 
-        worker.finished.connect(on_complete)
+        worker.result.connect(on_complete)
         worker.start()
         self._auto_login_worker = worker  # Keep reference
 
@@ -1365,9 +1222,14 @@ class MainWindow(FluentWindow):
                 self.logout,
                 self.i18n.tr,
                 self,
-                on_account=lambda: self._switch_to_screen(8),
-                on_settings=lambda: self._switch_to_screen(9),
+                on_account=lambda: self.open_route("account"),
+                on_settings=lambda: self.open_route("settings"),
+                on_activity=lambda: self.open_route("activity"),
             )
+            self.operation_tracker.runningCountChanged.connect(
+                self.top_bar.update_running_jobs
+            )
+            self.top_bar.update_running_jobs(self.operation_tracker.running_count())
         else:
             try:
                 self.top_bar.update_user(self._get_topbar_user_text())
@@ -1391,9 +1253,8 @@ class MainWindow(FluentWindow):
 
         # Apply background colors to containers
         from qfluentwidgets import isDarkTheme
-        from GUI_Qt.styles.theme_config import COLORS
         is_dark = isDarkTheme()
-        bg_color = COLORS['space_indigo'] if is_dark else COLORS['platinum']
+        bg_color = get_surface_color(is_dark, 'canvas')
 
         self._main_container.setStyleSheet(f"""
             #mainContainer {{
@@ -1411,9 +1272,10 @@ class MainWindow(FluentWindow):
         # If any screens were pre-constructed before content_stack existed, add them now.
         self._add_created_screens_to_stack()
 
-        # Switch to upload screen by default
-        self._current_screen_index = None
-        self._switch_to_screen(0)
+        # Restore the last authenticated route when it is still registered.
+        self._current_route = None
+        saved_route = str(self.settings.get("last_authenticated_route", "upload") or "upload")
+        self.open_route(saved_route if saved_route in self.ROUTES else "upload")
         self._sync_navigation_for_width(force=True)
         apply_accessibility_defaults(self._main_container)
 
@@ -1421,172 +1283,13 @@ class MainWindow(FluentWindow):
         self._schedule_update_check()
 
     def _schedule_update_check(self) -> None:
-        if self._update_check_scheduled:
-            return
-        self._update_check_scheduled = True
-
-        try:
-            enabled = bool(self.settings.get('update_check_enabled', True))
-        except Exception:
-            enabled = True
-        if not enabled:
-            return
-
-        try:
-            url = (self.settings.get('update_manifest_url', '') or '').strip()
-        except Exception:
-            url = ''
-        if not url:
-            return
-
-        QTimer.singleShot(2500, lambda: self.check_for_updates(interactive=False))
+        self.update_service.schedule()
 
     def check_for_updates(self, interactive: bool = True) -> None:
-        """Check update manifest and (if newer) prompt to download+install."""
-        try:
-            url = (self.settings.get('update_manifest_url', '') or '').strip()
-        except Exception:
-            url = ''
-        if not url:
-            return
-
-        # If VERSION.txt is missing/corrupt, default low so updates still work.
-        current = get_app_version('0.0.0')
-
-        from PySide6.QtCore import QThread, Signal
-
-        class _UpdateCheckWorker(QThread):
-            finished = Signal(bool, object, str)  # ok, manifest, error
-
-            def __init__(self, manifest_url: str):
-                super().__init__()
-                self.manifest_url = manifest_url
-
-            def run(self):
-                try:
-                    manifest = fetch_update_manifest(self.manifest_url)
-                    self.finished.emit(True, manifest, '')
-                except Exception as e:
-                    self.finished.emit(False, None, str(e))
-
-        worker = _UpdateCheckWorker(url)
-
-        def _on_checked(ok: bool, manifest, error: str):
-            if not ok:
-                if interactive:
-                    InfoBar.error(
-                        title=self.i18n.tr('update.error.title') if hasattr(self, 'i18n') else 'Update',
-                        content=error or 'Failed to check for updates',
-                        orient=Qt.Orientation.Horizontal,
-                        isClosable=True,
-                        position=InfoBarPosition.TOP,
-                        duration=4000,
-                        parent=self,
-                    )
-                return
-
-            if not is_newer_version(current, manifest.version):
-                if interactive:
-                    InfoBar.success(
-                        title=self.i18n.tr('update.uptodate.title') if hasattr(self, 'i18n') else 'Update',
-                        content=self.i18n.tr('update.uptodate.content') if hasattr(self, 'i18n') else 'You are up to date.',
-                        orient=Qt.Orientation.Horizontal,
-                        isClosable=True,
-                        position=InfoBarPosition.TOP,
-                        duration=2500,
-                        parent=self,
-                    )
-                return
-
-            title = self.i18n.tr('update.available.title') if hasattr(self, 'i18n') else 'Update available'
-            body = (self.i18n.tr('update.available.content', version=manifest.version)
-                    if hasattr(self, 'i18n') else f'New version {manifest.version} is available. Download and install now?')
-            if getattr(manifest, 'notes', None):
-                body = f"{body}\n\n{manifest.notes}"
-
-            dialog = MessageBox(title, body, self)
-            dialog.yesButton.setText(self.i18n.tr('update.available.yes') if hasattr(self, 'i18n') else 'Update')
-            dialog.cancelButton.setText(self.i18n.tr('update.available.no') if hasattr(self, 'i18n') else 'Later')
-            if not dialog.exec():
-                return
-
-            self._download_and_install_update(manifest)
-
-        worker.finished.connect(_on_checked)
-        worker.start()
-        self._update_worker = worker
+        self.update_service.check(interactive=interactive)
 
     def _download_and_install_update(self, manifest) -> None:
-        from PySide6.QtCore import QThread, Signal
-
-        self._show_loading(self.i18n.tr('update.downloading') if hasattr(self, 'i18n') else 'Downloading update...')
-
-        class _DownloadWorker(QThread):
-            finished = Signal(bool, str, str)  # ok, path, error
-
-            def __init__(self, m):
-                super().__init__()
-                self.m = m
-
-            def run(self):
-                try:
-                    name = f"UltraBike_Automatizacija_Setup_{self.m.version}.exe"
-                    path = download_to_temp(self.m.url, name)
-
-                    # SHA256 verification is now mandatory (enforced in fetch_update_manifest)
-                    # Always verify downloaded file matches manifest hash
-                    actual = sha256_file(path)
-                    if actual.lower() != str(self.m.sha256).lower():
-                        raise RuntimeError('Downloaded update failed SHA256 verification')
-
-                    self.finished.emit(True, path, '')
-                except Exception as e:
-                    if path:
-                        try:
-                            os.remove(path)
-                        except OSError:
-                            pass
-                    self.finished.emit(False, '', str(e))
-
-        worker = _DownloadWorker(manifest)
-
-        def _done(ok: bool, path: str, error: str):
-            if not ok:
-                self._show_loading('')
-                InfoBar.error(
-                    title=self.i18n.tr('update.error.title') if hasattr(self, 'i18n') else 'Update',
-                    content=error or 'Failed to download update',
-                    orient=Qt.Orientation.Horizontal,
-                    isClosable=True,
-                    position=InfoBarPosition.TOP,
-                    duration=5000,
-                    parent=self,
-                )
-                return
-
-            try:
-                # Updates should be unattended: no destination/shortcut prompts and no immediate
-                # post-install launch (which can race with AV/file locks and cause transient DLL errors).
-                run_installer(path, silent=True)
-            except Exception as e:
-                InfoBar.error(
-                    title=self.i18n.tr('update.error.title') if hasattr(self, 'i18n') else 'Update',
-                    content=str(e),
-                    orient=Qt.Orientation.Horizontal,
-                    isClosable=True,
-                    position=InfoBarPosition.TOP,
-                    duration=5000,
-                    parent=self,
-                )
-                return
-
-            # Exit on the next event-loop turn so the UI remains responsive
-            # while the installer starts (a blocking sleep froze the window).
-            QTimer.singleShot(500, QApplication.instance().quit)
-
-        worker.finished.connect(_done)
-        worker.start()
-        self._update_worker = worker
+        self.update_service.download_and_install(manifest)
 
     def on_login_success(self, email, driver):
         """Called when login succeeds"""
@@ -1649,7 +1352,8 @@ class MainWindow(FluentWindow):
         """Recreate Selenium driver and re-login using the 24h session, if available."""
         from qfluentwidgets import InfoBar, InfoBarPosition
         from PySide6.QtCore import Qt
-        from PySide6.QtCore import QThread, Signal
+        from Database.SessionManager import SessionManager
+        from GUI_Qt.workers.login_workers import PimboLoginWorker
 
         if self._is_driver_alive():
             InfoBar.success(
@@ -1663,58 +1367,37 @@ class MainWindow(FluentWindow):
             )
             return
 
-        class _ReconnectWorker(QThread):
-            finished = Signal(bool, str, object, str)  # success, message, driver, email
+        try:
+            email, password = SessionManager(self.db).get_credentials_from_session()
+        except Exception as error:
+            email, password = "", ""
+            session_error = str(error)
+        else:
+            session_error = ""
+        if not (email and password):
+            InfoBar.error(
+                title=self.i18n.tr("topbar.reconnect.title"),
+                content=session_error or self.i18n.tr("topbar.reconnect.no_session"),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP,
+                duration=4000,
+                parent=self,
+            )
+            return
 
-            def __init__(self, main):
-                super().__init__()
-                self.main = main
+        worker = PimboLoginWorker(
+            email,
+            password,
+            self.settings.get_browser_choice() or "Chrome",
+            self.credential_manager,
+            self.i18n.tr,
+        )
 
-            def run(self):
-                driver = None
-                try:
-                    from Database.SessionManager import SessionManager
-                    sm = SessionManager(self.main.db)
-                    email, password = sm.get_credentials_from_session()
-                    if not (email and password):
-                        self.finished.emit(False, self.main.i18n.tr("topbar.reconnect.no_session"), None, "")
-                        return
-
-                    from Config.BrowserConfig.BrowserManager import BrowserManager
-                    browser_choice = self.main.settings.get_browser_choice() or "Chrome"
-                    bm = BrowserManager()
-                    driver = bm.setup_browser(browser_choice, retry_callback=lambda: False)
-                    if driver is None:
-                        self.finished.emit(False, self.main.i18n.tr("login.browser_init_failed"), None, "")
-                        return
-
-                    from Config.LoginConfig.LoginHandler import LoginHandler
-                    lh = LoginHandler(driver, self.main.credential_manager)
-                    ok = lh.login(credentials_callback=lambda: (email, password), retry_callback=lambda: False, max_attempts=1)
-                    if not ok:
-                        try:
-                            driver.quit()
-                        except Exception:
-                            pass
-                        self.finished.emit(False, self.main.i18n.tr("topbar.reconnect.login_failed"), None, "")
-                        return
-
-                    self.finished.emit(True, self.main.i18n.tr("topbar.reconnect.done"), driver, email)
-                except Exception as e:
-                    try:
-                        if driver:
-                            driver.quit()
-                    except Exception:
-                        pass
-                    self.finished.emit(False, str(e), None, "")
-
-        worker = _ReconnectWorker(self)
-
-        def _done(success: bool, message: str, driver, email: str):
+        def _done(success: bool, message: str, driver):
             if success:
                 self.driver = driver
-                if email:
-                    self.current_user = email
+                self.current_user = email
                 self.refresh_topbar_user()
                 InfoBar.success(
                     title=self.i18n.tr("topbar.reconnect.title"),
@@ -1726,6 +1409,8 @@ class MainWindow(FluentWindow):
                     parent=self,
                 )
             else:
+                if message == self.i18n.tr("login.invalid_credentials"):
+                    message = self.i18n.tr("topbar.reconnect.login_failed")
                 InfoBar.error(
                     title=self.i18n.tr("topbar.reconnect.title"),
                     content=message,
@@ -1736,7 +1421,7 @@ class MainWindow(FluentWindow):
                     parent=self,
                 )
 
-        worker.finished.connect(_done)
+        worker.result.connect(_done)
         worker.start()
         self._reconnect_worker = worker
 
@@ -1774,7 +1459,7 @@ class MainWindow(FluentWindow):
                 pass
             self.driver = None
         self.current_user = None
-        self._current_screen_index = None
+        self._current_route = None
 
         # Hide navigation bar
         self.navigationInterface.setVisible(False)
@@ -1800,78 +1485,20 @@ class MainWindow(FluentWindow):
             return False
 
     def _iter_background_workers(self, include_orbea: bool = True):
-        """Yield distinct running QThreads retained by constructed screens."""
-        seen = set()
-        for value in vars(self).values():
-            if isinstance(value, QThread) and value.isRunning():
-                seen.add(id(value))
-                yield self, value
-        for index in self.SCREEN_ROUTES:
-            # Resolve from the already-created screen attributes only; shutdown
-            # must never instantiate new pages or start their dependencies.
-            route_attr = {
-                0: "upload_screen", 1: "unified_batch_screen", 2: "descriptions_screen",
-                3: "folder_creator_screen", 5: "basso_images_screen",
-                6: "pinarello_images_screen", 11: "spec_checker_screen",
-                12: "name_getter_screen", 13: "code_getter_screen",
-                14: "castelli_url_getter_screen", 15: "castelli_image_downloader_screen",
-                16: "abus_url_getter_screen", 17: "oakley_url_getter_screen",
-                18: "product_name_getter_screen", 19: "orbea_screen",
-            }.get(index)
-            screen = getattr(self, route_attr, None) if route_attr else None
-            if screen is None or (screen is self.orbea_screen and not include_orbea):
-                continue
-            for value in vars(screen).values():
-                if isinstance(value, QThread) and id(value) not in seen and value.isRunning():
-                    seen.add(id(value))
-                    yield screen, value
-        login = getattr(self, "login_screen", None)
-        if login is not None:
-            for value in vars(login).values():
-                if isinstance(value, QThread) and id(value) not in seen and value.isRunning():
-                    seen.add(id(value))
-                    yield login, value
+        yield from self.shutdown_service.iter_workers(include_orbea=include_orbea)
 
     def _confirm_stop_active_work(self) -> bool:
-        if not any(True for _ in self._iter_background_workers(include_orbea=True)):
-            return True
-        dialog = MessageBox(
-            self.i18n.tr("shutdown.confirm.title"),
-            self.i18n.tr("shutdown.confirm.content"),
-            self,
-        )
-        dialog.yesButton.setText(self.i18n.tr("shutdown.confirm.stop"))
-        dialog.cancelButton.setText(self.i18n.tr("common.cancel"))
-        try:
-            dialog.cancelButton.setFocus()
-        except Exception:
-            pass
-        return bool(dialog.exec())
+        return self.shutdown_service.confirm_stop()
 
     def _stop_background_work(self, wait_ms: int = 5000) -> bool:
-        """Cooperatively stop page workers before shared resources disappear."""
-        workers = list(self._iter_background_workers(include_orbea=False))
-        for screen, worker in workers:
-            shutdown = getattr(screen, "shutdown", None)
-            if callable(shutdown):
-                try:
-                    if not shutdown(wait_ms=wait_ms):
-                        return False
-                    continue
-                except Exception:
-                    return False
-            stopper = getattr(worker, "request_stop", None) or getattr(worker, "stop", None)
+        spotify = getattr(self, "spotify_screen", None)
+        if spotify is not None and hasattr(spotify, "shutdown"):
             try:
-                if callable(stopper):
-                    stopper()
-                else:
-                    worker.requestInterruption()
+                if not spotify.shutdown(wait_ms=wait_ms):
+                    return False
             except Exception:
                 return False
-        for _screen, worker in workers:
-            if worker.isRunning() and not worker.wait(max(0, int(wait_ms))):
-                return False
-        return True
+        return self.shutdown_service.stop_workers(wait_ms=wait_ms)
 
     def closeEvent(self, event):
         """Checkpoint long-running automation before closing application resources."""
@@ -1933,6 +1560,10 @@ class MainWindow(FluentWindow):
         except Exception:
             pass
         try:
+            self._save_window_state()
+        except Exception:
+            pass
+        try:
             self.db.close()
         except Exception:
             pass
@@ -1979,7 +1610,7 @@ class MainWindow(FluentWindow):
             items: List of {brand, code, url} dicts
         """
         # Switch to upload screen
-        self._switch_to_screen(0)
+        self.open_route("upload")
 
         # Trigger batch processing in upload screen
         if self.upload_screen:
@@ -1987,36 +1618,41 @@ class MainWindow(FluentWindow):
 
     def _apply_saved_theme(self):
         """Apply saved theme from settings"""
-        from qfluentwidgets import setTheme, Theme
+        from qfluentwidgets import Theme, isDarkTheme, setTheme
         from GUI_Qt.styles.global_styles import get_global_stylesheet
 
         theme = self.settings.get('theme', 'light')
-        if theme == 'dark':
-            setTheme(Theme.DARK)
-        else:
-            setTheme(Theme.LIGHT)
+        desired_dark = theme == 'dark'
+        # QFluentWidgets performs a full registered-widget style refresh even
+        # when setTheme() receives the already-active theme. Avoid that costly
+        # no-op, especially when this helper is called after Settings preview.
+        if desired_dark != isDarkTheme():
+            setTheme(Theme.DARK if desired_dark else Theme.LIGHT)
 
         # Apply global stylesheet for consistent styling (set at app-level so it
         # reliably affects all widgets/screens).
         try:
             app = QApplication.instance()
+            stylesheet = get_global_stylesheet()
             if app is not None:
-                app.setStyleSheet(get_global_stylesheet())
+                if app.styleSheet() != stylesheet:
+                    app.setStyleSheet(stylesheet)
             else:
-                self.setStyleSheet(get_global_stylesheet())
+                if self.styleSheet() != stylesheet:
+                    self.setStyleSheet(stylesheet)
         except Exception:
-            self.setStyleSheet(get_global_stylesheet())
+            stylesheet = get_global_stylesheet()
+            if self.styleSheet() != stylesheet:
+                self.setStyleSheet(stylesheet)
 
     def update_container_backgrounds(self):
         """Update main container and content stack backgrounds when theme changes"""
         from qfluentwidgets import isDarkTheme
-        from GUI_Qt.styles.theme_config import COLORS
-
         if getattr(self, 'content_stack', None) is None:
             return
 
         is_dark = isDarkTheme()
-        bg_color = COLORS['space_indigo'] if is_dark else COLORS['platinum']
+        bg_color = get_surface_color(is_dark, 'canvas')
 
         # Find and update main container
         for i in range(self.stackedWidget.count()):

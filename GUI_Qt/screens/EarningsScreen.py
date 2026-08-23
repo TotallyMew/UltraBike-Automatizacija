@@ -9,10 +9,13 @@ from typing import Any
 
 import openpyxl
 from openpyxl.styles import Alignment, Font, PatternFill
-from PySide6.QtCore import QPoint, QRectF, Qt, QTimer
-from PySide6.QtGui import QColor, QFont, QPainter, QPen
+from PySide6.QtCore import QDate, QEvent, QPoint, QRectF, QSize, Qt, QTimer, QUrl
+from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPen, QTextCharFormat
+from PySide6.QtMultimedia import QSoundEffect
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QAbstractSpinBox,
+    QCalendarWidget,
     QCheckBox,
     QDateEdit,
     QDateTimeEdit,
@@ -26,7 +29,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
-    QMenu,
+    QLayout,
     QMessageBox,
     QProgressBar,
     QSizePolicy,
@@ -36,14 +39,20 @@ from PySide6.QtWidgets import (
     QTabWidget,
     QTableWidget,
     QTableWidgetItem,
+    QTableView,
+    QToolButton,
     QToolTip,
     QVBoxLayout,
     QWidget,
 )
 from qfluentwidgets import (
+    Action,
     BodyLabel,
     CaptionLabel,
+    CheckBox,
     ComboBox,
+    DateEdit as FluentDateEdit,
+    DoubleSpinBox as FluentDoubleSpinBox,
     FluentIcon,
     InfoBar,
     InfoBarPosition,
@@ -51,7 +60,9 @@ from qfluentwidgets import (
     MessageBox,
     PrimaryPushButton,
     PushButton,
+    RoundMenu,
     ScrollArea,
+    SpinBox as FluentSpinBox,
     StrongBodyLabel,
     TitleLabel,
     isDarkTheme,
@@ -67,9 +78,20 @@ from GUI_Qt.styles.theme_config import (
     RADII,
     SIZES,
     SPACING,
+    get_dialog_button_style,
+    get_dialog_danger_button_style,
+    get_dialog_section_style,
+    get_dialog_table_style,
+    get_calendar_popup_style,
+    get_form_dialog_style,
+    get_form_input_style,
+    get_accent_colors,
     get_selection_bg,
+    get_status_text_color,
     get_subtle_border,
     get_subtle_item_hover_bg,
+    get_surface_color,
+    get_text_color,
     rgba_from_hex,
 )
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
@@ -79,485 +101,25 @@ from Managers.EarningsManager import (
     EarningsManager,
     GoalStatus,
     ProductType,
+    QuestKind,
 )
 
 
-PRODUCT_TYPES = (
-    (ProductType.BICYCLE.value, "Bicycle"),
-    (ProductType.FRAMESET.value, "Frameset"),
-    (ProductType.OTHER.value, "Other"),
+from GUI_Qt.earnings.presentation import (
+    PRODUCT_TYPES, duration, goal_level_state, goal_progress_state, local_datetime, money,
 )
-
-
-def money(cents: float | int | None) -> str:
-    if cents is None:
-        return "—"
-    return f"€{float(cents) / 100:,.2f}"
-
-
-def duration(seconds: float | int | None) -> str:
-    seconds = max(0, int(seconds or 0))
-    hours, remainder = divmod(seconds, 3600)
-    minutes, secs = divmod(remainder, 60)
-    return f"{hours:02d}:{minutes:02d}:{secs:02d}"
-
-
-def local_datetime(raw: str | None) -> str:
-    if not raw:
-        return ""
-    value = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=timezone.utc)
-    return value.astimezone().strftime("%Y-%m-%d %H:%M")
-
-
-class EarningsChart(QWidget):
-    """Compact theme-aware bar chart with hover values."""
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.data: list[dict[str, Any]] = []
-        self._bar_rects: list[QRectF] = []
-        self.setMinimumHeight(160)
-        self.setMouseTracking(True)
-
-    def set_data(self, data: list[dict[str, Any]]) -> None:
-        self.data = data
-        self.update()
-
-    def paintEvent(self, event):  # noqa: N802
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        text = QColor(COLORS["text_primary_dark"] if isDarkTheme() else COLORS["text_primary_light"])
-        secondary = QColor(COLORS["text_secondary"])
-        accent = QColor(COLORS.get("primary", COLORS["space_indigo"]))
-        grid = QColor(COLORS["border_dark"] if isDarkTheme() else COLORS["border_light"])
-        plot = self.rect().adjusted(54, 16, -16, -42)
-        self._bar_rects = []
-        if not self.data:
-            painter.setPen(secondary)
-            painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "No earning data yet")
-            return
-        maximum = max(1, max(int(item.get("cents", 0)) for item in self.data))
-        painter.setPen(QPen(grid, 1))
-        for i in range(5):
-            y = plot.bottom() - plot.height() * i / 4
-            painter.drawLine(plot.left(), int(y), plot.right(), int(y))
-            painter.setPen(secondary)
-            painter.drawText(2, int(y) - 8, 48, 18, Qt.AlignmentFlag.AlignRight, money(maximum * i / 4))
-            painter.setPen(QPen(grid, 1))
-        slot = plot.width() / max(1, len(self.data))
-        bar_width = max(3.0, min(28.0, slot * 0.66))
-        label_step = max(1, math.ceil(len(self.data) / 10))
-        for index, item in enumerate(self.data):
-            value = int(item.get("cents", 0))
-            height = plot.height() * value / maximum
-            x = plot.left() + index * slot + (slot - bar_width) / 2
-            rect = QRectF(x, plot.bottom() - height, bar_width, max(1.5, height))
-            self._bar_rects.append(rect)
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(accent)
-            painter.drawRoundedRect(rect, 3, 3)
-            if index % label_step == 0 or index == len(self.data) - 1:
-                painter.setPen(text)
-                painter.save()
-                font = painter.font()
-                font.setPointSize(8)
-                painter.setFont(font)
-                painter.drawText(
-                    QRectF(x - slot / 2, plot.bottom() + 8, slot * 2, 24),
-                    Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
-                    str(item.get("label", "")),
-                )
-                painter.restore()
-
-    def mouseMoveEvent(self, event):  # noqa: N802
-        point = event.position()
-        for index, rect in enumerate(self._bar_rects):
-            if rect.contains(point):
-                item = self.data[index]
-                QToolTip.showText(
-                    event.globalPosition().toPoint(),
-                    f"{item.get('label', '')}\n{money(item.get('cents', 0))} • {item.get('count', 0)} products",
-                    self,
-                )
-                return
-        QToolTip.hideText()
-
-
-class MetricCard(QWidget):
-    def __init__(self, title: str, parent=None):
-        super().__init__(parent)
-        self.setObjectName("earningsMetric")
-        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 10, 16, 11)
-        layout.setSpacing(3)
-        self.title = CaptionLabel(title)
-        self.title.setWordWrap(True)
-        self.value = QLabel("—")
-        self.value.setFont(QFont(FONTS["family"], 27, QFont.Weight.DemiBold))
-        self.subtitle = CaptionLabel("")
-        self.subtitle.setWordWrap(True)
-        layout.addWidget(self.title)
-        layout.addWidget(self.value)
-        layout.addWidget(self.subtitle)
-
-    def set_values(self, value: str, subtitle: str = "") -> None:
-        self.value.setText(value)
-        self.subtitle.setText(subtitle)
-
-
-class ProjectionMetric(QWidget):
-    """Borderless value used inside the income-projection surface."""
-
-    def __init__(self, title: str, parent=None):
-        super().__init__(parent)
-        self.setMinimumHeight(68)
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(2, 2, 10, 3)
-        layout.setSpacing(2)
-        self.title = CaptionLabel(title)
-        self.value = QLabel("—")
-        self.value.setFont(QFont(FONTS["family"], 22, QFont.Weight.DemiBold))
-        self.subtitle = CaptionLabel("")
-        self.subtitle.setWordWrap(True)
-        layout.addWidget(self.title)
-        layout.addWidget(self.value)
-        layout.addWidget(self.subtitle)
-
-    def set_values(self, value: str, subtitle: str = "") -> None:
-        self.value.setText(value)
-        self.subtitle.setText(subtitle)
-        self.setAccessibleName(f"{self.title.text()}: {value}. {subtitle}")
-
-
-class EarningEntryDialog(QDialog):
-    def __init__(self, service: EarningsManager, entry=None, parent=None):
-        super().__init__(parent)
-        self.service = service
-        self.entry = entry
-        self.setWindowTitle("Edit earning" if entry else "Add earning")
-        self.setMinimumWidth(440)
-        layout = QFormLayout(self)
-        self.sku = LineEdit()
-        self.name = LineEdit()
-        self.brand = ComboBox()
-        self.type = ComboBox()
-        self.when = QDateTimeEdit(datetime.now())
-        self.when.setCalendarPopup(True)
-        self.when.setDisplayFormat("yyyy-MM-dd HH:mm")
-        self._populate_brands()
-        for key, label in PRODUCT_TYPES:
-            self.type.addItem(label, userData=key)
-        layout.addRow("SKU *", self.sku)
-        layout.addRow("Name", self.name)
-        layout.addRow("Brand", self.brand)
-        layout.addRow("Product type", self.type)
-        layout.addRow("Earned at", self.when)
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
-        buttons.accepted.connect(self._accept)
-        buttons.rejected.connect(self.reject)
-        layout.addRow(buttons)
-        if entry:
-            self.sku.setText(entry["sku"])
-            self.name.setText(entry.get("product_name") or "")
-            idx = self.brand.findData(entry.get("brand_id"))
-            self.brand.setCurrentIndex(max(0, idx))
-            idx = self.type.findData(entry["product_type"])
-            self.type.setCurrentIndex(max(0, idx))
-            parsed = datetime.fromisoformat(entry["earned_at"].replace("Z", "+00:00")).astimezone()
-            self.when.setDateTime(parsed)
-
-    def _populate_brands(self):
-        self.brand.clear()
-        self.brand.addItem("No brand", userData=None)
-        for brand in self.service.list_brands():
-            self.brand.addItem(brand["name"], userData=brand["id"])
-
-    def _accept(self):
-        if not self.sku.text().strip():
-            QMessageBox.warning(self, "Missing SKU", "SKU is required.")
-            return
-        self.accept()
-
-    def values(self) -> dict[str, Any]:
-        return {
-            "sku": self.sku.text().strip(),
-            "product_name": self.name.text().strip() or None,
-            "brand_id": self.brand.currentData(),
-            "product_type": self.type.currentData(),
-            "earned_at": self.when.dateTime().toPython(),
-        }
-
-
-class GoalDialog(QDialog):
-    def __init__(self, goal=None, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Edit money goal" if goal else "Create money goal")
-        self.setMinimumWidth(400)
-        form = QFormLayout(self)
-        self.amount = QDoubleSpinBox()
-        self.amount.setRange(0.01, 1_000_000)
-        self.amount.setDecimals(2)
-        self.amount.setPrefix("€")
-        self.deadline_enabled = QCheckBox("Use a deadline")
-        self.deadline = QDateEdit()
-        self.deadline.setCalendarPopup(True)
-        self.deadline.setMinimumDate(datetime.now().date())
-        self.deadline.setDate(datetime.now().date())
-        self.deadline.setEnabled(False)
-        self.deadline_enabled.toggled.connect(self.deadline.setEnabled)
-        form.addRow("Target amount", self.amount)
-        form.addRow(self.deadline_enabled)
-        form.addRow("Deadline", self.deadline)
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        form.addRow(buttons)
-        if goal:
-            self.amount.setValue(int(goal["target_cents"]) / 100)
-            if goal.get("deadline_date"):
-                self.deadline_enabled.setChecked(True)
-                self.deadline.setDate(datetime.fromisoformat(goal["deadline_date"]).date())
-
-    def values(self):
-        return int(round(self.amount.value() * 100)), (
-            self.deadline.date().toPython() if self.deadline_enabled.isChecked() else None
-        )
-
-
-class EarningsSettingsDialog(QDialog):
-    def __init__(self, service: EarningsManager, parent=None):
-        super().__init__(parent)
-        self.service = service
-        self.setWindowTitle("Earnings settings")
-        self.setMinimumWidth(480)
-        form = QFormLayout(self)
-        self.rates = {}
-        for key, label in PRODUCT_TYPES:
-            spin = QDoubleSpinBox()
-            spin.setRange(0, 10000)
-            spin.setDecimals(2)
-            spin.setPrefix("€")
-            spin.setValue(service.get_rate_cents(key) / 100)
-            self.rates[key] = spin
-            form.addRow(f"{label} payout", spin)
-        targets = service.performance_targets()
-        self.daily_money = self._money_spin(targets["daily_earning_goal_cents"])
-        self.weekly_money = self._money_spin(targets["weekly_earning_goal_cents"])
-        self.daily_minutes = self._minutes_spin(targets["daily_work_goal_minutes"])
-        self.weekly_minutes = self._minutes_spin(targets["weekly_work_goal_minutes"])
-        form.addRow("Daily earnings target", self.daily_money)
-        form.addRow("Weekly earnings target", self.weekly_money)
-        form.addRow("Daily work target", self.daily_minutes)
-        form.addRow("Weekly work target", self.weekly_minutes)
-        schedule = service.work_schedule()
-        schedule_heading = StrongBodyLabel("Income projection schedule")
-        form.addRow(schedule_heading)
-        self.workday_hours = QDoubleSpinBox()
-        self.workday_hours.setRange(0.25, 24.0)
-        self.workday_hours.setDecimals(2)
-        self.workday_hours.setSingleStep(0.25)
-        self.workday_hours.setSuffix(" h")
-        self.workday_hours.setValue(schedule["workday_minutes"] / 60.0)
-        self.workdays_per_week = QSpinBox()
-        self.workdays_per_week.setRange(1, 7)
-        self.workdays_per_week.setSuffix(" days")
-        self.workdays_per_week.setValue(schedule["workdays_per_week"])
-        form.addRow("Normal workday", self.workday_hours)
-        form.addRow("Workdays per week", self.workdays_per_week)
-        note = CaptionLabel(
-            "Set a target to zero to disable it. Income projections use the schedule above. "
-            "Existing earning payouts never change retroactively."
-        )
-        note.setWordWrap(True)
-        form.addRow(note)
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        form.addRow(buttons)
-
-    @staticmethod
-    def _money_spin(cents):
-        spin = QDoubleSpinBox()
-        spin.setRange(0, 1_000_000)
-        spin.setPrefix("€")
-        spin.setValue(cents / 100)
-        return spin
-
-    @staticmethod
-    def _minutes_spin(minutes):
-        spin = QSpinBox()
-        spin.setRange(0, 10080)
-        spin.setSuffix(" min")
-        spin.setValue(minutes)
-        return spin
-
-    def save(self):
-        for key, spin in self.rates.items():
-            self.service.set_rate_cents(key, int(round(spin.value() * 100)))
-        self.service.set_performance_targets(
-            daily_earning_goal_cents=int(round(self.daily_money.value() * 100)),
-            weekly_earning_goal_cents=int(round(self.weekly_money.value() * 100)),
-            daily_work_goal_minutes=self.daily_minutes.value(),
-            weekly_work_goal_minutes=self.weekly_minutes.value(),
-        )
-        self.service.set_work_schedule(
-            workday_minutes=int(round(self.workday_hours.value() * 60)),
-            workdays_per_week=self.workdays_per_week.value(),
-        )
-
-
-class BrandManagerDialog(QDialog):
-    def __init__(self, service: EarningsManager, parent=None):
-        super().__init__(parent)
-        self.service = service
-        self.setWindowTitle("Manage earning brands")
-        self.resize(540, 430)
-        layout = QVBoxLayout(self)
-        add_row = QHBoxLayout()
-        self.new_name = LineEdit()
-        self.new_name.setPlaceholderText("New brand name")
-        add = PrimaryPushButton("Add brand")
-        add.clicked.connect(self._add)
-        add_row.addWidget(self.new_name, 1)
-        add_row.addWidget(add)
-        layout.addLayout(add_row)
-        self.table = QTableWidget(0, 3)
-        self.table.setHorizontalHeaderLabels(["Brand", "Type", "Status"])
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        layout.addWidget(self.table)
-        actions = QHBoxLayout()
-        rename = PushButton("Rename")
-        archive = PushButton("Archive")
-        rename.clicked.connect(self._rename)
-        archive.clicked.connect(self._archive)
-        actions.addWidget(rename)
-        actions.addWidget(archive)
-        actions.addStretch()
-        close = PushButton("Close")
-        close.clicked.connect(self.accept)
-        actions.addWidget(close)
-        layout.addLayout(actions)
-        self._reload()
-
-    def _reload(self):
-        rows = self.service.list_brands(active_only=False)
-        self.table.setRowCount(len(rows))
-        for i, row in enumerate(rows):
-            item = QTableWidgetItem(row["name"])
-            item.setData(Qt.ItemDataRole.UserRole, row)
-            self.table.setItem(i, 0, item)
-            self.table.setItem(i, 1, QTableWidgetItem("Scraper" if row["is_builtin"] else "Custom"))
-            self.table.setItem(i, 2, QTableWidgetItem("Active" if row["is_active"] else "Archived"))
-
-    def _selected(self):
-        row = self.table.currentRow()
-        return self.table.item(row, 0).data(Qt.ItemDataRole.UserRole) if row >= 0 else None
-
-    def _add(self):
-        try:
-            self.service.add_brand(self.new_name.text())
-            self.new_name.clear()
-            self._reload()
-        except Exception as error:
-            QMessageBox.warning(self, "Could not add brand", str(error))
-
-    def _rename(self):
-        row = self._selected()
-        if not row:
-            return
-        from PySide6.QtWidgets import QInputDialog
-        name, accepted = QInputDialog.getText(self, "Rename brand", "Brand name", text=row["name"])
-        if accepted:
-            try:
-                self.service.rename_brand(row["id"], name)
-                self._reload()
-            except Exception as error:
-                QMessageBox.warning(self, "Could not rename brand", str(error))
-
-    def _archive(self):
-        row = self._selected()
-        if not row:
-            return
-        try:
-            self.service.archive_brand(row["id"])
-            self._reload()
-        except Exception as error:
-            QMessageBox.warning(self, "Could not archive brand", str(error))
-
-
-class UploadEarningsDialog(QDialog):
-    """One compact review for saved regular or batch upload products."""
-
-    def __init__(self, service: EarningsManager, items: list[dict[str, Any]], parent=None):
-        super().__init__(parent)
-        self.service = service
-        self.items = [item for item in items if not item.get("processing_history_id") or not service.is_processing_imported(item["processing_history_id"])]
-        self.setWindowTitle("Add saved products to earnings")
-        self.resize(880, 420)
-        layout = QVBoxLayout(self)
-        label = BodyLabel("Review the saved products to count as earnings. Uncheck any test or unpaid item.")
-        label.setWordWrap(True)
-        layout.addWidget(label)
-        self.table = QTableWidget(len(self.items), 5)
-        self.table.setHorizontalHeaderLabels(["Include", "SKU", "Name", "Brand", "Type"])
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
-        brands = service.list_brands()
-        for row, item in enumerate(self.items):
-            include = QCheckBox()
-            include.setChecked(True)
-            self.table.setCellWidget(row, 0, include)
-            sku = LineEdit()
-            sku.setText(str(item.get("sku") or ""))
-            self.table.setCellWidget(row, 1, sku)
-            name = LineEdit()
-            name.setText(str(item.get("product_name") or ""))
-            self.table.setCellWidget(row, 2, name)
-            brand = ComboBox()
-            brand.addItem("No brand", userData=None)
-            for candidate in brands:
-                brand.addItem(candidate["name"], userData=candidate["id"])
-            wanted = str(item.get("brand") or "")
-            for index in range(brand.count()):
-                if brand.itemText(index).casefold() == wanted.casefold():
-                    brand.setCurrentIndex(index)
-                    break
-            self.table.setCellWidget(row, 3, brand)
-            ptype = ComboBox()
-            for key, product_label in PRODUCT_TYPES:
-                ptype.addItem(product_label, userData=key)
-            index = ptype.findData(item.get("product_type", ProductType.BICYCLE.value))
-            ptype.setCurrentIndex(max(0, index))
-            self.table.setCellWidget(row, 4, ptype)
-        layout.addWidget(self.table)
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-
-    def save_entries(self) -> int:
-        count = 0
-        for row, item in enumerate(self.items):
-            include = self.table.cellWidget(row, 0)
-            if not include.isChecked():
-                continue
-            sku = self.table.cellWidget(row, 1).text().strip()
-            if not sku:
-                continue
-            self.service.create_entry(
-                sku, self.table.cellWidget(row, 4).currentData(),
-                product_name=self.table.cellWidget(row, 2).text().strip() or None,
-                brand_id=self.table.cellWidget(row, 3).currentData(),
-                source=item.get("source", "upload"),
-                processing_history_id=item.get("processing_history_id"),
-            )
-            count += 1
-        return count
-
+from GUI_Qt.earnings.widgets import (
+    ActivityHeatmap, ActivityLegend, AnimatedSubmitButton, BatchProgressTicks, EarningsBurstBadge,
+    EarningsChart, FluentCalendarWidget, GoalMilestoneBar, MetricCard, ProjectionMetric,
+    PerformanceTargetWidget, QuestCelebrationOverlay, QuestProgressWidget,
+    apply_earnings_datetime_theme, configure_earnings_datetime_edit,
+)
+from GUI_Qt.earnings.dialogs import (
+    BrandManagerDialog, BrandNameDialog, BulkEarningEditDialog,
+    EarningEntryDialog, EarningsSettingsDialog, GoalAdjustmentDialog, GoalDialog,
+    QuestPickerDialog, SessionRecapDialog, UploadEarningsDialog,
+)
+from Utilities.ResourcePaths import resource_path
 
 class EarningsScreen(ResponsiveWidget):
     def __init__(self, main_window, parent=None):
@@ -569,7 +131,17 @@ class EarningsScreen(ResponsiveWidget):
         self._entries: list[dict[str, Any]] = []
         self._sessions_count = 0
         self._last_expired_session = None
+        self._engagement_settings = self.service.engagement_settings()
+        self._quest_observed_session_id: int | None = None
+        self._quest_observed_checkpoints = 0
+        self._quest_observed_complete = False
+        self._quest_observed_bonus_complete = False
         self._init_ui()
+        self._success_sound = QSoundEffect(self)
+        self._success_sound.setSource(
+            QUrl.fromLocalFile(str(resource_path("Assets/Sounds/earnings_success.wav")))
+        )
+        self._success_sound.setVolume(self.service.celebration_sound_volume() / 100.0)
         self._tick_timer = QTimer(self)
         self._tick_timer.timeout.connect(self._timer_tick)
         self._tick_timer.start(500)
@@ -601,10 +173,23 @@ class EarningsScreen(ResponsiveWidget):
         self.settings_button.clicked.connect(self._settings)
         self.export_button = PushButton("Export")
         self.export_button.setObjectName("earningsHeaderAction")
-        menu = QMenu(self.export_button)
-        self.export_filtered_action = menu.addAction("Export filtered records", lambda: self._export(True))
-        self.export_all_action = menu.addAction("Export all records", lambda: self._export(False))
-        self.export_button.setMenu(menu)
+        self.export_menu = RoundMenu(parent=self.export_button)
+        self.export_menu.setObjectName("earningsExportMenu")
+        self.export_menu.setAccessibleName("Export options")
+        self.export_menu.setMinimumWidth(248)
+        self.export_filtered_action = Action(
+            FluentIcon.FILTER, "Export filtered records", self.export_menu
+        )
+        self.export_all_action = Action(
+            FluentIcon.SAVE_AS, "Export all records", self.export_menu
+        )
+        self.export_filtered_action.setStatusTip("Export only the records shown by the current filters")
+        self.export_all_action.setStatusTip("Export the complete earnings history")
+        self.export_filtered_action.triggered.connect(lambda: self._export(True))
+        self.export_all_action.triggered.connect(lambda: self._export(False))
+        self.export_menu.addAction(self.export_filtered_action)
+        self.export_menu.addAction(self.export_all_action)
+        self.export_button.setMenu(self.export_menu)
         self.header_action_buttons = (self.brands_button, self.settings_button, self.export_button)
         for button in self.header_action_buttons:
             button.setMinimumHeight(36)
@@ -638,6 +223,9 @@ class EarningsScreen(ResponsiveWidget):
         self.metric_cards = (self.metric_today, self.metric_week, self.metric_all, self.metric_rate)
         self._arrange_metrics(compact=False)
         logging_layout.addLayout(self.metrics_layout)
+
+        self.goal_quest_panel = self._goal_quest_card()
+        logging_layout.addWidget(self.goal_quest_panel)
 
         self.live_tools_layout = QGridLayout()
         self.live_tools_layout.setSpacing(10)
@@ -794,6 +382,26 @@ class EarningsScreen(ResponsiveWidget):
             self.live_tools_layout.setColumnStretch(0, 3)
             self.live_tools_layout.setColumnStretch(1, 2)
 
+    def _arrange_goal_quest_header(self, *, compact: bool) -> None:
+        self._clear_grid(self.goal_quest_header_layout)
+        for column in range(6):
+            self.goal_quest_header_layout.setColumnStretch(column, 0)
+        if compact:
+            self.goal_quest_header_layout.addWidget(self.goal_quest_title, 0, 0, 1, 2)
+            self.goal_quest_header_layout.addWidget(self.goal_quest_level, 0, 2)
+            self.goal_quest_header_layout.addWidget(self.goal_quest_create, 1, 0)
+            self.goal_quest_header_layout.addWidget(self.goal_quest_adjust, 1, 1)
+            self.goal_quest_header_layout.addWidget(self.goal_quest_view, 1, 2)
+            for column in range(3):
+                self.goal_quest_header_layout.setColumnStretch(column, 1)
+        else:
+            self.goal_quest_header_layout.addWidget(self.goal_quest_title, 0, 0)
+            self.goal_quest_header_layout.addWidget(self.goal_quest_level, 0, 1)
+            self.goal_quest_header_layout.setColumnStretch(2, 1)
+            self.goal_quest_header_layout.addWidget(self.goal_quest_create, 0, 3)
+            self.goal_quest_header_layout.addWidget(self.goal_quest_adjust, 0, 4)
+            self.goal_quest_header_layout.addWidget(self.goal_quest_view, 0, 5)
+
     def _on_breakpoint_changed(self, breakpoint: str):
         compact = breakpoint in ("xs", "sm")
         self._update_header_labels(compact=compact)
@@ -802,6 +410,7 @@ class EarningsScreen(ResponsiveWidget):
         self._arrange_analytics_metrics(compact=compact)
         self._arrange_projection_metrics(compact=compact)
         self._arrange_analytics_config(compact=compact)
+        self._arrange_goal_quest_header(compact=compact)
         self._arrange_live_tools(compact=compact)
         self._arrange_history_toolbar(compact=compact)
         margins = (16, 14, 18, 20) if compact else (24, 20, 28, 28)
@@ -840,11 +449,9 @@ class EarningsScreen(ResponsiveWidget):
         for key, label in PRODUCT_TYPES:
             self.type_input.addItem(label, userData=key)
         self.date_input = QDateTimeEdit(datetime.now())
-        self.date_input.setCalendarPopup(True)
-        self.date_input.setDisplayFormat("yyyy-MM-dd HH:mm")
-        self.add_button = PrimaryPushButton("Add earning")
+        configure_earnings_datetime_edit(self.date_input)
+        self.add_button = AnimatedSubmitButton("Add earning")
         self.add_button.setObjectName("earningsPrimaryAction")
-        self.add_button.setFixedSize(150, 38)
         self.add_button.clicked.connect(self._add_entry)
         self.sku_input.returnPressed.connect(self._add_entry)
         self.sku_label = CaptionLabel("SKU *")
@@ -878,7 +485,10 @@ class EarningsScreen(ResponsiveWidget):
         button_layout.setSpacing(5)
         button_layout.addSpacing(self.date_label.sizeHint().height())
         button_layout.addWidget(self.add_button, 0, Qt.AlignmentFlag.AlignRight)
+        self.batch_counter = BatchProgressTicks()
+        button_layout.addWidget(self.batch_counter, 0, Qt.AlignmentFlag.AlignRight)
         grid.addWidget(button_wrapper, 3, 1)
+        self.earning_burst = EarningsBurstBadge(card)
         grid.setColumnStretch(0, 1)
         grid.setColumnStretch(1, 1)
         return card
@@ -902,9 +512,18 @@ class EarningsScreen(ResponsiveWidget):
         self.timer_display.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.timer_display.setFont(QFont(FONTS["family"], 30, QFont.Weight.Bold))
         layout.addWidget(self.timer_display)
+        self.session_earnings = StrongBodyLabel("Session earnings: €0.00")
+        self.session_earnings.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.session_earnings.setObjectName("sessionEarnings")
+        layout.addWidget(self.session_earnings)
+        self.session_products = CaptionLabel("SKUs logged this session: 0")
+        self.session_products.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.session_products)
         self.timer_status = CaptionLabel("Ready")
         self.timer_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.timer_status)
+        self.quest_progress = QuestProgressWidget(card)
+        layout.addWidget(self.quest_progress)
         countdown = QHBoxLayout()
         self.countdown_minutes = QSpinBox()
         self.countdown_minutes.setRange(1, 24 * 60)
@@ -947,7 +566,90 @@ class EarningsScreen(ResponsiveWidget):
         actions.addWidget(self.timer_reset)
         actions.addStretch()
         layout.addLayout(actions)
+        self.quest_celebration = QuestCelebrationOverlay(card)
         self._set_timer_action_labels("ready")
+        return card
+
+    def _goal_quest_card(self) -> QWidget:
+        card = self._surface()
+        card.setObjectName("earningsGoalQuest")
+        card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(18, 14, 18, 15)
+        layout.setSpacing(SPACING["sm"])
+        layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
+
+        self.goal_quest_header_layout = QGridLayout()
+        self.goal_quest_header_layout.setHorizontalSpacing(SPACING["sm"])
+        self.goal_quest_header_layout.setVerticalSpacing(SPACING["sm"])
+        self.goal_quest_title = StrongBodyLabel("Current money goal")
+        self.goal_quest_title.setWordWrap(True)
+        self.goal_quest_level = CaptionLabel("")
+        self.goal_quest_level.setAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        )
+
+        self.goal_quest_create = PrimaryPushButton("Create goal")
+        self.goal_quest_adjust = PushButton("Adjust progress")
+        self.goal_quest_view = PushButton("View forecast")
+        self.goal_quest_create.setObjectName("earningsPrimaryAction")
+        self.goal_quest_adjust.setObjectName("earningsSecondaryAction")
+        self.goal_quest_view.setObjectName("earningsSecondaryAction")
+        for button in (
+            self.goal_quest_create,
+            self.goal_quest_adjust,
+            self.goal_quest_view,
+        ):
+            button.setFixedHeight(34)
+            button.setMinimumWidth(104)
+        self.goal_quest_create.clicked.connect(self._create_goal)
+        self.goal_quest_adjust.clicked.connect(self._add_goal_adjustment)
+        self.goal_quest_view.clicked.connect(lambda: self._switch_section("analytics"))
+        self._arrange_goal_quest_header(compact=False)
+        layout.addLayout(self.goal_quest_header_layout)
+
+        self.goal_quest_empty = BodyLabel("")
+        self.goal_quest_empty.setWordWrap(True)
+        layout.addWidget(self.goal_quest_empty)
+
+        self.goal_quest_details = QWidget()
+        self.goal_quest_details.setObjectName("earningsGoalQuestDetails")
+        details = QVBoxLayout(self.goal_quest_details)
+        details.setContentsMargins(0, 0, 0, 0)
+        details.setSpacing(SPACING["sm"])
+        details.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
+
+        value_row = QHBoxLayout()
+        value_row.setSpacing(SPACING["sm"])
+        self.goal_quest_value = StrongBodyLabel("")
+        self.goal_quest_value.setWordWrap(True)
+        self.goal_quest_percentage = StrongBodyLabel("")
+        self.goal_quest_percentage.setAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        )
+        self.goal_quest_percentage.setMinimumWidth(64)
+        value_row.addWidget(self.goal_quest_value, 1)
+        value_row.addWidget(self.goal_quest_percentage)
+        details.addLayout(value_row)
+
+        self.goal_quest_progress = GoalMilestoneBar()
+        self.goal_quest_progress.setFixedHeight(14)
+        details.addWidget(self.goal_quest_progress)
+
+        footer = QHBoxLayout()
+        footer.setSpacing(SPACING["sm"])
+        self.goal_quest_next = CaptionLabel("")
+        self.goal_quest_next.setWordWrap(True)
+        self.goal_quest_remaining = CaptionLabel("")
+        self.goal_quest_remaining.setWordWrap(True)
+        self.goal_quest_remaining.setAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        )
+        footer.addWidget(self.goal_quest_next, 1)
+        footer.addWidget(self.goal_quest_remaining, 1)
+        details.addLayout(footer)
+        layout.addWidget(self.goal_quest_details)
         return card
 
     def _projection_card(self):
@@ -983,9 +685,11 @@ class EarningsScreen(ResponsiveWidget):
 
     def _goal_card(self):
         card = self._surface()
+        card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         layout = QVBoxLayout(card)
-        layout.setContentsMargins(14, 9, 14, 10)
-        layout.setSpacing(6)
+        layout.setContentsMargins(14, 10, 14, 10)
+        layout.setSpacing(0)
+        layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
         header = QHBoxLayout()
         self.goal_heading = StrongBodyLabel("Money goal and forecast")
         header.addWidget(self.goal_heading)
@@ -994,33 +698,107 @@ class EarningsScreen(ResponsiveWidget):
         self.goal_create.setObjectName("earningsPrimaryAction")
         self.goal_create.setFixedSize(128, 34)
         self.goal_edit = PushButton("Edit")
+        self.goal_adjust = PushButton("Add progress")
         self.goal_archive = PushButton("Archive")
+        self.goal_adjust.setObjectName("earningsSecondaryAction")
         self.goal_edit.setObjectName("earningsSecondaryAction")
         self.goal_archive.setObjectName("earningsSecondaryAction")
         self.goal_edit.setFixedHeight(34)
         self.goal_edit.setMinimumWidth(70)
+        self.goal_adjust.setFixedHeight(34)
+        self.goal_adjust.setMinimumWidth(108)
         self.goal_archive.setFixedHeight(34)
         self.goal_archive.setMinimumWidth(82)
         self.goal_create.clicked.connect(self._create_goal)
+        self.goal_adjust.clicked.connect(self._add_goal_adjustment)
         self.goal_edit.clicked.connect(self._edit_goal)
         self.goal_archive.clicked.connect(self._archive_goal)
         header.addWidget(self.goal_create)
+        header.addWidget(self.goal_adjust)
         header.addWidget(self.goal_edit)
         header.addWidget(self.goal_archive)
         layout.addLayout(header)
-        self.goal_title = BodyLabel("Create a money goal to see your forecast.")
+
+        self.goal_empty = BodyLabel("Create a money goal to see your forecast.")
+        self.goal_empty.setWordWrap(True)
+        self.goal_empty.setContentsMargins(0, SPACING["sm"], 0, 0)
+        layout.addWidget(self.goal_empty)
+
+        self.goal_details = QWidget()
+        self.goal_details.setObjectName("earningsGoalDetails")
+        self.goal_details.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum
+        )
+        details = QVBoxLayout(self.goal_details)
+        details.setContentsMargins(0, SPACING["md"], 0, 0)
+        details.setSpacing(0)
+        details.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
+
+        summary = QHBoxLayout()
+        summary.setSpacing(SPACING["sm"])
+        self.goal_title = BodyLabel("")
         self.goal_title.setWordWrap(True)
+        self.goal_percentage = BodyLabel("")
+        self.goal_percentage.setAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        )
+        self.goal_percentage.setMinimumWidth(64)
+        summary.addWidget(self.goal_title, 1)
+        summary.addWidget(self.goal_percentage)
+        details.addLayout(summary)
+
+        details.addSpacing(SPACING["xs"])
+        self.goal_remaining = CaptionLabel("")
+        self.goal_remaining.setWordWrap(True)
+        details.addWidget(self.goal_remaining)
+
+        details.addSpacing(SPACING["sm"])
         self.goal_progress = QProgressBar()
         self.goal_progress.setRange(0, 1000)
-        self.goal_progress.setTextVisible(True)
-        self.goal_forecast = CaptionLabel("")
+        self.goal_progress.setTextVisible(False)
+        self.goal_progress.setFixedHeight(12)
+        details.addWidget(self.goal_progress)
+
+        self.goal_adjustment_block = QWidget()
+        self.goal_adjustment_block.setObjectName("earningsGoalAdjustment")
+        self.goal_adjustment_block.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum
+        )
+        adjustment_layout = QVBoxLayout(self.goal_adjustment_block)
+        adjustment_layout.setContentsMargins(0, SPACING["sm"], 0, 0)
+        adjustment_layout.setSpacing(SPACING["xs"])
+        adjustment_layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
+        self.goal_adjustment_summary = CaptionLabel("")
+        self.goal_adjustment_summary.setWordWrap(True)
+        self.goal_adjustment_note = CaptionLabel("")
+        self.goal_adjustment_note.setWordWrap(True)
+        adjustment_layout.addWidget(self.goal_adjustment_summary)
+        adjustment_layout.addWidget(self.goal_adjustment_note)
+        details.addWidget(self.goal_adjustment_block)
+
+        self.goal_forecast_block = QWidget()
+        self.goal_forecast_block.setObjectName("earningsGoalForecast")
+        self.goal_forecast_block.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum
+        )
+        forecast_layout = QVBoxLayout(self.goal_forecast_block)
+        forecast_layout.setContentsMargins(0, SPACING["md"], 0, 0)
+        forecast_layout.setSpacing(SPACING["xs"])
+        forecast_layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
+        self.goal_forecast = BodyLabel("")
         self.goal_forecast.setWordWrap(True)
+        self.goal_forecast_detail = CaptionLabel("")
+        self.goal_forecast_detail.setWordWrap(True)
+        forecast_layout.addWidget(self.goal_forecast)
+        forecast_layout.addWidget(self.goal_forecast_detail)
+
         self.goal_deadline = CaptionLabel("")
         self.goal_deadline.setWordWrap(True)
-        layout.addWidget(self.goal_title)
-        layout.addWidget(self.goal_progress)
-        layout.addWidget(self.goal_forecast)
-        layout.addWidget(self.goal_deadline)
+        self.goal_deadline.setContentsMargins(0, SPACING["xs"], 0, 0)
+        forecast_layout.addWidget(self.goal_deadline)
+        details.addWidget(self.goal_forecast_block)
+        layout.addWidget(self.goal_details)
+        self._goal_is_complete = False
         return card
 
     def _analytics_card(self):
@@ -1081,39 +859,88 @@ class EarningsScreen(ResponsiveWidget):
     def _performance_card(self):
         card = self._surface()
         layout = QVBoxLayout(card)
-        layout.setContentsMargins(14, 9, 14, 10)
-        layout.setSpacing(6)
+        layout.setContentsMargins(16, 14, 16, 16)
+        layout.setSpacing(12)
         header = QHBoxLayout()
         self.performance_heading = StrongBodyLabel("Daily and weekly targets")
         header.addWidget(self.performance_heading)
         header.addStretch()
         self.streak_label = CaptionLabel("")
+        self.streak_label.setObjectName("earningsStreakBadge")
+        self.streak_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.streak_label.setMinimumHeight(26)
         header.addWidget(self.streak_label)
         layout.addLayout(header)
         grid = QGridLayout()
+        grid.setHorizontalSpacing(8)
+        grid.setVerticalSpacing(8)
+        grid.setColumnStretch(0, 1)
+        grid.setColumnStretch(1, 1)
         self.performance_widgets = {}
         definitions = (
-            ("daily_money", "Daily earnings"),
-            ("weekly_money", "Weekly earnings"),
-            ("daily_time", "Daily work time"),
-            ("weekly_time", "Weekly work time"),
+            ("daily_money", "Daily earnings", "earnings.performance.daily_money"),
+            ("weekly_money", "Weekly earnings", "earnings.performance.weekly_money"),
+            ("daily_time", "Daily work time", "earnings.performance.daily_time"),
+            ("weekly_time", "Weekly work time", "earnings.performance.weekly_time"),
         )
-        for index, (key, label) in enumerate(definitions):
-            wrapper = QWidget()
-            box = QVBoxLayout(wrapper)
-            box.setContentsMargins(0, 0, 0, 0)
-            caption = CaptionLabel(label)
-            progress = QProgressBar()
-            progress.setRange(0, 1000)
-            progress.setTextVisible(True)
-            box.addWidget(caption)
-            box.addWidget(progress)
-            grid.addWidget(wrapper, index // 2, index % 2)
-            self.performance_widgets[key] = (wrapper, progress)
+        self.performance_label_keys = {}
+        for index, (key, label, label_key) in enumerate(definitions):
+            target = PerformanceTargetWidget(label)
+            grid.addWidget(target, index // 2, index % 2)
+            self.performance_widgets[key] = target
+            self.performance_label_keys[key] = label_key
         layout.addLayout(grid)
         self.no_performance_targets = CaptionLabel("Set targets in Earnings settings to see progress and streaks.")
         self.no_performance_targets.setWordWrap(True)
         layout.addWidget(self.no_performance_targets)
+
+        self.activity_block = QWidget()
+        self.activity_block.setObjectName("earningsActivityBlock")
+        self.activity_block.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        activity_layout = QVBoxLayout(self.activity_block)
+        activity_layout.setContentsMargins(12, 11, 12, 12)
+        activity_layout.setSpacing(7)
+        heatmap_header = QHBoxLayout()
+        self.activity_heatmap_heading = CaptionLabel("Product activity · last 30 days")
+        self.activity_heatmap_heading.setObjectName("activityHeatmapHeading")
+        heatmap_header.addWidget(self.activity_heatmap_heading)
+        heatmap_header.addStretch()
+        self.activity_heatmap_legend = ActivityLegend(self.main.i18n.tr)
+        heatmap_header.addWidget(self.activity_heatmap_legend)
+        activity_layout.addLayout(heatmap_header)
+        self.activity_heatmap_explanation = CaptionLabel(
+            "Each square is one day. Darker means more SKUs logged."
+        )
+        self.activity_heatmap_explanation.setWordWrap(True)
+        activity_layout.addWidget(self.activity_heatmap_explanation)
+        self.activity_heatmap = ActivityHeatmap(self.main.i18n.tr)
+        activity_layout.addWidget(self.activity_heatmap)
+
+        self.activity_summary = QWidget()
+        self.activity_summary.setObjectName("earningsActivitySummary")
+        summary_layout = QGridLayout(self.activity_summary)
+        summary_layout.setContentsMargins(0, 2, 0, 0)
+        summary_layout.setHorizontalSpacing(8)
+        summary_layout.setVerticalSpacing(2)
+        self.activity_summary_widgets = []
+        for column in range(3):
+            metric = QWidget()
+            metric.setObjectName("earningsActivityMetric")
+            metric.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+            metric_layout = QVBoxLayout(metric)
+            metric_layout.setContentsMargins(10, 8, 10, 8)
+            metric_layout.setSpacing(1)
+            value = QLabel("0")
+            value.setObjectName("earningsActivityValue")
+            caption = CaptionLabel("")
+            caption.setObjectName("earningsActivityCaption")
+            metric_layout.addWidget(value)
+            metric_layout.addWidget(caption)
+            summary_layout.addWidget(metric, 0, column)
+            summary_layout.setColumnStretch(column, 1)
+            self.activity_summary_widgets.append((value, caption))
+        activity_layout.addWidget(self.activity_summary)
+        layout.addWidget(self.activity_block)
         return card
 
     def _history_card(self):
@@ -1129,6 +956,7 @@ class EarningsScreen(ResponsiveWidget):
         heading_row.addWidget(self.history_heading)
         heading_row.addStretch()
         heading_row.addWidget(self.filtered_total)
+        self.history_heading_row = heading_row
         layout.addLayout(heading_row)
 
         self.search = LineEdit()
@@ -1162,6 +990,14 @@ class EarningsScreen(ResponsiveWidget):
         self.edit_entry_button.setToolTip("Edit selected earning")
         self.edit_entry_button.clicked.connect(self._edit_selected_entry)
         self.edit_entry_button.setVisible(False)
+        self.bulk_edit_button = PushButton("Edit selected")
+        self.bulk_edit_button.setObjectName("earningsSecondaryAction")
+        self.bulk_edit_button.setToolTip(
+            "Apply the same brand, product type, or date to selected earnings"
+        )
+        self.bulk_edit_button.clicked.connect(self._bulk_edit_selected_entries)
+        self.bulk_edit_button.setVisible(False)
+        self.history_heading_row.insertWidget(2, self.bulk_edit_button)
         self.delete_entry_button = PushButton("Delete")
         self.delete_entry_button.setObjectName("earningsDangerAction")
         self.delete_entry_button.setToolTip("Delete selected earning")
@@ -1174,6 +1010,9 @@ class EarningsScreen(ResponsiveWidget):
         self.edit_entry_button.setMinimumWidth(72)
         self.edit_entry_button.setMaximumWidth(110)
         self.edit_entry_button.setFixedHeight(34)
+        self.bulk_edit_button.setMinimumWidth(112)
+        self.bulk_edit_button.setMaximumWidth(170)
+        self.bulk_edit_button.setFixedHeight(34)
         self.delete_entry_button.setMinimumWidth(78)
         self.delete_entry_button.setMaximumWidth(110)
         self.delete_entry_button.setFixedHeight(34)
@@ -1197,6 +1036,9 @@ class EarningsScreen(ResponsiveWidget):
         )
         self._arrange_history_toolbar(compact=False)
         layout.addWidget(self.history_toolbar)
+        self.selection_hint = CaptionLabel("")
+        self.selection_hint.setWordWrap(True)
+        layout.addWidget(self.selection_hint)
 
         self.history_tabs = QTabWidget()
         self.history_tabs.setObjectName("earningsHistoryTabs")
@@ -1207,7 +1049,11 @@ class EarningsScreen(ResponsiveWidget):
         )
         self.entries_table.setColumnHidden(9, True)
         self.entries_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.entries_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.entries_table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.entries_table.setAccessibleName("Earnings history")
+        self.entries_table.setAccessibleDescription(
+            "Use Control-click or Shift-click to select multiple earnings; Control+A selects all"
+        )
         self.entries_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.entries_table.setAlternatingRowColors(True)
         self.entries_table.setShowGrid(False)
@@ -1379,9 +1225,18 @@ class EarningsScreen(ResponsiveWidget):
         )
 
     def _update_history_actions(self) -> None:
-        selected = self._selected_entry() is not None
-        self.edit_entry_button.setVisible(selected)
-        self.delete_entry_button.setVisible(selected)
+        selected_count = len(self._selected_entries())
+        single = selected_count == 1
+        multiple = selected_count > 1
+        self.edit_entry_button.setVisible(single)
+        self.delete_entry_button.setVisible(single)
+        self.bulk_edit_button.setVisible(multiple)
+        tr = self.main.i18n.tr
+        self.selection_hint.setText(
+            tr("earnings.history.selection.count", count=selected_count)
+            if selected_count
+            else tr("earnings.history.selection.hint")
+        )
 
     # ------------------------------------------------------------- refresh/UI
     def refresh_all(self):
@@ -1514,48 +1369,229 @@ class EarningsScreen(ResponsiveWidget):
         return f"{arrow} {abs(delta):.0f}% vs {label}"
 
     def _refresh_goal(self):
+        tr = self.main.i18n.tr
         forecast = self.service.goal_forecast()
-        active = forecast is not None
-        self.goal_create.setVisible(not active)
-        self.goal_edit.setVisible(active)
-        self.goal_archive.setVisible(active)
-        self.goal_progress.setVisible(active)
-        self.goal_forecast.setVisible(active)
-        self.goal_deadline.setVisible(active)
-        if not active:
+        editable = forecast is not None
+        if forecast is None:
+            goals = self.service.list_goals()
+            latest = goals[0] if goals else None
+            if latest and latest.get("status") == GoalStatus.COMPLETED.value:
+                forecast = self.service.goal_forecast(int(latest["id"]))
+
+        has_goal = forecast is not None
+        self.goal_create.setVisible(not editable)
+        self.goal_adjust.setVisible(editable)
+        self.goal_edit.setVisible(editable)
+        self.goal_archive.setVisible(editable)
+        self.goal_empty.setVisible(not has_goal)
+        self.goal_details.setVisible(has_goal)
+        if not has_goal:
             self.goal_panel.setMinimumHeight(92)
             self.goal_panel.setMaximumHeight(96)
-            self.goal_title.setText("Create a money goal to see products and work-time predictions.")
+            self.goal_empty.setText(tr("earnings.goal.empty"))
+            self.goal_title.setText("")
+            self.goal_percentage.setText("")
+            self.goal_remaining.setText("")
+            self.goal_adjustment_summary.setText("")
+            self.goal_adjustment_note.setText("")
+            self.goal_adjustment_block.setVisible(False)
             self.goal_forecast.setText("")
+            self.goal_forecast_detail.setText("")
             self.goal_deadline.setText("")
+            self._goal_is_complete = False
+
+            self.goal_quest_title.setText(tr("earnings.goal.quest.create.title"))
+            self.goal_quest_level.setVisible(False)
+            self.goal_quest_create.setVisible(True)
+            self.goal_quest_create.setText(tr("earnings.goal.quest.create.action"))
+            self.goal_quest_adjust.setVisible(False)
+            self.goal_quest_view.setVisible(False)
+            self.goal_quest_empty.setText(tr("earnings.goal.quest.create.body"))
+            self.goal_quest_empty.setVisible(True)
+            self.goal_quest_details.setVisible(False)
+            self.goal_quest_progress.set_progress(0, 0)
+            self._apply_goal_progress_theme()
             return
+
         self.goal_panel.setMinimumHeight(0)
         self.goal_panel.setMaximumHeight(16777215)
         goal = forecast["goal"]
+        earned = int(forecast.get("earned_cents") or 0)
+        target = int(goal.get("target_cents") or 0)
+        state = goal_progress_state(earned, target)
+        level_state = goal_level_state(earned, target)
+        percent = float(state["percent"])
+        percent_text = f"{percent:.0f}%" if abs(percent - round(percent)) < 0.05 else f"{percent:.1f}%"
+
         self.goal_title.setText(
-            f"{money(forecast['earned_cents'])} of {money(goal['target_cents'])} • {money(forecast['remaining_cents'])} remaining"
+            tr("earnings.goal.progress", current=money(earned), target=money(target))
         )
-        self.goal_progress.setValue(int(round(forecast["percent"] * 10)))
-        self.goal_progress.setFormat(f"{forecast['percent']:.1f}%")
-        likely = str(forecast["likely_products"]) if forecast["likely_products"] is not None else "not enough history"
-        hours = f"{forecast['estimated_hours']:.1f} work hours" if forecast["estimated_hours"] is not None else "track more time to unlock the time forecast"
+        self.goal_percentage.setText(percent_text)
+        if state["above_cents"]:
+            self.goal_remaining.setText(
+                tr("earnings.goal.above", amount=money(state["above_cents"]))
+            )
+        elif state["reached"]:
+            self.goal_remaining.setText(tr("earnings.goal.reached"))
+        else:
+            self.goal_remaining.setText(
+                tr("earnings.goal.remaining", amount=money(state["remaining_cents"]))
+            )
+        self.goal_progress.setValue(int(round(float(state["visual_percent"]) * 10)))
+
+        self.goal_quest_title.setText(tr("earnings.goal.quest.title"))
+        self.goal_quest_level.setText(
+            tr(
+                "earnings.goal.quest.level",
+                level=level_state["level"],
+                levels=level_state["levels"],
+            )
+        )
+        self.goal_quest_level.setVisible(True)
+        self.goal_quest_create.setVisible(not editable)
+        self.goal_quest_create.setText(tr("earnings.goal.quest.new.action"))
+        self.goal_quest_adjust.setVisible(editable)
+        self.goal_quest_view.setVisible(True)
+        self.goal_quest_empty.setVisible(False)
+        self.goal_quest_details.setVisible(True)
+        self.goal_quest_value.setText(
+            tr("earnings.goal.progress", current=money(earned), target=money(target))
+        )
+        self.goal_quest_percentage.setText(percent_text)
+        self.goal_quest_progress.set_progress(earned, target)
+        if level_state["complete"]:
+            self.goal_quest_next.setText(tr("earnings.goal.quest.complete"))
+            self.goal_quest_remaining.setText(
+                tr("earnings.goal.above", amount=money(state["above_cents"]))
+                if state["above_cents"]
+                else ""
+            )
+        else:
+            self.goal_quest_next.setText(
+                tr(
+                    "earnings.goal.quest.next",
+                    amount=money(level_state["next_level_cents"]),
+                    level=level_state["next_level"],
+                )
+            )
+            self.goal_quest_remaining.setText(
+                tr(
+                    "earnings.goal.quest.remaining",
+                    amount=money(state["remaining_cents"]),
+                )
+            )
+
+        adjustment_cents = int(forecast.get("adjustment_cents") or 0)
+        adjustments = (
+            self.service.list_goal_adjustments(int(goal["id"]))
+            if adjustment_cents > 0
+            else []
+        )
+        latest_note = next(
+            (str(item.get("note") or "").strip() for item in adjustments if item.get("note")),
+            "",
+        )
+        self.goal_adjustment_block.setVisible(adjustment_cents > 0)
+        self.goal_adjustment_summary.setText(
+            self.main.i18n.tr(
+                "earnings.goal.adjust.summary",
+                amount=money(adjustment_cents),
+            )
+            if adjustment_cents > 0
+            else ""
+        )
+        self.goal_adjustment_note.setVisible(bool(latest_note))
+        self.goal_adjustment_note.setText(
+            self.main.i18n.tr("earnings.goal.adjust.note.latest", note=latest_note)
+            if latest_note
+            else ""
+        )
+
+        self._goal_is_complete = bool(state["reached"])
+        self.goal_forecast_block.setVisible(not self._goal_is_complete)
+        likely = (
+            tr("earnings.goal.forecast.products", count=forecast["likely_products"])
+            if forecast["likely_products"] is not None
+            else tr("earnings.goal.forecast.products.unknown")
+        )
+        hours = (
+            tr(
+                "earnings.goal.forecast.hours",
+                hours=f"{forecast['estimated_hours']:.1f}",
+            )
+            if forecast["estimated_hours"] is not None
+            else tr("earnings.goal.forecast.hours.unknown")
+        )
         self.goal_forecast.setText(
-            f"Likely: {likely} products and {hours}. Range: {forecast['optimistic_products']} products at the highest payout "
-            f"to {forecast['conservative_products']} at the lowest. Based on {forecast['product_sample']} products "
-            f"({forecast['product_basis'].replace('_', ' ')})."
+            tr("earnings.goal.forecast.likely", products=likely, hours=hours)
+        )
+        basis = tr(
+            "earnings.goal.forecast.basis.last_30_days"
+            if forecast["product_basis"] == "last_30_days"
+            else "earnings.goal.forecast.basis.all"
+        )
+        payout_basis = tr(
+            "earnings.goal.forecast.payout.recent"
+            if forecast["product_basis"] == "last_30_days"
+            else "earnings.goal.forecast.payout.recorded"
+        )
+        self.goal_forecast_detail.setText(
+            tr(
+                "earnings.goal.forecast.range",
+                optimistic=forecast["optimistic_products"],
+                conservative=forecast["conservative_products"],
+                payout_basis=payout_basis,
+                sample=forecast["product_sample"],
+                basis=basis,
+            )
         )
         deadline = forecast.get("deadline")
         if not deadline:
             self.goal_deadline.setText("")
+            self.goal_deadline.setVisible(False)
         elif deadline["overdue"]:
-            self.goal_deadline.setText(f"Deadline {deadline['date']} is overdue. Update the deadline or keep working toward the goal.")
+            self.goal_deadline.setText(
+                tr("earnings.goal.forecast.deadline.overdue", date=deadline["date"])
+            )
+            self.goal_deadline.setVisible(True)
         else:
-            pace = f"{money(deadline['cents_per_day'])}/day or {money(deadline['cents_per_week'])}/week"
+            pace_parts = [
+                tr(
+                    "earnings.goal.forecast.pace.money",
+                    daily=money(deadline["cents_per_day"]),
+                    weekly=money(deadline["cents_per_week"]),
+                )
+            ]
             if deadline["products_per_day"] is not None:
-                pace += f" • {deadline['products_per_day']:.1f} products/day"
+                pace_parts.append(
+                    tr(
+                        "earnings.goal.forecast.pace.products",
+                        products=f"{deadline['products_per_day']:.1f}",
+                    )
+                )
             if deadline["hours_per_week"] is not None:
-                pace += f" • {deadline['hours_per_week']:.1f} work hours/week"
-            self.goal_deadline.setText(f"Deadline {deadline['date']} • Required pace: {pace}")
+                pace_parts.append(
+                    tr(
+                        "earnings.goal.forecast.pace.hours",
+                        hours=f"{deadline['hours_per_week']:.1f}",
+                    )
+                )
+            self.goal_deadline.setText(
+                tr(
+                    "earnings.goal.forecast.deadline",
+                    date=deadline["date"],
+                    pace=" • ".join(pace_parts),
+                )
+            )
+            self.goal_deadline.setVisible(True)
+        self._apply_goal_progress_theme()
+        self.goal_adjustment_block.updateGeometry()
+        self.goal_forecast_block.updateGeometry()
+        self.goal_details.updateGeometry()
+        self.goal_panel.updateGeometry()
+        self.goal_quest_details.updateGeometry()
+        self.goal_quest_panel.updateGeometry()
+        self.analytics_config_layout.invalidate()
 
     def _refresh_analytics(self):
         chart_data = self.service.trend_data(self.period.currentData() or "daily")
@@ -1581,6 +1617,8 @@ class EarningsScreen(ResponsiveWidget):
 
     def _refresh_performance(self):
         values = self.service.performance_progress()
+        activity = self.service.trend_data("daily")
+        self.activity_heatmap.set_data(activity)
         rows = {
             "daily_money": (values["daily_earned_cents"], values["daily_earning_goal_cents"], money),
             "weekly_money": (values["weekly_earned_cents"], values["weekly_earning_goal_cents"], money),
@@ -1589,18 +1627,42 @@ class EarningsScreen(ResponsiveWidget):
         }
         any_enabled = False
         for key, (current, target, formatter) in rows.items():
-            wrapper, progress = self.performance_widgets[key]
+            widget = self.performance_widgets[key]
             enabled = target > 0
-            wrapper.setVisible(enabled)
+            widget.setVisible(enabled)
             if enabled:
                 any_enabled = True
-                ratio = min(1.0, float(current) / float(target))
-                progress.setValue(int(round(ratio * 1000)))
-                progress.setFormat(f"{formatter(current)} / {formatter(target)}")
+                ratio = float(current) / float(target)
+                widget.set_progress(
+                    formatter(current),
+                    formatter(target),
+                    ratio,
+                )
         self.no_performance_targets.setVisible(not any_enabled)
-        self.performance_panel.setMinimumHeight(0 if any_enabled else 92)
-        self.performance_panel.setMaximumHeight(16777215 if any_enabled else 96)
-        self.streak_label.setText(f"{values['streak']} day streak" if any_enabled else "")
+        self.performance_panel.setMinimumHeight(210)
+        self.performance_panel.setMaximumHeight(16777215)
+        streak = int(values["streak"])
+        if any_enabled:
+            self.streak_label.setText(
+                self.main.i18n.tr(
+                    "earnings.performance.streak",
+                    count=streak,
+                )
+                if streak > 0
+                else self.main.i18n.tr("earnings.performance.streak_start")
+            )
+        else:
+            self.streak_label.setText("")
+
+        counts = [max(0, int(item.get("count", 0))) for item in activity[-30:]]
+        active_days = sum(1 for count in counts if count > 0)
+        total_skus = sum(counts)
+        best_day = max(counts, default=0)
+        for (value_label, _caption), value in zip(
+            self.activity_summary_widgets,
+            (active_days, total_skus, best_day),
+        ):
+            value_label.setText(str(value))
 
     def _refresh_entries(self):
         if not hasattr(self, "entries_table"):
@@ -1708,6 +1770,7 @@ class EarningsScreen(ResponsiveWidget):
             if not dialog.exec():
                 return
         try:
+            payout_cents = self.service.get_rate_cents(self.type_input.currentData())
             self.service.create_entry(
                 sku, self.type_input.currentData(), product_name=self.name_input.text(),
                 brand_id=self.brand_input.currentData(), earned_at=self.date_input.dateTime().toPython(),
@@ -1716,14 +1779,28 @@ class EarningsScreen(ResponsiveWidget):
             self.name_input.clear()
             self.date_input.setDateTime(datetime.now())
             self.refresh_all()
+            self.batch_counter.advance()
+            self.add_button.animate_success()
+            self.earning_burst.show_amount(payout_cents, self.add_button)
             InfoBar.success(title="Earning added", content=f"{sku} was added to your earnings.", parent=self, position=InfoBarPosition.TOP, duration=2500)
         except Exception as error:
             InfoBar.error(title="Could not add earning", content=str(error), parent=self, position=InfoBarPosition.TOP)
 
     def _selected_entry(self):
-        row = self.entries_table.currentRow()
-        item = self.entries_table.item(row, 0) if row >= 0 else None
-        return item.data(Qt.ItemDataRole.UserRole) if item is not None else None
+        entries = self._selected_entries()
+        return entries[0] if len(entries) == 1 else None
+
+    def _selected_entries(self) -> list[dict[str, Any]]:
+        selection = self.entries_table.selectionModel()
+        if selection is None:
+            return []
+        entries: list[dict[str, Any]] = []
+        for index in sorted(selection.selectedRows(0), key=lambda value: value.row()):
+            item = self.entries_table.item(index.row(), 0)
+            entry = item.data(Qt.ItemDataRole.UserRole) if item is not None else None
+            if isinstance(entry, dict):
+                entries.append(entry)
+        return entries
 
     def _edit_selected_entry(self):
         entry = self._selected_entry()
@@ -1736,6 +1813,41 @@ class EarningsScreen(ResponsiveWidget):
                 self.refresh_all()
             except Exception as error:
                 QMessageBox.warning(self, "Could not update earning", str(error))
+
+    def _bulk_edit_selected_entries(self):
+        entries = self._selected_entries()
+        if len(entries) < 2:
+            return
+        dialog = BulkEarningEditDialog(
+            self.service,
+            len(entries),
+            self,
+            translate=self.main.i18n.tr,
+        )
+        if not dialog.exec():
+            return
+        try:
+            updated = self.service.bulk_update_entries(
+                (entry["id"] for entry in entries), **dialog.values()
+            )
+            self.refresh_all()
+            InfoBar.success(
+                title=self.main.i18n.tr("earnings.bulk.complete.title"),
+                content=self.main.i18n.tr(
+                    "earnings.bulk.complete", count=updated
+                ),
+                parent=self,
+                position=InfoBarPosition.TOP,
+                duration=3000,
+            )
+        except Exception as error:
+            InfoBar.error(
+                title=self.main.i18n.tr("earnings.bulk.failed"),
+                content=str(error),
+                parent=self,
+                position=InfoBarPosition.TOP,
+                duration=5000,
+            )
 
     def _delete_selected_entry(self):
         entry = self._selected_entry()
@@ -1770,6 +1882,97 @@ class EarningsScreen(ResponsiveWidget):
             button.setToolTip(label)
             button.setAccessibleName(label)
 
+    def _quest_value_text(self, kind: str, value: int) -> str:
+        tr = self.main.i18n.tr
+        if kind == QuestKind.SKU.value:
+            return tr("earnings.quest.value.sku", value=int(value))
+        if kind == QuestKind.EARNINGS.value:
+            return money(int(value))
+        minutes = int(value) / 60.0
+        rendered = f"{minutes:.0f}" if minutes.is_integer() else f"{minutes:.1f}"
+        return tr("earnings.quest.value.minutes", value=rendered)
+
+    def _render_quest_progress(self, progress: dict[str, Any] | None) -> None:
+        if progress is None:
+            self.quest_progress.clear()
+            return
+        tr = self.main.i18n.tr
+        kind = progress["kind"]
+        current = self._quest_value_text(kind, progress["current_value"])
+        target = self._quest_value_text(kind, progress["target_value"])
+        if progress["complete"]:
+            badge = tr("earnings.quest.complete.badge")
+            if progress.get("bonus_complete"):
+                detail = tr("earnings.quest.bonus.complete")
+            else:
+                detail = tr(
+                    "earnings.quest.bonus.next",
+                    current=current,
+                    value=self._quest_value_text(kind, progress["bonus_target_value"]),
+                )
+        else:
+            badge = tr(
+                "earnings.quest.percent", percent=int(round(progress["percent"]))
+            )
+            next_value = self._quest_value_text(
+                kind, progress["next_checkpoint_value"]
+            )
+            detail = tr(
+                "earnings.quest.progress.detail",
+                current=current,
+                target=target,
+                next=next_value,
+            )
+        title = tr(f"earnings.quest.{kind}.title")
+        animations = self._engagement_settings["animations_enabled"]
+        self.quest_progress.set_state(
+            title=title,
+            badge=badge,
+            detail=detail,
+            percent=progress["percent"],
+            animated=animations,
+            complete=progress["complete"],
+        )
+
+    def _observe_quest_progress(
+        self, session_id: int, progress: dict[str, Any] | None
+    ) -> None:
+        if progress is None:
+            self._quest_observed_session_id = session_id
+            self._quest_observed_checkpoints = 0
+            self._quest_observed_complete = False
+            self._quest_observed_bonus_complete = False
+            return
+        reached = int(progress["reached_checkpoints"])
+        complete = bool(progress["complete"])
+        bonus_complete = bool(progress.get("bonus_complete"))
+        if self._quest_observed_session_id != session_id:
+            # A refresh or app restart silently adopts persisted state so a
+            # celebration can never replay for work already observed.
+            self._quest_observed_session_id = session_id
+            self._quest_observed_checkpoints = reached
+            self._quest_observed_complete = complete
+            self._quest_observed_bonus_complete = bonus_complete
+            return
+
+        settings = self._engagement_settings
+        completed_now = complete and not self._quest_observed_complete
+        checkpoint_now = reached > self._quest_observed_checkpoints
+        bonus_now = bonus_complete and not self._quest_observed_bonus_complete
+        if completed_now:
+            if settings["animations_enabled"]:
+                self.quest_celebration.celebrate(
+                    completion=True,
+                    badge_text=self.main.i18n.tr("earnings.quest.complete.badge"),
+                )
+            if settings["sound_enabled"]:
+                self._success_sound.play()
+        elif (checkpoint_now or bonus_now) and settings["animations_enabled"]:
+            self.quest_celebration.celebrate(completion=False)
+        self._quest_observed_checkpoints = reached
+        self._quest_observed_complete = complete
+        self._quest_observed_bonus_complete = bonus_complete
+
     def _timer_tick(self):
         snapshot = self.service.timer_snapshot()
         active = snapshot is not None
@@ -1777,7 +1980,18 @@ class EarningsScreen(ResponsiveWidget):
         self.countdown_minutes.setEnabled(not active)
         if not snapshot:
             self.timer_display.setText("00:00:00")
+            self.session_earnings.setText(
+                self.main.i18n.tr("earnings.timer.session_earnings", amount=money(0))
+            )
+            self.session_products.setText(
+                self.main.i18n.tr("earnings.timer.session_products", count=0)
+            )
             self.timer_status.setText("Ready")
+            self.quest_progress.clear()
+            self._quest_observed_session_id = None
+            self._quest_observed_checkpoints = 0
+            self._quest_observed_complete = False
+            self._quest_observed_bonus_complete = False
             self._set_timer_action_labels("ready")
             self.timer_start.setVisible(True)
             self.timer_pause.setVisible(False)
@@ -1785,6 +1999,19 @@ class EarningsScreen(ResponsiveWidget):
             self.timer_reset.setVisible(False)
             self.timer_start.setEnabled(True)
             return
+        session = self.service.get_session(snapshot.id)
+        self._render_quest_progress(session["quest_progress"])
+        self._observe_quest_progress(snapshot.id, session["quest_progress"])
+        self.session_earnings.setText(
+            self.main.i18n.tr(
+                "earnings.timer.session_earnings", amount=money(session["earned_cents"])
+            )
+        )
+        self.session_products.setText(
+            self.main.i18n.tr(
+                "earnings.timer.session_products", count=session["product_count"]
+            )
+        )
         shown = snapshot.remaining_seconds if snapshot.mode == "countdown" and not snapshot.allow_overtime else snapshot.elapsed_seconds
         self.timer_display.setText(duration(shown))
         self.timer_status.setText(
@@ -1806,8 +2033,30 @@ class EarningsScreen(ResponsiveWidget):
         snapshot = self.service.timer_snapshot()
         try:
             if snapshot is None:
+                dialog = QuestPickerDialog(
+                    self.service,
+                    self,
+                    translate=self.main.i18n.tr,
+                )
+                if not dialog.exec():
+                    return
+                quest_kind, quest_target = dialog.values()
                 target = self.countdown_minutes.value() * 60 if self.timer_mode.currentData() == "countdown" else None
-                self.service.start_session(self.timer_mode.currentData(), target)
+                session_id = self.service.start_session(
+                    self.timer_mode.currentData(),
+                    target,
+                    quest_kind=quest_kind,
+                    quest_target_value=quest_target,
+                )
+                if quest_kind == QuestKind.FOCUS.value:
+                    focus_index = self.timer_mode.findData("countdown")
+                    if focus_index >= 0:
+                        self.timer_mode.setCurrentIndex(focus_index)
+                # New sessions begin at zero and may celebrate future progress.
+                self._quest_observed_session_id = session_id
+                self._quest_observed_checkpoints = 0
+                self._quest_observed_complete = False
+                self._quest_observed_bonus_complete = False
             else:
                 overtime = snapshot.mode == "countdown" and snapshot.remaining_seconds == 0
                 self.service.resume_session(overtime=overtime)
@@ -1821,8 +2070,17 @@ class EarningsScreen(ResponsiveWidget):
         self._refresh_sessions()
 
     def _finish_timer(self):
-        self.service.finish_session()
+        finished = self.service.finish_session()
+        recap = self.service.session_recap(finished["id"])
         self.refresh_all()
+        dialog = SessionRecapDialog(
+            recap,
+            self,
+            translate=self.main.i18n.tr,
+        )
+        dialog.exec()
+        if dialog.start_another:
+            self._start_or_resume()
 
     def _reset_timer(self):
         dialog = MessageBox("Discard session?", "The work session will be removed. Linked earnings will remain and be detached.", self)
@@ -1859,6 +2117,47 @@ class EarningsScreen(ResponsiveWidget):
             self.service.update_goal(goal["id"], target, deadline)
             self.refresh_all()
 
+    def _add_goal_adjustment(self):
+        goal = self.service.active_goal()
+        if not goal:
+            return
+        current_progress_cents = int(
+            self.service.goal_progress(int(goal["id"]))["earned_cents"]
+        )
+        dialog = GoalAdjustmentDialog(
+            self,
+            translate=self.main.i18n.tr,
+            current_progress_cents=current_progress_cents,
+        )
+        if not dialog.exec():
+            return
+        mode, entered_cents, note = dialog.values()
+        try:
+            if mode == GoalAdjustmentDialog.SET_TOTAL:
+                _adjustment_id, amount_cents = self.service.add_goal_adjustment_to_total(
+                    int(goal["id"]), entered_cents, note
+                )
+            else:
+                amount_cents = entered_cents
+                self.service.add_goal_adjustment(int(goal["id"]), amount_cents, note)
+            self.refresh_all()
+            InfoBar.success(
+                title=self.main.i18n.tr("earnings.goal.adjust.done.title"),
+                content=self.main.i18n.tr(
+                    "earnings.goal.adjust.done.content",
+                    amount=money(amount_cents),
+                ),
+                parent=self,
+                position=InfoBarPosition.TOP,
+                duration=2500,
+            )
+        except Exception as error:
+            QMessageBox.warning(
+                self,
+                self.main.i18n.tr("earnings.goal.adjust.failed"),
+                str(error),
+            )
+
     def _archive_goal(self):
         goal = self.service.active_goal()
         if not goal:
@@ -1875,9 +2174,17 @@ class EarningsScreen(ResponsiveWidget):
         self._reload_brands()
 
     def _settings(self):
-        dialog = EarningsSettingsDialog(self.service, self)
+        dialog = EarningsSettingsDialog(
+            self.service,
+            self,
+            translate=self.main.i18n.tr,
+        )
         if dialog.exec():
             dialog.save()
+            self._engagement_settings = self.service.engagement_settings()
+            self._success_sound.setVolume(
+                self.service.celebration_sound_volume() / 100.0
+            )
             self.refresh_all()
 
     def prompt_upload_entries(self, items: list[dict[str, Any]]) -> int:
@@ -1949,13 +2256,15 @@ class EarningsScreen(ResponsiveWidget):
             ws_sessions.cell(ws_sessions.max_row, 8).number_format = '€0.00'
             ws_sessions.cell(ws_sessions.max_row, 9).number_format = '€0.00'
 
-        ws_goals = sheet("Goal History", ["Started", "Deadline", "Status", "Target", "Completed", "Final Earned", "Products", "Tracked Hours"])
+        ws_goals = sheet("Goal History", ["Started", "Deadline", "Status", "Target", "Completed", "Final Progress", "Goal-only Adjustments", "Products", "Tracked Hours"])
         for row in self.service.list_goals():
             ws_goals.append([local_datetime(row["started_at"]), row.get("deadline_date"), row["status"], row["target_cents"] / 100,
                              local_datetime(row.get("completed_at")), (row.get("final_earned_cents") or 0) / 100,
+                             (row.get("adjustment_cents") or 0) / 100,
                              row.get("final_product_count") or 0, (row.get("final_tracked_seconds") or 0) / 3600])
             ws_goals.cell(ws_goals.max_row, 4).number_format = '€0.00'
             ws_goals.cell(ws_goals.max_row, 6).number_format = '€0.00'
+            ws_goals.cell(ws_goals.max_row, 7).number_format = '€0.00'
 
         values = self.service.summary()
         ws_summary = sheet("Summary", ["Metric", "Value"])
@@ -1986,23 +2295,141 @@ class EarningsScreen(ResponsiveWidget):
                 ws_current.column_dimensions[letter].width = min(45, max(12, max(len(str(cell.value or "")) for cell in column) + 2))
         workbook.save(path)
 
+    def _apply_goal_progress_theme(self) -> None:
+        dark = isDarkTheme()
+        complete = bool(getattr(self, "_goal_is_complete", False))
+        accent = COLORS["lavender_grey" if dark else "space_indigo"]
+        track = (
+            rgba_from_hex(COLORS["lavender_grey"], 0.18)
+            if dark
+            else COLORS["platinum"]
+        )
+        fill = COLORS["success"] if complete else COLORS["lavender_grey"]
+        quest_fill = COLORS["success"] if complete else accent
+        quest_background = "#292D40" if dark else "#F7F6FB"
+        quest_track = rgba_from_hex(accent, 0.18 if dark else 0.12)
+        quest_border = rgba_from_hex(accent, 0.52 if dark else 0.32)
+        primary = get_text_color(dark, "primary")
+        secondary = get_text_color(dark, "secondary")
+        tertiary = get_text_color(dark, "tertiary")
+        status = get_status_text_color("success", dark) if complete else secondary
+
+        self.goal_quest_panel.setStyleSheet(f"""
+            QWidget#earningsGoalQuest {{
+                background-color: {quest_background};
+                border: 1px solid {quest_border};
+                border-radius: 12px;
+            }}
+        """)
+        self.goal_quest_details.setStyleSheet(
+            "QWidget#earningsGoalQuestDetails { background: transparent; border: none; }"
+        )
+        self.goal_quest_progress.setStyleSheet(f"""
+            QProgressBar {{
+                background-color: {quest_track};
+                border: none;
+                border-radius: {RADII['sm']}px;
+                padding: 0;
+            }}
+            QProgressBar::chunk {{
+                background-color: {quest_fill};
+                border: none;
+                border-radius: {RADII['sm']}px;
+                margin: 0;
+            }}
+        """)
+        self.goal_quest_title.setStyleSheet(
+            f"color: {primary}; font-size: 16px; font-weight: 650; "
+            "background: transparent; border: none;"
+        )
+        self.goal_quest_level.setStyleSheet(
+            f"color: {quest_fill}; background-color: {quest_track}; "
+            "border: none; border-radius: 8px; padding: 4px 9px; font-weight: 600;"
+        )
+        self.goal_quest_value.setStyleSheet(
+            f"color: {primary}; font-size: 15px; font-weight: 600; "
+            "background: transparent; border: none;"
+        )
+        self.goal_quest_percentage.setStyleSheet(
+            f"color: {quest_fill}; font-size: 15px; font-weight: 700; "
+            "background: transparent; border: none;"
+        )
+        self.goal_quest_next.setStyleSheet(
+            f"color: {quest_fill}; font-weight: 600; background: transparent; border: none;"
+        )
+        self.goal_quest_remaining.setStyleSheet(
+            f"color: {secondary}; background: transparent; border: none;"
+        )
+        self.goal_quest_empty.setStyleSheet(
+            f"color: {secondary}; background: transparent; border: none;"
+        )
+
+        self.goal_details.setStyleSheet(
+            "QWidget#earningsGoalDetails { background: transparent; border: none; }"
+        )
+        self.goal_forecast_block.setStyleSheet(
+            "QWidget#earningsGoalForecast { background: transparent; border: none; }"
+        )
+        self.goal_adjustment_block.setStyleSheet(
+            "QWidget#earningsGoalAdjustment { background: transparent; border: none; }"
+        )
+        self.goal_progress.setStyleSheet(f"""
+            QProgressBar {{
+                background-color: {track};
+                border: none;
+                border-radius: {RADII['sm']}px;
+                padding: 0;
+            }}
+            QProgressBar::chunk {{
+                background-color: {fill};
+                border: none;
+                border-radius: {RADII['sm']}px;
+                margin: 0;
+            }}
+        """)
+        self.goal_title.setStyleSheet(
+            f"color: {primary}; font-weight: 600; background: transparent; border: none;"
+        )
+        self.goal_percentage.setStyleSheet(
+            f"color: {primary}; font-weight: 600; background: transparent; border: none;"
+        )
+        self.goal_remaining.setStyleSheet(
+            f"color: {status}; background: transparent; border: none;"
+        )
+        self.goal_adjustment_summary.setStyleSheet(
+            f"color: {tertiary}; background: transparent; border: none;"
+        )
+        self.goal_adjustment_note.setStyleSheet(
+            f"color: {secondary}; background: transparent; border: none;"
+        )
+        self.goal_forecast.setStyleSheet(
+            f"color: {primary}; font-weight: 500; background: transparent; border: none;"
+        )
+        self.goal_forecast_detail.setStyleSheet(
+            f"color: {tertiary}; background: transparent; border: none;"
+        )
+        self.goal_deadline.setStyleSheet(
+            f"color: {secondary}; background: transparent; border: none;"
+        )
+
     def _apply_theme(self):
         apply_screen_theme(self, "EarningsScreen", scroll=self.scroll, content=self.content)
         dark = isDarkTheme()
-        canvas = "#1B1E2B" if dark else "#E8EDF2"
-        surface = "#242737" if dark else "#FFFFFF"
-        metric_surface = "#292D40" if dark else "#FFFFFF"
-        empty_surface = "#202332" if dark else "#F6F8FB"
+        canvas = get_surface_color(dark, "canvas")
+        surface = get_surface_color(dark)
+        metric_surface = get_surface_color(dark, "alternate") if dark else surface
+        empty_surface = get_surface_color(dark, "alternate")
         text = COLORS["text_primary_dark" if dark else "text_primary_light"]
         muted = COLORS["text_secondary_dark" if dark else "text_secondary_light"]
         outline = get_subtle_border(dark)
         card_border = COMPONENT_COLORS["card"]["border_dark" if dark else "border_light"]
         secondary_hover = get_subtle_item_hover_bg(dark)
         danger = COLORS["error_text_dark" if dark else "error_text_light"]
-        accent = COLORS["lavender_grey" if dark else "space_indigo"]
-        accent_text = COLORS["space_indigo" if dark else "text_white"]
-        accent_hover = "#A5B0C1" if dark else "#3B3E59"
-        accent_pressed = "#758197" if dark else "#202234"
+        accent_colors = get_accent_colors(dark)
+        accent = accent_colors["base"]
+        accent_text = accent_colors["text"]
+        accent_hover = accent_colors["hover"]
+        accent_pressed = accent_colors["pressed"]
         accent_soft = rgba_from_hex(
             COLORS["lavender_grey" if dark else "space_indigo"],
             0.16 if dark else 0.07,
@@ -2012,8 +2439,8 @@ class EarningsScreen(ResponsiveWidget):
         table_bg = table_colors["row_bg_dark" if dark else "row_bg_light"]
         table_alt = table_colors["row_alt_bg_dark" if dark else "row_alt_bg_light"]
         table_border = table_colors["border_dark" if dark else "border_light"]
-        table_header = COLORS["lavender_grey" if dark else "space_indigo"]
-        table_header_text = COLORS["space_indigo" if dark else "text_white"]
+        table_header = table_colors["header_bg_dark" if dark else "header_bg_light"]
+        table_header_text = table_colors["header_text_dark" if dark else "header_text_light"]
         self.setStyleSheet(
             self.styleSheet()
             + f"""
@@ -2025,6 +2452,79 @@ class EarningsScreen(ResponsiveWidget):
             }}
             EarningsScreen QWidget#earningsMetric {{
                 background-color: {metric_surface};
+            }}
+            EarningsScreen QWidget#earningsTargetMetric {{
+                background-color: {empty_surface};
+                border: 1px solid {outline};
+                border-radius: 10px;
+            }}
+            EarningsScreen QWidget#earningsTargetMetric QLabel {{
+                background: transparent;
+                border: none;
+            }}
+            EarningsScreen QLabel#earningsTargetTitle {{
+                color: {muted};
+                font-weight: 600;
+            }}
+            EarningsScreen QLabel#earningsTargetCurrent {{
+                color: {text};
+                font-size: 19px;
+                font-weight: 700;
+            }}
+            EarningsScreen QLabel#earningsTargetTotal {{
+                color: {muted};
+            }}
+            EarningsScreen QLabel#earningsTargetPercentage {{
+                color: {accent};
+                background-color: {accent_soft};
+                border: 1px solid {accent};
+                border-radius: 8px;
+                padding: 2px 7px;
+                font-weight: 700;
+            }}
+            EarningsScreen QProgressBar#earningsTargetProgress {{
+                background-color: {disabled_bg};
+                border: none;
+                border-radius: 4px;
+            }}
+            EarningsScreen QProgressBar#earningsTargetProgress::chunk {{
+                background-color: {accent};
+                border: none;
+                border-radius: 4px;
+            }}
+            EarningsScreen QLabel#earningsStreakBadge {{
+                color: {accent};
+                background-color: {accent_soft};
+                border: 1px solid {accent};
+                border-radius: 9px;
+                padding: 3px 10px;
+                font-weight: 600;
+            }}
+            EarningsScreen QWidget#earningsActivityBlock {{
+                background-color: {accent_soft};
+                border: 1px solid {outline};
+                border-radius: 10px;
+            }}
+            EarningsScreen QWidget#earningsActivityBlock QLabel {{
+                background: transparent;
+                border: none;
+            }}
+            EarningsScreen QLabel#activityHeatmapHeading {{
+                color: {text};
+                font-weight: 650;
+            }}
+            EarningsScreen QWidget#earningsActivityMetric {{
+                background-color: {surface};
+                border: 1px solid {outline};
+                border-radius: 8px;
+            }}
+            EarningsScreen QLabel#earningsActivityValue {{
+                color: {text};
+                font-size: 20px;
+                font-weight: 700;
+            }}
+            EarningsScreen QLabel#earningsActivityCaption {{
+                color: {muted};
             }}
             EarningsScreen PrimaryPushButton#earningsPrimaryAction,
             EarningsScreen PrimaryPushButton#timerStart {{
@@ -2206,6 +2706,10 @@ class EarningsScreen(ResponsiveWidget):
             widget.setStyleSheet(
                 f"QWidget#earningsEmptyState {{ background-color: {empty_surface}; border: 1px solid {card_border}; border-radius: 10px; }}"
             )
+        self.session_earnings.setStyleSheet(
+            f"color: {COLORS['success_text_dark' if dark else 'success_text_light']}; "
+            "font-size: 15px; font-weight: 700; background: transparent; border: none;"
+        )
 
         primary_push_style = f"""
             PrimaryPushButton {{
@@ -2224,6 +2728,7 @@ class EarningsScreen(ResponsiveWidget):
         for button in (
             self.add_button,
             self.goal_create,
+            self.goal_quest_create,
             self.analytics_empty_add,
             self.entries_empty_add,
             self.sessions_empty_add,
@@ -2237,9 +2742,13 @@ class EarningsScreen(ResponsiveWidget):
         """
         for button in (
             self.goal_edit,
+            self.goal_adjust,
             self.goal_archive,
+            self.goal_quest_adjust,
+            self.goal_quest_view,
             self.clear_filters_button,
             self.edit_entry_button,
+            self.bulk_edit_button,
             self.timer_finish,
         ):
             button.setStyleSheet(secondary_style)
@@ -2255,6 +2764,35 @@ class EarningsScreen(ResponsiveWidget):
         """
         for button in (self.brands_button, self.settings_button, self.export_button):
             button.setStyleSheet(header_style)
+        apply_earnings_datetime_theme(self.date_input)
+        quest_surface = "#222C2A" if dark else "#F3FAF7"
+        quest_border = "#355C52" if dark else "#B8DFD0"
+        quest_track = "#303748" if dark else "#DDE6E2"
+        quest_fill = COLORS["success"]
+        self.quest_progress.setStyleSheet(
+            f"""
+            QWidget#earningsQuestProgress {{
+                background-color: {quest_surface};
+                border: 1px solid {quest_border};
+                border-radius: 9px;
+            }}
+            QWidget#earningsQuestProgress QLabel {{
+                background: transparent;
+                border: none;
+            }}
+            QWidget#earningsQuestProgress QProgressBar {{
+                background-color: {quest_track};
+                border: none;
+                border-radius: 6px;
+            }}
+            QWidget#earningsQuestProgress QProgressBar::chunk {{
+                background-color: {quest_fill};
+                border: none;
+                border-radius: 6px;
+            }}
+            """
+        )
+        self._apply_goal_progress_theme()
         self.chart.update()
 
     def retranslate_ui(self):
@@ -2278,7 +2816,29 @@ class EarningsScreen(ResponsiveWidget):
         self.add_button.setText(tr("earnings.add.action"))
         self.timer_heading.setText(tr("earnings.timer.title"))
         self.goal_heading.setText(tr("earnings.goal.title"))
+        self.goal_create.setText(tr("earnings.goal.quest.create.action"))
+        self.goal_edit.setText(tr("earnings.goal.edit.action"))
+        self.goal_adjust.setText(tr("earnings.goal.adjust.action"))
+        self.goal_archive.setText(tr("earnings.goal.archive.action"))
+        self.goal_quest_adjust.setText(tr("earnings.goal.adjust.action"))
+        self.goal_quest_view.setText(tr("earnings.goal.quest.view"))
         self.performance_heading.setText(tr("earnings.performance.title"))
+        for key, target in self.performance_widgets.items():
+            target.set_title(tr(self.performance_label_keys[key]))
+        self.no_performance_targets.setText(tr("earnings.performance.empty"))
+        self.activity_heatmap_heading.setText(tr("earnings.activity_30_days"))
+        self.activity_heatmap_explanation.setText(tr("earnings.activity_legend"))
+        self.activity_heatmap_legend.retranslate_ui()
+        self.activity_heatmap.retranslate_ui()
+        for (_value, caption), key in zip(
+            self.activity_summary_widgets,
+            (
+                "earnings.activity.active_days",
+                "earnings.activity.total_skus",
+                "earnings.activity.best_day",
+            ),
+        ):
+            caption.setText(tr(key))
         self.analytics_heading.setText(tr("earnings.analytics.title"))
         self.projection_heading.setText(tr("earnings.projection.title"))
         self.projection_day.title.setText(tr("earnings.projection.day"))
@@ -2292,6 +2852,8 @@ class EarningsScreen(ResponsiveWidget):
         self.type_label.setText(tr("earnings.field.type"))
         self.date_label.setText(tr("earnings.field.date"))
         self.edit_entry_button.setText(tr("earnings.history.edit"))
+        self.bulk_edit_button.setText(tr("earnings.history.bulk_edit"))
+        self.bulk_edit_button.setToolTip(tr("earnings.history.bulk_edit.tooltip"))
         self.delete_entry_button.setText(tr("earnings.history.delete"))
         self.clear_filters_button.setText(tr("earnings.history.clear_filters"))
         self.analytics_empty_title.setText(tr("earnings.analytics.empty.title"))
@@ -2308,5 +2870,7 @@ class EarningsScreen(ResponsiveWidget):
         self.sku_input.setPlaceholderText(tr("earnings.sku.placeholder"))
         self.name_input.setPlaceholderText(tr("earnings.name.placeholder"))
         self.search.setPlaceholderText(tr("earnings.search.placeholder"))
+        self._update_history_actions()
         self._refresh_projections()
+        self._refresh_goal()
         self._timer_tick()

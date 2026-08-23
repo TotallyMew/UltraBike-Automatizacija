@@ -26,30 +26,46 @@ class BrowserManager:
     def __init__(self):
         self.internet_checker = InternetChecker()
 
-    def setup_browser(self, browser_choice, retry_callback):
+    def setup_browser(self, browser_choice, retry_callback, cancel_callback=None):
         """Setup browser.
 
         This project is GUI-only. `retry_callback` must be provided and should
-        return True to retry (when offline) or False to cancel.
+        return True to retry (when offline) or False to cancel.  Login workers
+        can pass ``cancel_callback`` so application shutdown does not have to
+        wait for another retry or browser-launch step.
         """
         if retry_callback is None:
             raise ValueError("retry_callback is required")
+        cancelled = cancel_callback or (lambda: False)
         while True:
+            if cancelled():
+                return None
             if not self.internet_checker.check_connection():
+                if cancelled():
+                    return None
                 if not retry_callback():
                     return None
                 continue
 
             try:
+                if cancelled():
+                    return None
                 browser_choice = browser_choice.lower()
                 if browser_choice == "chrome":
-                    return self._setup_chrome()
+                    driver = self._setup_chrome()
                 elif browser_choice == "firefox":
-                    return self._setup_firefox()
+                    driver = self._setup_firefox()
                 elif browser_choice == "edge":
-                    return self._setup_edge()
+                    driver = self._setup_edge()
                 else:
                     raise ValueError(f"Unsupported browser_choice: {browser_choice}")
+                if cancelled():
+                    try:
+                        driver.quit()
+                    except Exception:
+                        pass
+                    return None
+                return driver
             except Exception as e:
                 # Error: Error setting up browser: {e}
                 # Error: Closing program, browser not found.

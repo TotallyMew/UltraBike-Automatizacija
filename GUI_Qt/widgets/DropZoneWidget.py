@@ -23,6 +23,7 @@ from GUI_Qt.styles.theme_config import (
     SIZES,
     SPACING,
     get_hover_bg,
+    get_text_color,
 )
 
 
@@ -54,11 +55,13 @@ class DropZoneWidget(QWidget):
 
         self.title_label = StrongBodyLabel("")
         self.title_label.setStyleSheet(
-            f"font-size: {FONTS['size_subtitle_2']}; color: {COLORS['lavender_grey']};"
+            f"font-size: {FONTS['size_subtitle_2']}; color: {get_text_color(isDarkTheme())};"
         )
 
         self.subtitle_label = CaptionLabel("")
-        self.subtitle_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self.subtitle_label.setStyleSheet(
+            f"color: {get_text_color(isDarkTheme(), 'secondary')};"
+        )
 
         layout.addStretch()
         layout.addWidget(icon, 0, Qt.AlignmentFlag.AlignCenter)
@@ -102,6 +105,12 @@ class DropZoneWidget(QWidget):
 
     def _apply_style(self, is_drag_active: bool = False):
         is_dark = isDarkTheme()
+        self.title_label.setStyleSheet(
+            f"font-size: {FONTS['size_subtitle_2']}; color: {get_text_color(is_dark)};"
+        )
+        self.subtitle_label.setStyleSheet(
+            f"color: {get_text_color(is_dark, 'secondary')};"
+        )
         border = COLORS["lavender_grey"] if is_dark else COLORS["space_indigo"]
         dashed = COLORS["lavender_grey"]
         hover_bg = get_hover_bg(is_dark)

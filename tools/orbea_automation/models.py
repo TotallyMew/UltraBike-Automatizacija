@@ -73,6 +73,7 @@ class OrbeaRunConfig:
     filters: PimboFilterSpec = field(default_factory=PimboFilterSpec)
     all_products: bool = True
     download_images: bool = True
+    download_product_photos: bool = False
     browser_name: str = "chrome"
     max_products: int | None = None
     navigation_timeout: float = 25.0
@@ -112,6 +113,7 @@ class OrbeaRunConfig:
             "search": self.search,
             "all_products": self.all_products,
             "download_images": self.download_images,
+            "download_product_photos": self.download_product_photos,
         }
 
 
@@ -160,4 +162,3 @@ class CancellationToken:
 
 class RunCancelled(RuntimeError):
     """Internal control-flow exception used to produce a partial report."""
-

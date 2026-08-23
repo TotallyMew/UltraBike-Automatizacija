@@ -42,6 +42,12 @@ class CredentialManager:
     def verify_master_password(self, master_password: str) -> bool:
         return self.session_manager.verify_master_password(master_password)
 
+    def change_master_password(self, current_password: str, new_password: str) -> None:
+        self.session_manager.change_master_password(current_password, new_password)
+
+    def reset_master_password(self, new_password: str) -> None:
+        self.session_manager.reset_master_password(new_password)
+
     # --- 24h auto-login session (machine-encrypted) ---
 
     def create_session(self, email: str, password: str) -> None:

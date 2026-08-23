@@ -500,6 +500,9 @@ def write_image_manifest(checkpoint: RunCheckpoint) -> Path:
         "Orbea URL",
         "Geometry Status",
         "Geometry PNG",
+        "Geometry Sizes",
+        "Geometry Wheel Sizes",
+        "Geometry PNGs",
         "Size Guide Status",
         "Size Guide CM PNG",
         "Retryable",
@@ -516,6 +519,8 @@ def write_image_manifest(checkpoint: RunCheckpoint) -> Path:
             if result.get("status") != "code_match":
                 continue
             image = _image_record(checkpoint, result)
+            geometry_variants = list(image.get("geometry_variants", []) or [])
+            geometry_folder = Path(str(image.get("folder", "")))
             writer.writerow(
                 {
                     "Variant SKU": result.get("sku", ""),
@@ -526,6 +531,21 @@ def write_image_manifest(checkpoint: RunCheckpoint) -> Path:
                     "Orbea URL": result.get("catalogue_url", ""),
                     "Geometry Status": image.get("geometry_status", "pending"),
                     "Geometry PNG": image.get("geometry_image", ""),
+                    "Geometry Sizes": "; ".join(
+                        str(variant.get("size", "")).strip()
+                        for variant in geometry_variants
+                        if str(variant.get("size", "")).strip()
+                    ),
+                    "Geometry Wheel Sizes": "; ".join(
+                        str(variant.get("wheel_size", "")).strip()
+                        for variant in geometry_variants
+                        if str(variant.get("wheel_size", "")).strip()
+                    ),
+                    "Geometry PNGs": "; ".join(
+                        str(geometry_folder / str(variant.get("filename", "")))
+                        for variant in geometry_variants
+                        if str(variant.get("filename", "")).strip()
+                    ),
                     "Size Guide Status": image.get("size_guide_status", "pending"),
                     "Size Guide CM PNG": image.get(
                         "size_guide_image", image.get("size_guide_cm_image", "")

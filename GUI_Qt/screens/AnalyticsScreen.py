@@ -16,18 +16,20 @@ from qfluentwidgets import (
 )
 from datetime import datetime, timedelta
 from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill, Alignment
+from openpyxl.styles import Font, PatternFill
 
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
 from GUI_Qt.styles.theme_config import (
     COLORS, FONTS, RADII, SPACING, SIZES, rgba_from_hex,
-    get_status_text_color,
+    get_status_text_color, get_surface_color,
 )
 from GUI_Qt.styles.screen_theme import (
     apply_screen_theme, PAGE_MARGINS, PAGE_SPACING, CARD_MARGINS, CARD_SPACING,
     ICON_TEXT_GAP, TIGHT_SPACING, get_responsive_margins, get_responsive_spacing
 )
 from GUI_Qt.styles.screen_theme import enforce_transparent_labels
+from GUI_Qt.earnings.presentation import money
+from Managers.AnalyticsManager import AnalyticsManager
 
 
 class MetricCard(CardWidget):
@@ -260,6 +262,7 @@ class AnalyticsScreen(ResponsiveWidget):
         super().__init__(parent)
         self.main = main_window
         self.db = main_window.db
+        self.analytics = AnalyticsManager(self.db)
 
         self._init_ui()
         self._apply_theme()
@@ -309,7 +312,8 @@ class AnalyticsScreen(ResponsiveWidget):
         toolbar = self._create_toolbar()
         content_layout.addWidget(toolbar)
 
-        # Key metrics (4 cards) - activity types
+        # Business totals. Earnings is the product ledger, so these include
+        # manually recorded work completed outside the application.
         self.metrics_grid = QGridLayout()
         self.metrics_grid.setSpacing(CARD_SPACING)
 
@@ -317,16 +321,16 @@ class AnalyticsScreen(ResponsiveWidget):
         for col in range(4):
             self.metrics_grid.setColumnStretch(col, 1)
 
-        self.regular_uploads_metric = MetricCard("Regular Uploads", "0", "", FluentIcon.UP)
-        self.batch_uploads_metric = MetricCard("Batch Uploads", "0", "", FluentIcon.FOLDER)
-        self.batch_desc_metric = MetricCard("Batch Descriptions", "0", "", FluentIcon.DOCUMENT)
-        self.batch_titles_metric = MetricCard("Batch Titles", "0", "", FluentIcon.EDIT)
+        self.products_metric = MetricCard("Recorded products", "0", "", FluentIcon.SHOPPING_CART)
+        self.earnings_metric = MetricCard("Earnings", "€0.00", "", FluentIcon.TAG)
+        self.manual_products_metric = MetricCard("Outside the app", "0", "", FluentIcon.GLOBE)
+        self.app_products_metric = MetricCard("App-linked", "0", "", FluentIcon.CONNECT)
 
         self.metric_cards = [
-            self.regular_uploads_metric,
-            self.batch_uploads_metric,
-            self.batch_desc_metric,
-            self.batch_titles_metric,
+            self.products_metric,
+            self.earnings_metric,
+            self.manual_products_metric,
+            self.app_products_metric,
         ]
         for column, card in enumerate(self.metric_cards):
             self.metrics_grid.addWidget(card, 0, column)
@@ -376,6 +380,36 @@ class AnalyticsScreen(ResponsiveWidget):
 
         content_layout.addLayout(self.charts_layout)
 
+        # Product mix from the Earnings ledger.
+        self.breakdowns_layout = QHBoxLayout()
+        self.breakdowns_layout.setSpacing(CARD_SPACING)
+
+        self.source_chart_card = CardWidget()
+        self.source_chart_card.setBorderRadius(RADII['md'])
+        source_layout = QVBoxLayout(self.source_chart_card)
+        source_layout.setContentsMargins(*CARD_MARGINS)
+        source_layout.setSpacing(SPACING['md'])
+        self.source_title = StrongBodyLabel("Products by source")
+        self.source_title.setStyleSheet(f"font-size: {FONTS['size_subtitle_2']};")
+        source_layout.addWidget(self.source_title)
+        self.source_chart = SimpleBarChart([], [])
+        source_layout.addWidget(self.source_chart)
+        self.breakdowns_layout.addWidget(self.source_chart_card, 1)
+
+        self.type_chart_card = CardWidget()
+        self.type_chart_card.setBorderRadius(RADII['md'])
+        type_layout = QVBoxLayout(self.type_chart_card)
+        type_layout.setContentsMargins(*CARD_MARGINS)
+        type_layout.setSpacing(SPACING['md'])
+        self.type_title = StrongBodyLabel("Products by type")
+        self.type_title.setStyleSheet(f"font-size: {FONTS['size_subtitle_2']};")
+        type_layout.addWidget(self.type_title)
+        self.type_chart = SimpleBarChart([], [])
+        type_layout.addWidget(self.type_chart)
+        self.breakdowns_layout.addWidget(self.type_chart_card, 1)
+
+        content_layout.addLayout(self.breakdowns_layout)
+
         # Recent activity card
         self.activity_card = CardWidget()
         self.activity_card.setBorderRadius(RADII['md'])
@@ -391,7 +425,7 @@ class AnalyticsScreen(ResponsiveWidget):
 
         self.view_all_btn = TransparentToolButton(FluentIcon.RIGHT_ARROW)
         self.view_all_btn.setToolTip("View full history")
-        self.view_all_btn.clicked.connect(self._view_full_history)
+        self.view_all_btn.clicked.connect(self._view_earnings)
         activity_header.addWidget(self.view_all_btn)
 
         activity_layout.addLayout(activity_header)
@@ -441,7 +475,7 @@ class AnalyticsScreen(ResponsiveWidget):
             scroll = getattr(self, "scroll", None)
             if scroll is not None:
                 is_dark = isDarkTheme()
-                bg_color = COLORS['space_indigo'] if is_dark else COLORS['platinum']
+                bg_color = get_surface_color(is_dark, 'canvas')
                 handle = rgba_from_hex(COLORS['lavender_grey'], 0.35) if is_dark else rgba_from_hex(COLORS['space_indigo'], 0.22)
                 handle_hover = rgba_from_hex(COLORS['lavender_grey'], 0.55) if is_dark else rgba_from_hex(COLORS['space_indigo'], 0.32)
                 scroll.setStyleSheet(
@@ -550,134 +584,110 @@ class AnalyticsScreen(ResponsiveWidget):
 
         # Apply to all content cards
         for card_attr in ['toolbar_card', 'brand_chart_card', 'success_chart_card',
-                         'activity_card', 'errors_card']:
+                         'source_chart_card', 'type_chart_card', 'activity_card', 'errors_card']:
             if hasattr(self, card_attr):
                 card_widget = getattr(self, card_attr)
                 if card_widget is not None:
                     card_widget.setStyleSheet(card_style)
 
     def load_analytics(self):
-        """Load and display analytics data"""
-        cursor = self.db.conn.cursor()
-
-        # Get time range
+        """Load business totals from Earnings and reliability from app history."""
         period = self.period_combo.currentText()
         days = self.period_combo.currentData()
-        self.success_caption.setText(period)
+        values = self.analytics.snapshot(days=days)
+        earnings = values["earnings"]
+        processing = values["processing"]
+        tr = self.main.i18n.tr
 
-        # Build date filter
-        date_filter = ""
-        params = []
-        if days:
-            date_threshold = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
-            date_filter = "WHERE DATE(processed_at) >= ?"
-            params.append(date_threshold)
-
-        # Overall counts + success rate (for donut)
-        total_query = f"SELECT COUNT(*) FROM processing_history {date_filter}"
-        total = cursor.execute(total_query, params).fetchone()[0]
-        success_query = (
-            f"SELECT COUNT(*) FROM processing_history {date_filter} "
-            f"{'AND' if date_filter else 'WHERE'} status IN ('success', 'saved_manually')"
+        self._update_metric(
+            self.products_metric, f"{earnings['product_count']:,}", period
         )
-        success = cursor.execute(success_query, params).fetchone()[0]
-        success_rate = (success / total * 100) if total > 0 else 0
+        self._update_metric(
+            self.earnings_metric, money(earnings["earned_cents"]), period
+        )
+        self._update_metric(
+            self.manual_products_metric,
+            f"{earnings['manual_count']:,}",
+            tr("analytics.metric.manual.subtitle"),
+        )
+        self._update_metric(
+            self.app_products_metric,
+            f"{earnings['app_linked_count']:,}",
+            tr("analytics.metric.app_linked.subtitle"),
+        )
 
-        # Activity-type counts (uses batch_id prefixes)
-        where_prefix = "AND" if date_filter else "WHERE"
-
-        regular_count = cursor.execute(
-            f"SELECT COUNT(*) FROM processing_history {date_filter} {where_prefix} (batch_id IS NULL OR batch_id = '')",
-            params,
-        ).fetchone()[0]
-        batch_upload_count = cursor.execute(
-            f"SELECT COUNT(*) FROM processing_history {date_filter} {where_prefix} batch_id LIKE 'batch_%'",
-            params,
-        ).fetchone()[0]
-        batch_desc_count = cursor.execute(
-            f"SELECT COUNT(*) FROM processing_history {date_filter} {where_prefix} batch_id LIKE 'batchdesc_%'",
-            params,
-        ).fetchone()[0]
-        batch_titles_count = cursor.execute(
-            f"SELECT COUNT(*) FROM processing_history {date_filter} {where_prefix} batch_id LIKE 'batchtitle_%'",
-            params,
-        ).fetchone()[0]
-
-        # Update metric cards
-        self._update_metric(self.regular_uploads_metric, f"{regular_count:,}", period)
-        self._update_metric(self.batch_uploads_metric, f"{batch_upload_count:,}", period)
-        self._update_metric(self.batch_desc_metric, f"{batch_desc_count:,}", period)
-        self._update_metric(self.batch_titles_metric, f"{batch_titles_count:,}", period)
-
-        # Update success donut
-        self.success_donut.percentage = success_rate
+        self.success_donut.percentage = processing["success_rate"]
         self.success_donut.update()
+        self.success_caption.setText(
+            tr(
+                "analytics.success.caption",
+                period=period,
+                count=processing["total"],
+            )
+        )
 
-        # Brand performance
-        brand_query = f"""
-            SELECT brand, COUNT(*) as count
-            FROM processing_history
-            {date_filter}
-            GROUP BY brand
-            ORDER BY count DESC
-            LIMIT 8
-        """
-        brand_data = cursor.execute(brand_query, params).fetchall()
+        self._update_bar_chart(
+            self.brand_chart,
+            values["brands"],
+            lambda label: (
+                tr("analytics.brand.none") if label == "No brand" else str(label)
+            ),
+        )
+        self._update_bar_chart(
+            self.source_chart,
+            values["sources"],
+            lambda label: tr(
+                {
+                    "manual": "analytics.source.manual",
+                    "regular_upload": "analytics.source.regular",
+                    "batch_upload": "analytics.source.batch",
+                }.get(str(label), "analytics.source.other")
+            ),
+        )
+        self._update_bar_chart(
+            self.type_chart,
+            values["product_types"],
+            lambda label: tr(
+                {
+                    "bicycle": "analytics.type.bicycle",
+                    "frameset": "analytics.type.frameset",
+                    "other": "analytics.type.other",
+                }.get(str(label), "analytics.type.other")
+            ),
+        )
 
-        if brand_data:
-            brands = [str(row[0] or self.main.i18n.tr("analytics.brand.unknown")) for row in brand_data]
-            counts = [row[1] for row in brand_data]
-            self.brand_chart.data = counts
-            self.brand_chart.labels = brands
-            self.brand_chart.max_value = max(counts) if counts else 1
-            self.brand_chart.update()
-
-        # Recent activity (last 10)
         self._clear_layout(self.activity_container)
-
-        recent_query = f"""
-            SELECT brand, product_code, status, processed_at, batch_id
-            FROM processing_history
-            {date_filter}
-            ORDER BY processed_at DESC
-            LIMIT 10
-        """
-        recent = cursor.execute(recent_query, params).fetchall()
-
-        for row in recent:
-            item = self._create_activity_item(row[0], row[1], row[2], row[3], row[4])
-            self.activity_container.addWidget(item)
-        if not recent:
-            empty = CaptionLabel(self.main.i18n.tr("analytics.activity.empty"))
+        for row in values["recent"]:
+            self.activity_container.addWidget(self._create_activity_item(row))
+        if not values["recent"]:
+            empty = CaptionLabel(tr("analytics.activity.empty"))
             self.activity_container.addWidget(empty)
 
-        # Common errors
         self._clear_layout(self.errors_container)
-
-        error_query = f"""
-            SELECT error_message, COUNT(*) as count
-            FROM processing_history
-            {date_filter}
-            {'AND' if date_filter else 'WHERE'} status = 'failed'
-            AND error_message IS NOT NULL
-            AND error_message != ''
-            GROUP BY error_message
-            ORDER BY count DESC
-            LIMIT 5
-        """
-        errors = cursor.execute(error_query, params).fetchall()
-
-        if errors:
-            for row in errors:
-                error_item = self._create_error_item(row[0], row[1])
-                self.errors_container.addWidget(error_item)
+        if values["errors"]:
+            for row in values["errors"]:
+                self.errors_container.addWidget(
+                    self._create_error_item(row["message"], row["count"])
+                )
         else:
-            no_errors = CaptionLabel(self.main.i18n.tr("analytics.errors.empty"))
+            no_errors = CaptionLabel(tr("analytics.errors.empty"))
             no_errors.setStyleSheet(
                 f"color: {get_status_text_color('success', isDarkTheme())}; "
                 "font-style: italic; background: transparent; background-color: transparent;"
             )
             self.errors_container.addWidget(no_errors)
+
+    def showEvent(self, event):
+        """Refresh when returning from Earnings or an upload workflow."""
+        super().showEvent(event)
+        self.load_analytics()
+
+    @staticmethod
+    def _update_bar_chart(chart, rows, label_formatter=lambda value: str(value)):
+        chart.data = [int(row["count"] or 0) for row in rows]
+        chart.labels = [label_formatter(row["label"]) for row in rows]
+        chart.max_value = max(chart.data) if chart.data else 1
+        chart.update()
 
     def _update_metric(self, card, value, subtitle, trend=None, trend_positive=True):
         """Update a metric card's values"""
@@ -691,44 +701,40 @@ class AnalyticsScreen(ResponsiveWidget):
                 child.setText(str(value))
                 break
 
-    def _create_activity_item(self, brand, code, status, timestamp, batch_id=None):
-        """Create a recent activity item"""
+    def _create_activity_item(self, row):
+        """Create a recent paid-product item from the Earnings ledger."""
         item = QWidget()
         item.setStyleSheet("background: transparent; background-color: transparent; border: none;")
         layout = QHBoxLayout(item)
         layout.setContentsMargins(SPACING['sm'], SPACING['sm'], SPACING['sm'], SPACING['sm'])
         layout.setSpacing(CARD_SPACING)
 
-        # Activity type
         tr = self.main.i18n.tr
-        activity_type = tr("analytics.activity.regular") if not batch_id else (
-            tr("analytics.metric.batch_uploads") if str(batch_id).startswith('batch_') else (
-                tr("analytics.metric.batch_descriptions") if str(batch_id).startswith('batchdesc_') else (
-                    tr("analytics.metric.batch_titles") if str(batch_id).startswith('batchtitle_') else tr("analytics.activity.batch")
-                )
-            )
-        )
-
-        # Status icon
-        if status in ('success', 'saved_manually'):
-            status_icon = FluentIcon.ACCEPT
-            status_color = get_status_text_color('success', isDarkTheme())
-        elif status == 'ready_for_review':
-            status_icon = FluentIcon.SYNC
-            status_color = get_status_text_color('warning', isDarkTheme())
-        elif status in ('blocked_non_draft', 'discarded'):
-            status_icon = FluentIcon.INFO
-            status_color = COLORS['text_tertiary_dark'] if isDarkTheme() else COLORS['text_tertiary_light']
-        else:
-            status_icon = FluentIcon.CANCEL
-            status_color = get_status_text_color('error', isDarkTheme())
-        icon = IconWidget(status_icon)
+        source = str(row.get("source") or "manual")
+        source_key = {
+            "manual": "analytics.source.manual",
+            "regular_upload": "analytics.source.regular",
+            "batch_upload": "analytics.source.batch",
+        }.get(source, "analytics.source.other")
+        source_icon = {
+            "manual": FluentIcon.GLOBE,
+            "regular_upload": FluentIcon.UP,
+            "batch_upload": FluentIcon.FOLDER,
+        }.get(source, FluentIcon.TAG)
+        status_color = get_status_text_color('success', isDarkTheme())
+        icon = IconWidget(source_icon)
         icon.setFixedSize(SIZES['icon_sm'], SIZES['icon_sm'])
         icon.setStyleSheet(f"color: {status_color}; background: transparent; background-color: transparent;")
         layout.addWidget(icon)
 
-        # Brand and code
-        text = BodyLabel(f"{activity_type} • {brand} • {code}")
+        brand = row.get("brand") or tr("analytics.brand.none")
+        if brand == "No brand":
+            brand = tr("analytics.brand.none")
+        text = BodyLabel(
+            f"{tr(source_key)} • {brand} • {row.get('sku', '')} • {money(row.get('payout_cents'))}"
+        )
+        if row.get("product_name"):
+            text.setToolTip(str(row["product_name"]))
         text.setStyleSheet(
             f"color: {COLORS['text_primary_dark'] if isDarkTheme() else COLORS['text_primary_light']};"
             "background: transparent; background-color: transparent; border: none;"
@@ -739,8 +745,9 @@ class AnalyticsScreen(ResponsiveWidget):
 
         # Time
         try:
+            timestamp = row.get("earned_at")
             if isinstance(timestamp, str):
-                dt = datetime.fromisoformat(timestamp.replace('Z', '').replace('T', ' '))
+                dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
             else:
                 dt = timestamp
             time_ago = self._time_ago(dt)
@@ -777,8 +784,10 @@ class AnalyticsScreen(ResponsiveWidget):
 
     def _time_ago(self, dt):
         """Convert datetime to relative time"""
-        now = datetime.now()
+        now = datetime.now(dt.tzinfo) if getattr(dt, "tzinfo", None) else datetime.now()
         diff = now - dt
+        if diff.total_seconds() < 0:
+            diff = timedelta(0)
 
         if diff.days > 0:
             return self.main.i18n.tr("analytics.time.days", count=diff.days)
@@ -796,23 +805,16 @@ class AnalyticsScreen(ResponsiveWidget):
             if item.widget():
                 item.widget().deleteLater()
 
-    def _view_full_history(self):
-        """Switch to full history view"""
-        # Import and show HistoryScreen
-        from GUI_Qt.screens.FullHistoryScreen import HistoryScreen
-
-        if not hasattr(self.main, '_full_history_screen') or self.main._full_history_screen is None:
-            self.main._full_history_screen = HistoryScreen(self.main)
-            self.main._add_screen_to_stack(self.main._full_history_screen, "Full History")
-
-        self.main._show_screen(self.main._full_history_screen)
+    def _view_earnings(self):
+        """Open the ledger behind the business analytics."""
+        self.main.open_route("earnings")
 
     def _export_analytics(self):
-        """Export analytics to Excel"""
+        """Export the same combined period currently shown on the dashboard."""
         try:
             file_path, _ = QFileDialog.getSaveFileName(
                 self,
-                "Export Analytics",
+                self.main.i18n.tr("analytics.export.dialog"),
                 f"analytics_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
                 "Excel Files (*.xlsx)"
             )
@@ -822,9 +824,8 @@ class AnalyticsScreen(ResponsiveWidget):
 
             wb = Workbook()
             ws = wb.active
-            ws.title = "Analytics Summary"
+            ws.title = "Summary"
 
-            # Headers
             headers = ["Metric", "Value"]
             for col, header in enumerate(headers, 1):
                 cell = ws.cell(1, col, header)
@@ -832,49 +833,69 @@ class AnalyticsScreen(ResponsiveWidget):
                 cell.fill = PatternFill(start_color="4F46E5", fill_type="solid")
                 cell.font = Font(color="FFFFFF", bold=True)
 
-            # Get current metrics
-            cursor = self.db.conn.cursor()
-            total = cursor.execute("SELECT COUNT(*) FROM processing_history").fetchone()[0]
-            success = cursor.execute(
-                "SELECT COUNT(*) FROM processing_history "
-                "WHERE status IN ('success', 'saved_manually')"
-            ).fetchone()[0]
-            success_rate = (success / total * 100) if total > 0 else 0
-
-            regular = cursor.execute("SELECT COUNT(*) FROM processing_history WHERE batch_id IS NULL OR batch_id = ''").fetchone()[0]
-            batch_up = cursor.execute("SELECT COUNT(*) FROM processing_history WHERE batch_id LIKE 'batch_%'").fetchone()[0]
-            batch_desc = cursor.execute("SELECT COUNT(*) FROM processing_history WHERE batch_id LIKE 'batchdesc_%'").fetchone()[0]
-            batch_titles = cursor.execute("SELECT COUNT(*) FROM processing_history WHERE batch_id LIKE 'batchtitle_%'").fetchone()[0]
-
-            # Write data
+            values = self.analytics.snapshot(days=self.period_combo.currentData())
+            earnings = values["earnings"]
+            processing = values["processing"]
             data = [
-                ["Total Activities", total],
-                ["Successful", success],
-                ["Success Rate", f"{success_rate:.1f}%"],
-                ["Failed", total - success],
-                ["Regular Uploads", regular],
-                ["Batch Uploads", batch_up],
-                ["Batch Descriptions", batch_desc],
-                ["Batch Titles", batch_titles],
+                ["Period", self.period_combo.currentText()],
+                ["Recorded products", earnings["product_count"]],
+                ["Earnings", earnings["earned_cents"] / 100.0],
+                ["Outside-app products", earnings["manual_count"]],
+                ["App-linked products", earnings["app_linked_count"]],
+                ["App activity records", processing["total"]],
+                ["Successful app records", processing["succeeded"]],
+                ["App success rate", processing["success_rate"] / 100.0],
+                ["Failed app records", processing["failed"]],
             ]
 
             for row_idx, row_data in enumerate(data, 2):
                 for col_idx, value in enumerate(row_data, 1):
                     ws.cell(row_idx, col_idx, value)
+            ws.cell(4, 2).number_format = '€#,##0.00'
+            ws.cell(9, 2).number_format = '0.0%'
+            ws.column_dimensions["A"].width = 28
+            ws.column_dimensions["B"].width = 22
+
+            def add_breakdown(title, rows):
+                sheet = wb.create_sheet(title)
+                sheet.append(["Name", "Products", "Earnings"])
+                for cell in sheet[1]:
+                    cell.font = Font(color="FFFFFF", bold=True)
+                    cell.fill = PatternFill(start_color="4F46E5", fill_type="solid")
+                for row in rows:
+                    sheet.append([row["label"], row["count"], row["cents"] / 100.0])
+                    sheet.cell(sheet.max_row, 3).number_format = '€#,##0.00'
+                sheet.column_dimensions["A"].width = 28
+                sheet.column_dimensions["B"].width = 14
+                sheet.column_dimensions["C"].width = 16
+
+            add_breakdown("Brands", values["brands"])
+            add_breakdown("Sources", values["sources"])
+            add_breakdown("Product types", values["product_types"])
+
+            issues = wb.create_sheet("App issues")
+            issues.append(["Issue", "Count"])
+            for cell in issues[1]:
+                cell.font = Font(color="FFFFFF", bold=True)
+                cell.fill = PatternFill(start_color="4F46E5", fill_type="solid")
+            for row in values["errors"]:
+                issues.append([row["message"], row["count"]])
+            issues.column_dimensions["A"].width = 70
+            issues.column_dimensions["B"].width = 12
 
             wb.save(file_path)
 
             InfoBar.success(
-                title="Export Successful",
-                content=f"Analytics exported to {file_path}",
+                title=self.main.i18n.tr("analytics.export.success.title"),
+                content=self.main.i18n.tr("analytics.export.success.content", path=file_path),
                 parent=self,
                 position=InfoBarPosition.TOP,
                 duration=3000
             )
         except Exception as e:
             InfoBar.error(
-                title="Export Failed",
-                content=str(e),
+                title=self.main.i18n.tr("analytics.export.failed.title"),
+                content=self.main.i18n.tr("analytics.export.failed.content", error=str(e)),
                 parent=self,
                 position=InfoBarPosition.TOP,
                 duration=3000
@@ -884,12 +905,14 @@ class AnalyticsScreen(ResponsiveWidget):
         """Update UI text for current language"""
         tr = self.main.i18n.tr
         self.title_label.setText(tr("analytics.title"))
-        self.regular_uploads_metric.title_label.setText(tr("analytics.metric.regular_uploads"))
-        self.batch_uploads_metric.title_label.setText(tr("analytics.metric.batch_uploads"))
-        self.batch_desc_metric.title_label.setText(tr("analytics.metric.batch_descriptions"))
-        self.batch_titles_metric.title_label.setText(tr("analytics.metric.batch_titles"))
+        self.products_metric.title_label.setText(tr("analytics.metric.products"))
+        self.earnings_metric.title_label.setText(tr("analytics.metric.earnings"))
+        self.manual_products_metric.title_label.setText(tr("analytics.metric.manual"))
+        self.app_products_metric.title_label.setText(tr("analytics.metric.app_linked"))
         self.brand_title.setText(tr("analytics.brand.title"))
         self.success_title.setText(tr("analytics.success.title"))
+        self.source_title.setText(tr("analytics.source.title"))
+        self.type_title.setText(tr("analytics.type.title"))
         self.activity_title.setText(tr("analytics.activity.title"))
         self.errors_title.setText(tr("analytics.errors.title"))
         self.period_label.setText(tr("common.period"))
@@ -952,6 +975,12 @@ class AnalyticsScreen(ResponsiveWidget):
                 else QBoxLayout.Direction.LeftToRight
             )
             self.charts_layout.setSpacing(spacing)
+        if hasattr(self, "breakdowns_layout"):
+            self.breakdowns_layout.setDirection(
+                QBoxLayout.Direction.TopToBottom if chart_compact
+                else QBoxLayout.Direction.LeftToRight
+            )
+            self.breakdowns_layout.setSpacing(spacing)
 
     def _on_theme_changed(self):
         """Handle theme change"""

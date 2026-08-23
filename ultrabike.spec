@@ -16,6 +16,8 @@ ROOT = Path(SPECPATH).resolve() if 'SPECPATH' in globals() else Path.cwd().resol
 # Non-sensitive runtime resources that must be available in frozen builds
 _datas = [
     (str(ROOT / "Assets" / "Translations" / "*.txt"), "Assets/Translations"),
+    (str(ROOT / "Assets" / "i18n" / "*.json"), "Assets/i18n"),
+    (str(ROOT / "Assets" / "Sounds" / "*.wav"), "Assets/Sounds"),
     (str(ROOT / "VERSION.txt"), "."),
 ]
 
@@ -36,6 +38,29 @@ a = Analysis(
     binaries=[],
     datas=_datas,
     hiddenimports=[
+        # Authenticated screens are registered by module name and imported lazily.
+        "GUI_Qt.screens.UploadScreen",
+        "GUI_Qt.screens.UnifiedBatchScreen",
+        "GUI_Qt.screens.DescriptionsScreen",
+        "GUI_Qt.screens.FolderCreatorScreen",
+        "GUI_Qt.screens.TranslationsScreen",
+        "GUI_Qt.screens.AnalyticsScreen",
+        "GUI_Qt.screens.EarningsScreen",
+        "GUI_Qt.screens.SpotifyScreen",
+        "GUI_Qt.screens.ActivityScreen",
+        "GUI_Qt.screens.SpecCheckerScreen",
+        "GUI_Qt.screens.NameGetterScreen",
+        "GUI_Qt.screens.CodeGetterScreen",
+        "GUI_Qt.screens.ProductNameGetterScreen",
+        "GUI_Qt.screens.BassoImageScreen",
+        "GUI_Qt.screens.PinarelloImageScreen",
+        "GUI_Qt.screens.CastelliUrlGetterScreen",
+        "GUI_Qt.screens.CastelliImageDownloaderScreen",
+        "GUI_Qt.screens.AbusUrlGetterScreen",
+        "GUI_Qt.screens.OakleyUrlGetterScreen",
+        "GUI_Qt.screens.AccountScreen",
+        "GUI_Qt.screens.SettingsScreen",
+        "GUI_Qt.screens.InfoScreen",
         # The Orbea screen loads these services lazily after login. Keep them
         # explicit so frozen builds include the complete workflow.
         "GUI_Qt.screens.OrbeaScreen",
@@ -44,6 +69,7 @@ a = Analysis(
         "tools.orbea_automation.checkpoint",
         "tools.orbea_automation.descriptions",
         "tools.orbea_automation.models",
+        "tools.orbea_automation.photos",
         "tools.orbea_automation.pimbo",
         "tools.orbea_automation.report",
         "tools.orbea_automation.service",

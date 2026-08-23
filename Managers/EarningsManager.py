@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import statistics
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from enum import Enum
@@ -27,6 +28,12 @@ class SessionStatus(str, Enum):
     RUNNING = "running"
     PAUSED = "paused"
     COMPLETED = "completed"
+
+
+class QuestKind(str, Enum):
+    SKU = "sku"
+    EARNINGS = "earnings"
+    FOCUS = "focus"
 
 
 class GoalStatus(str, Enum):
@@ -164,6 +171,100 @@ class EarningsManager:
             else:
                 self._upsert_int_setting(key, value)
 
+    def engagement_settings(self) -> dict[str, bool]:
+        return {
+            "animations_enabled": self._bool_setting(
+                "earnings_celebration_animations", True
+            ),
+            "sound_enabled": self._bool_setting(
+                "earnings_celebration_sound", False
+            ),
+        }
+
+    def set_engagement_settings(
+        self, *, animations_enabled: bool, sound_enabled: bool
+    ) -> None:
+        values = {
+            "earnings_celebration_animations": bool(animations_enabled),
+            "earnings_celebration_sound": bool(sound_enabled),
+        }
+        if self.settings is not None:
+            self.settings.set_many(values)
+            return
+        for key, value in values.items():
+            self._upsert_bool_setting(key, value)
+
+    def celebration_sound_volume(self) -> int:
+        """Return the local success-chime volume as a safe percentage."""
+
+        return min(
+            100,
+            max(0, int(self._setting("earnings_celebration_sound_volume", 45))),
+        )
+
+    def set_celebration_sound_volume(self, percent: int) -> None:
+        value = min(100, max(0, int(percent)))
+        if self.settings is not None:
+            self.settings.set("earnings_celebration_sound_volume", value)
+        else:
+            self._upsert_int_setting("earnings_celebration_sound_volume", value)
+
+    def quest_presets(self, now: datetime | None = None) -> dict[str, dict[str, Any]]:
+        """Return adaptive, editable quest targets based on recent productive sessions."""
+
+        rows = self.db.conn.execute(
+            """
+            SELECT id FROM work_sessions
+            WHERE status='completed'
+            ORDER BY completed_at DESC, id DESC
+            LIMIT 50
+            """
+        ).fetchall()
+        recent: list[dict[str, Any]] = []
+        for row in rows:
+            session = self.get_session(int(row["id"]), now=now)
+            if int(session["product_count"]) <= 0:
+                continue
+            recent.append(session)
+            if len(recent) == 10:
+                break
+
+        if recent:
+            sku_raw = float(statistics.median(row["product_count"] for row in recent))
+            earnings_raw = float(statistics.median(row["earned_cents"] for row in recent))
+            focus_raw = float(statistics.median(row["elapsed_seconds"] for row in recent))
+        else:
+            sku_raw = 10.0
+            average_payout = statistics.mean(
+                self.get_rate_cents(kind) for kind in self.RATE_KEYS
+            )
+            earnings_raw = average_payout * 10.0
+            focus_raw = 45.0 * 60.0
+
+        sku_target = min(100, max(10, self._round_up(sku_raw, 5)))
+        earnings_target = max(1_000, self._round_up(earnings_raw, 500))
+        focus_target = min(
+            90 * 60,
+            max(25 * 60, self._round_nearest(focus_raw, 5 * 60)),
+        )
+        return {
+            QuestKind.SKU.value: {
+                "kind": QuestKind.SKU.value,
+                "target_value": sku_target,
+                "sample_size": len(recent),
+            },
+            QuestKind.EARNINGS.value: {
+                "kind": QuestKind.EARNINGS.value,
+                "target_value": earnings_target,
+                "sample_size": len(recent),
+            },
+            QuestKind.FOCUS.value: {
+                "kind": QuestKind.FOCUS.value,
+                "target_value": focus_target,
+                "sample_size": len(recent),
+            },
+        }
+
     def income_projections(
         self,
         *,
@@ -207,6 +308,16 @@ class EarningsManager:
         row = self.db.conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
         return int(row[0]) if row else default
 
+    def _bool_setting(self, key: str, default: bool) -> bool:
+        if self.settings is not None:
+            return bool(self.settings.get(key, default))
+        row = self.db.conn.execute(
+            "SELECT value FROM settings WHERE key = ?", (key,)
+        ).fetchone()
+        if not row:
+            return bool(default)
+        return str(row[0]).strip().lower() == "true"
+
     def _upsert_int_setting(self, key: str, value: int) -> None:
         now = to_utc_iso(utc_now())
         self.db.conn.execute(
@@ -216,6 +327,19 @@ class EarningsManager:
             ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at
             """,
             (key, str(value), str(value), now),
+        )
+        self.db.conn.commit()
+
+    def _upsert_bool_setting(self, key: str, value: bool) -> None:
+        now = to_utc_iso(utc_now())
+        encoded = "true" if value else "false"
+        self.db.conn.execute(
+            """
+            INSERT INTO settings(key, value, value_type, category, description, default_value, updated_at)
+            VALUES (?, ?, 'bool', 'earnings', '', ?, ?)
+            ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at
+            """,
+            (key, encoded, encoded, now),
         )
         self.db.conn.commit()
 
@@ -390,6 +514,70 @@ class EarningsManager:
         self.db.conn.commit()
         self.complete_goal_if_reached(now=stamp_dt)
 
+    def bulk_update_entries(
+        self,
+        entry_ids: Iterable[int],
+        *,
+        update_brand: bool = False,
+        brand_id: int | None = None,
+        product_type: str | ProductType | None = None,
+        earned_at: datetime | str | None = None,
+        now: datetime | None = None,
+    ) -> int:
+        """Update shared metadata for several earnings in one transaction.
+
+        Payouts are historical snapshots and are deliberately preserved when
+        the product type is corrected in bulk.
+        """
+
+        ids = tuple(dict.fromkeys(int(entry_id) for entry_id in entry_ids))
+        if not ids:
+            raise ValueError("Select at least one earning entry")
+        if not update_brand and product_type is None and earned_at is None:
+            raise ValueError("Choose at least one field to update")
+
+        if update_brand and brand_id is not None:
+            brand = self._brand(int(brand_id))
+            if not brand["is_active"]:
+                raise ValueError("Archived brands cannot be applied in bulk")
+            brand_id = int(brand_id)
+        ptype = self._product_type(product_type) if product_type is not None else None
+        stamp_dt = now or utc_now()
+        earned_stamp = (
+            self._normalize_user_datetime(earned_at, stamp_dt)
+            if earned_at is not None
+            else None
+        )
+        updated_stamp = to_utc_iso(stamp_dt)
+
+        # Validate every target before starting any writes. This avoids a
+        # partially edited selection if a stale UI row was removed elsewhere.
+        for entry_id in ids:
+            if self.db.conn.execute(
+                "SELECT 1 FROM earning_entries WHERE id=?", (entry_id,)
+            ).fetchone() is None:
+                raise ValueError(f"Unknown earning entry: {entry_id}")
+
+        assignments: list[str] = []
+        values: list[Any] = []
+        if update_brand:
+            assignments.append("brand_id=?")
+            values.append(brand_id)
+        if ptype is not None:
+            assignments.append("product_type=?")
+            values.append(ptype)
+        if earned_stamp is not None:
+            assignments.append("earned_at=?")
+            values.append(earned_stamp)
+        assignments.append("updated_at=?")
+        values.append(updated_stamp)
+
+        sql = f"UPDATE earning_entries SET {', '.join(assignments)} WHERE id=?"
+        with self.db.conn:
+            self.db.conn.executemany(sql, [(*values, entry_id) for entry_id in ids])
+        self.complete_goal_if_reached(now=stamp_dt)
+        return len(ids)
+
     def delete_entry(self, entry_id: int) -> None:
         self.db.conn.execute("DELETE FROM earning_entries WHERE id=?", (int(entry_id),))
         self.db.conn.commit()
@@ -451,11 +639,24 @@ class EarningsManager:
         mode: str | TimerMode,
         target_seconds: int | None = None,
         *,
+        quest_kind: str | QuestKind | None = None,
+        quest_target_value: int | None = None,
         now: datetime | None = None,
     ) -> int:
         if self._unfinished_session() is not None:
             raise ActiveSessionError("Finish or reset the current session first")
+        quest_value = self._quest_kind(quest_kind)
+        if quest_value is None:
+            if quest_target_value is not None:
+                raise ValueError("A quest target requires a quest kind")
+        else:
+            quest_target_value = int(quest_target_value or 0)
+            if quest_target_value <= 0:
+                raise ValueError("Quest target must be greater than zero")
         mode_value = TimerMode(mode).value
+        if quest_value == QuestKind.FOCUS.value:
+            mode_value = TimerMode.COUNTDOWN.value
+            target_seconds = quest_target_value
         if mode_value == TimerMode.COUNTDOWN.value:
             target_seconds = int(target_seconds or 0)
             if target_seconds <= 0:
@@ -466,10 +667,19 @@ class EarningsManager:
         cursor = self.db.conn.execute(
             """
             INSERT INTO work_sessions
-                (mode, target_seconds, status, allow_overtime, started_at, created_at, updated_at)
-            VALUES (?, ?, 'running', 0, ?, ?, ?)
+                (mode, target_seconds, status, allow_overtime, started_at,
+                 quest_kind, quest_target_value, created_at, updated_at)
+            VALUES (?, ?, 'running', 0, ?, ?, ?, ?, ?)
             """,
-            (mode_value, target_seconds, stamp, stamp, stamp),
+            (
+                mode_value,
+                target_seconds,
+                stamp,
+                quest_value,
+                quest_target_value,
+                stamp,
+                stamp,
+            ),
         )
         session_id = int(cursor.lastrowid)
         self.db.conn.execute(
@@ -623,7 +833,217 @@ class EarningsManager:
             row["earned_cents"] * 3600.0 / row["elapsed_seconds"]
             if row["elapsed_seconds"] > 0 else None
         )
+        row["quest_progress"] = self._quest_progress_from_values(
+            row,
+            product_count=row["product_count"],
+            earned_cents=row["earned_cents"],
+            elapsed_seconds=row["elapsed_seconds"],
+            now=now,
+        )
         return row
+
+    def session_quest_progress(
+        self, session_id: int, now: datetime | None = None
+    ) -> dict[str, Any] | None:
+        session = self.get_session(session_id, now=now)
+        return session["quest_progress"]
+
+    def _quest_progress_from_values(
+        self,
+        session: dict[str, Any],
+        *,
+        product_count: int,
+        earned_cents: int,
+        elapsed_seconds: float,
+        now: datetime | None,
+    ) -> dict[str, Any] | None:
+        kind = session.get("quest_kind")
+        target = session.get("quest_target_value")
+        if not kind or target is None:
+            return None
+        kind = QuestKind(kind).value
+        target = int(target)
+        current = {
+            QuestKind.SKU.value: int(product_count),
+            QuestKind.EARNINGS.value: int(earned_cents),
+            QuestKind.FOCUS.value: int(elapsed_seconds),
+        }[kind]
+        checkpoints = sorted(
+            {
+                max(1, int(math.ceil(target * fraction)))
+                for fraction in (0.25, 0.50, 0.75, 1.0)
+            }
+        )
+        reached = sum(1 for value in checkpoints if current >= value)
+        complete = current >= target
+        completed_at = session.get("quest_completed_at")
+        newly_completed = False
+        if complete and not completed_at:
+            stamp = to_utc_iso(now or utc_now())
+            self.db.conn.execute(
+                """
+                UPDATE work_sessions
+                SET quest_completed_at=?, updated_at=?
+                WHERE id=? AND quest_completed_at IS NULL
+                """,
+                (stamp, stamp, int(session["id"])),
+            )
+            self.db.conn.commit()
+            completed_at = stamp
+            session["quest_completed_at"] = stamp
+            newly_completed = True
+
+        next_checkpoint = next(
+            (value for value in checkpoints if current < value), None
+        )
+        bonus_target = None
+        bonus_complete = False
+        bonus_percent = None
+        if complete:
+            step = {
+                QuestKind.SKU.value: 10,
+                QuestKind.EARNINGS.value: 1_000,
+                QuestKind.FOCUS.value: 15 * 60,
+            }[kind]
+            bonus_target = target + step
+            bonus_complete = current >= bonus_target
+            bonus_percent = min(100.0, max(0, current - target) * 100.0 / step)
+        return {
+            "kind": kind,
+            "target_value": target,
+            "current_value": current,
+            "percent": min(100.0, current * 100.0 / target),
+            "checkpoints": checkpoints,
+            "reached_checkpoints": reached,
+            "next_checkpoint_value": next_checkpoint,
+            "complete": complete,
+            "completed_at": completed_at,
+            "newly_completed": newly_completed,
+            "bonus_target_value": bonus_target,
+            "bonus_complete": bonus_complete,
+            "bonus_percent": bonus_percent,
+        }
+
+    def session_recap(
+        self, session_id: int, now: datetime | None = None
+    ) -> dict[str, Any]:
+        session = self.get_session(session_id, now=now)
+        if session["status"] != SessionStatus.COMPLETED.value:
+            raise ValueError("Only completed work sessions have a recap")
+
+        prior_rows = self.db.conn.execute(
+            """
+            SELECT id FROM work_sessions
+            WHERE status='completed'
+              AND (
+                    completed_at < ?
+                    OR (completed_at = ? AND id < ?)
+                  )
+            ORDER BY completed_at DESC, id DESC
+            """,
+            (
+                session["completed_at"],
+                session["completed_at"],
+                int(session_id),
+            ),
+        ).fetchall()
+        prior = [self.get_session(int(row["id"]), now=now) for row in prior_rows]
+
+        def record_state(
+            key: str,
+            value: float | int | None,
+            candidates: list[float | int],
+            *,
+            eligible: bool = True,
+        ) -> dict[str, Any]:
+            previous_best = max(candidates) if candidates else None
+            status = None
+            if eligible and value is not None:
+                if previous_best is None:
+                    status = "benchmark"
+                elif float(value) > float(previous_best):
+                    status = "record"
+            return {
+                "key": key,
+                "value": value,
+                "eligible": eligible,
+                "previous_best": previous_best,
+                "status": status,
+            }
+
+        qualified = (
+            int(session["product_count"]) >= 5
+            and float(session["elapsed_seconds"]) >= 10 * 60
+            and session["hourly_cents"] is not None
+        )
+        prior_qualified_rates = [
+            float(item["hourly_cents"])
+            for item in prior
+            if int(item["product_count"]) >= 5
+            and float(item["elapsed_seconds"]) >= 10 * 60
+            and item["hourly_cents"] is not None
+        ]
+        records = {
+            "earnings": record_state(
+                "earnings",
+                int(session["earned_cents"]),
+                [int(item["earned_cents"]) for item in prior],
+            ),
+            "products": record_state(
+                "products",
+                int(session["product_count"]),
+                [int(item["product_count"]) for item in prior],
+            ),
+            "hourly_rate": record_state(
+                "hourly_rate",
+                session["hourly_cents"],
+                prior_qualified_rates,
+                eligible=qualified,
+            ),
+        }
+        return {
+            "session": session,
+            "quest": session["quest_progress"],
+            "goal_contribution": self._session_goal_contribution(session),
+            "records": records,
+            "record_callouts": [
+                value for value in records.values() if value["status"] is not None
+            ],
+        }
+
+    def _session_goal_contribution(self, session: dict[str, Any]) -> dict[str, Any] | None:
+        session_end = session.get("completed_at") or session.get("updated_at")
+        goal = self.db.conn.execute(
+            """
+            SELECT id, target_cents, started_at, completed_at
+            FROM earning_goals
+            WHERE started_at<=?
+              AND (completed_at IS NULL OR completed_at>=?)
+            ORDER BY id DESC LIMIT 1
+            """,
+            (session_end, session["started_at"]),
+        ).fetchone()
+        if goal is None:
+            return None
+        row = self.db.conn.execute(
+            """
+            SELECT COALESCE(SUM(payout_cents), 0)
+            FROM earning_entries
+            WHERE session_id=? AND earned_at>=?
+              AND (? IS NULL OR earned_at<=?)
+            """,
+            (
+                int(session["id"]),
+                goal["started_at"],
+                goal["completed_at"],
+                goal["completed_at"],
+            ),
+        ).fetchone()
+        return {
+            "goal_id": int(goal["id"]),
+            "target_cents": int(goal["target_cents"]),
+            "contribution_cents": int(row[0]),
+        }
 
     def list_sessions(self, now: datetime | None = None) -> list[dict[str, Any]]:
         rows = self.db.conn.execute("SELECT id FROM work_sessions ORDER BY started_at DESC").fetchall()
@@ -709,6 +1129,83 @@ class EarningsManager:
         self.db.conn.commit()
         self.complete_goal_if_reached(now=now)
 
+    def add_goal_adjustment(
+        self,
+        goal_id: int,
+        amount_cents: int,
+        note: str | None = None,
+        *,
+        now: datetime | None = None,
+    ) -> int:
+        """Add audited goal progress without creating an earnings entry."""
+
+        amount_cents = int(amount_cents)
+        if amount_cents <= 0:
+            raise ValueError("Goal adjustment must be greater than zero")
+        note = " ".join(str(note or "").split()) or None
+        stamp = to_utc_iso(now or utc_now())
+        with self.db.write_lock, self.db.conn:
+            goal = self.db.conn.execute(
+                "SELECT status FROM earning_goals WHERE id=?", (int(goal_id),)
+            ).fetchone()
+            if goal is None or goal["status"] != GoalStatus.ACTIVE.value:
+                raise ValueError("Only the active goal can receive an adjustment")
+            cursor = self.db.conn.execute(
+                """
+                INSERT INTO earning_goal_adjustments
+                    (goal_id, amount_cents, note, created_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (int(goal_id), amount_cents, note, stamp),
+            )
+            adjustment_id = int(cursor.lastrowid)
+        self.complete_goal_if_reached(now=now)
+        return adjustment_id
+
+    def add_goal_adjustment_to_total(
+        self,
+        goal_id: int,
+        total_cents: int,
+        note: str | None = None,
+        *,
+        now: datetime | None = None,
+    ) -> tuple[int, int]:
+        """Set a higher displayed goal total by recording only its difference.
+
+        The adjustment remains auditable and does not create or alter an earnings
+        entry. Returns ``(adjustment_id, difference_cents)``.
+        """
+
+        goal = self._goal(int(goal_id))
+        if goal is None or goal["status"] != GoalStatus.ACTIVE.value:
+            raise ValueError("Only the active goal can receive an adjustment")
+        total_cents = int(total_cents)
+        current_cents = int(self.goal_progress(int(goal_id), now=now)["earned_cents"])
+        difference_cents = total_cents - current_cents
+        if difference_cents <= 0:
+            raise ValueError("New goal progress must be greater than current progress")
+        adjustment_id = self.add_goal_adjustment(
+            int(goal_id),
+            difference_cents,
+            note,
+            now=now,
+        )
+        return adjustment_id, difference_cents
+
+    def list_goal_adjustments(self, goal_id: int) -> list[dict[str, Any]]:
+        return [
+            dict(row)
+            for row in self.db.conn.execute(
+                """
+                SELECT id, goal_id, amount_cents, note, created_at
+                FROM earning_goal_adjustments
+                WHERE goal_id=?
+                ORDER BY created_at DESC, id DESC
+                """,
+                (int(goal_id),),
+            ).fetchall()
+        ]
+
     def close_goal(self, goal_id: int, *, status: str | GoalStatus, now: datetime | None = None) -> None:
         status_value = GoalStatus(status).value
         if status_value not in (GoalStatus.ARCHIVED.value, GoalStatus.CANCELLED.value):
@@ -756,8 +1253,14 @@ class EarningsManager:
         row = self.db.conn.execute("SELECT * FROM earning_goals WHERE id=?", (goal_id,)).fetchone()
         if row is None:
             raise ValueError("Unknown earnings goal")
+        adjustment_row = self.db.conn.execute(
+            "SELECT COALESCE(SUM(amount_cents), 0) FROM earning_goal_adjustments WHERE goal_id=?",
+            (int(goal_id),),
+        ).fetchone()
+        adjustment_cents = int(adjustment_row[0] or 0)
         if row["status"] != GoalStatus.ACTIVE.value and row["final_earned_cents"] is not None:
             earned = int(row["final_earned_cents"])
+            earnings_cents = max(0, earned - adjustment_cents)
             count = int(row["final_product_count"] or 0)
             tracked = float(row["final_tracked_seconds"] or 0)
         else:
@@ -766,11 +1269,15 @@ class EarningsManager:
                 "SELECT COUNT(*), COALESCE(SUM(payout_cents), 0) FROM earning_entries WHERE earned_at>=? AND earned_at<=?",
                 (row["started_at"], to_utc_iso(end)),
             ).fetchone()
-            count, earned = int(totals[0]), int(totals[1])
+            count, earnings_cents = int(totals[0]), int(totals[1])
+            earned = earnings_cents + adjustment_cents
             tracked = self.tracked_seconds_between(parse_utc(row["started_at"]), end)
         target = int(row["target_cents"])
         return {
-            "goal": dict(row), "earned_cents": earned, "product_count": count,
+            "goal": dict(row), "earned_cents": earned,
+            "earnings_cents": earnings_cents,
+            "adjustment_cents": adjustment_cents,
+            "product_count": count,
             "tracked_seconds": tracked, "remaining_cents": max(0, target - earned),
             "percent": min(100.0, earned * 100.0 / target),
         }
@@ -829,7 +1336,16 @@ class EarningsManager:
 
     def list_goals(self) -> list[dict[str, Any]]:
         return [dict(row) for row in self.db.conn.execute(
-            "SELECT * FROM earning_goals ORDER BY created_at DESC"
+            """
+            SELECT g.*,
+                   COALESCE((
+                       SELECT SUM(a.amount_cents)
+                       FROM earning_goal_adjustments a
+                       WHERE a.goal_id=g.id
+                   ), 0) AS adjustment_cents
+            FROM earning_goals g
+            ORDER BY g.created_at DESC
+            """
         ).fetchall()]
 
     def _goal(self, goal_id: int) -> dict[str, Any] | None:
@@ -1075,6 +1591,20 @@ class EarningsManager:
     @staticmethod
     def _product_type(value: str | ProductType) -> str:
         return ProductType(value).value
+
+    @staticmethod
+    def _quest_kind(value: str | QuestKind | None) -> str | None:
+        if value is None or value == "":
+            return None
+        return QuestKind(value).value
+
+    @staticmethod
+    def _round_up(value: float | int, step: int) -> int:
+        return int(math.ceil(float(value) / step) * step)
+
+    @staticmethod
+    def _round_nearest(value: float | int, step: int) -> int:
+        return int(math.floor(float(value) / step + 0.5) * step)
 
     @staticmethod
     def _deadline(value: str | date | None) -> str | None:

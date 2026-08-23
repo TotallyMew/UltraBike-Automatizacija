@@ -52,7 +52,9 @@ from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 from webdriver_manager.chrome import ChromeDriverManager
 
-from GUI_Qt.styles.theme_config import COLORS, FONTS, RADII, PADDINGS, SIZES
+from GUI_Qt.styles.theme_config import (
+    COLORS, FONTS, RADII, PADDINGS, SIZES, get_surface_color, get_text_color,
+)
 from Utilities.URLHandler import URLHandler
 
 
@@ -195,7 +197,7 @@ class BassoImageScreen(ResponsiveWidget):
 
     def _apply_theme(self):
         is_dark = isDarkTheme()
-        bg_color = COLORS['space_indigo'] if is_dark else COLORS['platinum']
+        bg_color = get_surface_color(is_dark, 'canvas')
         self.setStyleSheet(f"""
             BassoImageScreen {{
                 background-color: {bg_color};
@@ -206,7 +208,9 @@ class BassoImageScreen(ResponsiveWidget):
         if hasattr(self, 'log') and self.log is not None:
             self.log.setStyleSheet(f"""
                 QPlainTextEdit {{
-                    background-color: {COLORS['lavender_grey'] if is_dark else COLORS['bg_light']};
+                    background-color: {get_surface_color(is_dark, 'alternate')};
+                    color: {get_text_color(is_dark)};
+                    border: 1px solid {COLORS['border_dark'] if is_dark else COLORS['border_light']};
                     border-radius: {RADII['sm']}px;
                     padding: {PADDINGS['combo_item']};
                 }}
@@ -428,6 +432,10 @@ class BassoImageScreen(ResponsiveWidget):
         self.worker = BassoImageWorker(url=url, output_dir=output_dir, tr=tr)
         self.worker.progress.connect(self._append_log)
         self.worker.finished.connect(self._on_finished)
+        if hasattr(self.main, "track_worker"):
+            self.main.track_worker(
+                self.worker, "image_tool", "basso_images", output_path=output_dir
+            )
         self.worker.start()
 
     def _on_finished(self, success: bool, message: str, results):

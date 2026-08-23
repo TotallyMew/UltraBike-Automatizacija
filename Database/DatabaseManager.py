@@ -1,9 +1,12 @@
 ﻿import sqlite3
 from pathlib import Path
+import threading
 from datetime import datetime, timezone
 
 class DatabaseManager:
     """Manages SQLite database connection and schema"""
+
+    LATEST_SCHEMA_VERSION = 5
     
     def __init__(self, db_path=None):
         if db_path is None:
@@ -11,6 +14,7 @@ class DatabaseManager:
             db_path = get_default_db_path()
 
         self.db_path = str(Path(db_path))
+        self.write_lock = threading.RLock()
         self.conn = None
         self._connect()
         self._initialize_schema()
@@ -170,6 +174,9 @@ class DatabaseManager:
                 allow_overtime INTEGER NOT NULL DEFAULT 0,
                 started_at TEXT NOT NULL,
                 completed_at TEXT,
+                quest_kind TEXT CHECK(quest_kind IN ('sku', 'earnings', 'focus')),
+                quest_target_value INTEGER CHECK(quest_target_value > 0),
+                quest_completed_at TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
@@ -260,6 +267,8 @@ class DatabaseManager:
         except Exception:
             pass
 
+        self._run_ordered_migrations()
+
         # Seed translations on first run (from bundled Assets/Translations)
         try:
             row = cursor.execute("SELECT COUNT(1) AS c FROM translations").fetchone()
@@ -270,6 +279,164 @@ class DatabaseManager:
         except Exception:
             # Never block startup if translation seeding fails; app can still run.
             pass
+
+    def _run_ordered_migrations(self) -> None:
+        """Apply durable, ordered migrations to both existing and new databases."""
+
+        current = int(self.conn.execute("PRAGMA user_version").fetchone()[0])
+        migrations = {
+            1: self._migration_remove_obsolete_integrations,
+            2: self._migration_operation_runs,
+            3: self._migration_goal_adjustments,
+            4: self._migration_session_quests,
+            5: self._migration_spotify,
+        }
+        if current > self.LATEST_SCHEMA_VERSION:
+            raise RuntimeError(
+                f"Database schema {current} is newer than this app supports "
+                f"({self.LATEST_SCHEMA_VERSION})"
+            )
+        for version in range(current + 1, self.LATEST_SCHEMA_VERSION + 1):
+            migration = migrations[version]
+            with self.conn:
+                migration()
+                self.conn.execute(f"PRAGMA user_version = {version}")
+
+    def _migration_remove_obsolete_integrations(self) -> None:
+        # Compatibility cleanup only: remove secrets/settings from the retired
+        # translation provider while retaining active brand portal credentials.
+        self.conn.execute("DELETE FROM settings WHERE key = ?", ("deepl_api_key",))
+        self.conn.execute(
+            "DELETE FROM external_credentials WHERE lower(service_key) IN (?, ?)",
+            ("deepl", "deepl_api"),
+        )
+
+    def _migration_operation_runs(self) -> None:
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS operation_runs (
+                id TEXT PRIMARY KEY,
+                kind TEXT NOT NULL,
+                source_route TEXT NOT NULL,
+                status TEXT NOT NULL CHECK(status IN (
+                    'queued', 'running', 'stopping', 'succeeded', 'partial',
+                    'failed', 'cancelled', 'interrupted'
+                )),
+                current INTEGER NOT NULL DEFAULT 0,
+                total INTEGER NOT NULL DEFAULT 0,
+                stage TEXT,
+                message TEXT,
+                summary_json TEXT,
+                error_summary TEXT,
+                output_path TEXT,
+                resume_kind TEXT,
+                resume_ref TEXT,
+                batch_id TEXT,
+                started_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                finished_at TEXT
+            )
+            """
+        )
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_operation_runs_updated "
+            "ON operation_runs(updated_at DESC)"
+        )
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_operation_runs_status "
+            "ON operation_runs(status)"
+        )
+
+    def _migration_goal_adjustments(self) -> None:
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS earning_goal_adjustments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                goal_id INTEGER NOT NULL,
+                amount_cents INTEGER NOT NULL CHECK(amount_cents > 0),
+                note TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(goal_id) REFERENCES earning_goals(id) ON DELETE CASCADE
+            )
+            """
+        )
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_goal_adjustments_goal "
+            "ON earning_goal_adjustments(goal_id, created_at)"
+        )
+
+    def _migration_session_quests(self) -> None:
+        self._ensure_column(
+            "work_sessions",
+            "quest_kind",
+            "TEXT",
+        )
+        self._ensure_column(
+            "work_sessions",
+            "quest_target_value",
+            "INTEGER",
+        )
+        self._ensure_column("work_sessions", "quest_completed_at", "TEXT")
+
+    def _migration_spotify(self) -> None:
+        """Add protected Spotify authorization state and local play history."""
+
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS spotify_auth (
+                singleton_id INTEGER PRIMARY KEY CHECK(singleton_id = 1),
+                encrypted_refresh_token TEXT NOT NULL,
+                spotify_user_id TEXT,
+                display_name TEXT,
+                image_url TEXT,
+                connected_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS spotify_plays (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                track_id TEXT NOT NULL,
+                track_name TEXT NOT NULL,
+                artist_display TEXT,
+                album_name TEXT,
+                duration_ms INTEGER NOT NULL DEFAULT 0 CHECK(duration_ms >= 0),
+                played_at TEXT NOT NULL,
+                session_id INTEGER,
+                context_uri TEXT,
+                context_type TEXT,
+                recorded_at TEXT NOT NULL,
+                UNIQUE(track_id, played_at),
+                FOREIGN KEY(session_id) REFERENCES work_sessions(id) ON DELETE SET NULL
+            )
+            """
+        )
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS spotify_play_artists (
+                play_id INTEGER NOT NULL,
+                artist_id TEXT NOT NULL DEFAULT '',
+                artist_name TEXT NOT NULL,
+                artist_order INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY(play_id, artist_id, artist_name),
+                FOREIGN KEY(play_id) REFERENCES spotify_plays(id) ON DELETE CASCADE
+            )
+            """
+        )
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_spotify_plays_date "
+            "ON spotify_plays(played_at DESC)"
+        )
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_spotify_plays_session "
+            "ON spotify_plays(session_id, played_at)"
+        )
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_spotify_play_artists_name "
+            "ON spotify_play_artists(artist_name COLLATE NOCASE)"
+        )
     
     def close(self):
         """Close database connection"""
@@ -295,7 +462,9 @@ class DatabaseManager:
             'credentials', 'external_credentials', 'processing_history',
             'recent_products', 'translations', 'settings', 'descriptions',
             'description_folders', 'earning_brands', 'earning_entries',
-            'work_sessions', 'work_segments', 'earning_goals'
+            'work_sessions', 'work_segments', 'earning_goals',
+            'earning_goal_adjustments', 'operation_runs', 'spotify_auth',
+            'spotify_plays', 'spotify_play_artists'
         }
 
         # Check for empty identifier

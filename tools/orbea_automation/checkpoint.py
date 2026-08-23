@@ -42,6 +42,16 @@ def compatibility_for(config: OrbeaRunConfig) -> dict[str, Any]:
     return config.compatibility_dict(file_sha256(config.catalogue_path))
 
 
+def _compatibility_matches(actual: Any, expected: dict[str, Any]) -> bool:
+    """Compare checkpoints while keeping pre-photo-option runs resumable."""
+
+    if not isinstance(actual, dict):
+        return False
+    normalized = dict(actual)
+    normalized.setdefault("download_product_photos", False)
+    return normalized == expected
+
+
 def _run_folder_name(moment: datetime | None = None) -> str:
     value = moment or datetime.now()
     return value.strftime("%Y%m%d-%H%M%S")
@@ -86,7 +96,7 @@ def find_latest_compatible_run(
             data = json.loads(checkpoint_path.read_text(encoding="utf-8"))
             if data.get("version") != CHECKPOINT_VERSION:
                 continue
-            if data.get("compatibility") != expected:
+            if not _compatibility_matches(data.get("compatibility"), expected):
                 continue
             if data.get("completed") and not (
                 include_completed_errors and _has_retryable_images(data)
@@ -141,7 +151,9 @@ class RunCheckpoint:
         data = json.loads(path.read_text(encoding="utf-8"))
         if data.get("version") != CHECKPOINT_VERSION:
             raise ValueError("The run checkpoint was created by an incompatible version")
-        if data.get("compatibility") != compatibility_for(config):
+        if not _compatibility_matches(
+            data.get("compatibility"), compatibility_for(config)
+        ):
             raise ValueError("The run uses a different catalogue or Pimbo filter set")
         data["resumed_at"] = utc_now()
         data["cancelled"] = False
@@ -245,10 +257,12 @@ class RunCheckpoint:
             )
         )
         counts["images"] = counts.get("images_downloaded", 0)
+        photo_summary = self.data.get("product_photos", {})
+        counts["product_photos"] = int(photo_summary.get("files", 0) or 0)
         counts["unavailable"] = counts.get("images_not_available", 0)
         counts["errors"] = counts.get("error", 0) + counts.get(
             "images_transient_error", 0
-        )
+        ) + len(photo_summary.get("failures", ()) or ())
         return counts
 
     def pending_retryable_images(self) -> Iterable[tuple[str, dict[str, Any]]]:

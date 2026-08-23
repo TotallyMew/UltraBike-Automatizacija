@@ -1,0 +1,47 @@
+name: Windows CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test-and-package:
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt pyinstaller
+
+      - name: Validate dependencies
+        run: python -m pip check
+
+      - name: Test
+        run: python -m pytest -q
+
+      - name: UI import smoke
+        run: python tools/smoke_imports_ui.py
+
+      - name: Offline application smoke
+        run: python main.py --smoke-test
+
+      - name: Build executable
+        run: python -m PyInstaller --noconfirm --clean ultrabike.spec
+
+      - name: Packaged smoke
+        shell: powershell
+        run: |
+          $process = Start-Process -FilePath ".\dist\UltraBike_Automatizacija.exe" -ArgumentList "--smoke-test" -Wait -PassThru -WindowStyle Hidden
+          if ($process.ExitCode -ne 0) { throw "Packaged smoke test failed: $($process.ExitCode)" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ultrabike-windows-exe
+          path: dist/UltraBike_Automatizacija.exe

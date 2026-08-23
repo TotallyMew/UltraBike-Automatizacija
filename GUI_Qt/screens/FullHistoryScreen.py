@@ -345,8 +345,8 @@ class FullHistoryScreen(ResponsiveWidget):
         border = table_colors['border_dark'] if is_dark else table_colors['border_light']
         text = COLORS['text_primary_dark'] if is_dark else COLORS['text_primary_light']
 
-        header_bg = COLORS['lavender_grey'] if is_dark else COLORS['space_indigo']
-        header_text = COLORS['space_indigo'] if is_dark else COLORS['text_white']
+        header_bg = table_colors['header_bg_dark' if is_dark else 'header_bg_light']
+        header_text = table_colors['header_text_dark' if is_dark else 'header_text_light']
 
         selection_bg = get_selection_bg()
 
@@ -749,7 +749,7 @@ class FullHistoryScreen(ResponsiveWidget):
             item = QTableWidgetItem(url[:100] + '...' if len(url) > 100 else url)
             item.setToolTip(url)
             if url.startswith('http'):
-                item.setForeground(QColor(COLORS['lavender_grey']))
+                item.setForeground(QColor(get_text_color(isDarkTheme(), 'secondary')))
                 item.setData(Qt.ItemDataRole.UserRole, url)  # Store full URL
             self.table.setItem(row_idx, 10, item)
 
@@ -943,7 +943,3 @@ class FullHistoryScreen(ResponsiveWidget):
         if hasattr(self, 'content_widget') and self.content_widget.layout():
             self.content_widget.layout().setContentsMargins(*margins)
             self.content_widget.layout().setSpacing(spacing)
-
-
-# Alias for backward compatibility
-HistoryScreen = FullHistoryScreen

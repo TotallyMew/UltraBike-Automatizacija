@@ -3,8 +3,8 @@
 Explains what the app is and how to use it.
 """
 
-from PySide6.QtCore import QEvent, QObject, Qt
-from PySide6.QtWidgets import QLabel, QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy
 
 from qfluentwidgets import (
     CardWidget,
@@ -21,7 +21,9 @@ from qfluentwidgets import (
 )
 
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
-from GUI_Qt.styles.theme_config import COLORS, FONTS, RADII, SIZES, get_details_card_bg
+from GUI_Qt.styles.theme_config import (
+    COLORS, FONTS, RADII, SIZES, get_details_card_bg, get_surface_color,
+)
 from GUI_Qt.styles.screen_theme import (
     PAGE_MARGINS,
     PAGE_SPACING,
@@ -31,31 +33,11 @@ from GUI_Qt.styles.screen_theme import (
     CONTENT_SPACING,
     DETAILS_MARGINS,
     apply_screen_theme,
+    enforce_transparent_labels,
     get_responsive_margins,
     get_responsive_spacing,
     DETAILS_SPACING,
 )
-
-
-class _TransparentLabelEventFilter(QObject):
-    """Keeps label widgets transparent even if QFluent re-styles them."""
-
-    def __init__(self, owner: "InfoScreen"):
-        super().__init__(owner)
-        self._owner = owner
-
-    def eventFilter(self, watched, event):  # noqa: N802 (Qt naming)
-        if isinstance(watched, QLabel):
-            t = event.type()
-            if t in (
-                QEvent.Type.Polish,
-                QEvent.Type.StyleChange,
-                QEvent.Type.PaletteChange,
-                QEvent.Type.Show,
-                QEvent.Type.DynamicPropertyChange,
-            ):
-                self._owner._normalize_text_widget(watched)
-        return super().eventFilter(watched, event)
 
 
 class InfoScreen(ResponsiveWidget):
@@ -69,13 +51,12 @@ class InfoScreen(ResponsiveWidget):
         self.scroll: ScrollArea | None = None
         self.content: QWidget | None = None
         self.content_widget = None  # Alias for consistency
-        self._transparent_label_filter = _TransparentLabelEventFilter(self)
         self._init_ui()
         qconfig.themeChangedFinished.connect(self._on_theme_changed)
 
     def _apply_theme(self):
         is_dark = isDarkTheme()
-        bg_color = COLORS['space_indigo'] if is_dark else COLORS['platinum']
+        bg_color = get_surface_color(is_dark, 'canvas')
         self.setStyleSheet(f"""
             InfoScreen {{
                 background-color: {bg_color};
@@ -112,44 +93,8 @@ class InfoScreen(ResponsiveWidget):
         self._force_transparent_text_widgets()
 
     def _force_transparent_text_widgets(self):
-        """Ensure labels don't paint their own backgrounds.
-
-        QFluentWidgets may apply styles directly on label instances.
-        Parent QSS can't reliably override that, so we normalize here.
-        """
-
-        for w in self.findChildren(QLabel):
-            self._normalize_text_widget(w)
-
-    def _normalize_text_widget(self, w: QLabel):
-        """Applies the strongest safe transparency settings to a label."""
-
-        try:
-            w.setAutoFillBackground(False)
-            w.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
-            w.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
-
-            # Reinstall filter if needed (Qt will ignore duplicates).
-            w.installEventFilter(self._transparent_label_filter)
-
-            current = w.styleSheet() or ""
-
-            # Force both shorthand and explicit background properties.
-            # Keep existing rules, but append overrides at the end.
-            override = "\n".join(
-                [
-                    "background: transparent;",
-                    "background-color: transparent;",
-                    "border: none;",
-                ]
-            )
-            if current.strip():
-                if override not in current:
-                    w.setStyleSheet(current.rstrip() + "\n" + override)
-            else:
-                w.setStyleSheet(override)
-        except Exception:
-            return
+        """Normalize labels once, outside Qt's style-event callbacks."""
+        enforce_transparent_labels(self)
 
     def _apply_extra_details_style(self):
         if not hasattr(self, "extra_details_card"):

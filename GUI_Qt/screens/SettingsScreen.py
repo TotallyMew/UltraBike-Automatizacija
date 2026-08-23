@@ -3,23 +3,32 @@ Settings Screen
 Application settings with Fluent Design System
 """
 
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFileDialog, QSizePolicy
-from PySide6.QtCore import Qt, QThread, Signal
+from datetime import datetime
+import sys
+from pathlib import Path
+
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFileDialog, QSizePolicy, QLineEdit, QInputDialog, QApplication
+from PySide6.QtCore import Qt, QThread, Signal, QTimer, QProcess
 from qfluentwidgets import (
     CardWidget, TitleLabel, StrongBodyLabel, BodyLabel, CaptionLabel,
     ComboBox, SwitchButton, FluentIcon, InfoBar, InfoBarPosition,
-    isDarkTheme, setTheme, Theme, PushButton, LineEdit, ScrollArea,
+    isDarkTheme, setTheme, Theme, PushButton, LineEdit, ScrollArea, MessageBox,
     PrimaryPushButton, TransparentToolButton, qconfig, IconWidget
 )
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
-from GUI_Qt.styles.theme_config import COLORS, FONTS, RADII, SIZES, rgba_from_hex
+from GUI_Qt.styles.theme_config import (
+    COLORS, FONTS, RADII, SIZES, get_surface_color, get_text_color, rgba_from_hex,
+)
 from GUI_Qt.styles.screen_theme import (
     PAGE_MARGINS, PAGE_SPACING, CARD_MARGINS, CARD_SPACING, ICON_TEXT_GAP, FOOTER_MARGINS,
     enforce_transparent_labels, apply_screen_theme, get_responsive_margins, get_responsive_spacing
 )
-from GUI_Qt.i18n import normalize_language, translate
+from GUI_Qt.i18n import Language, normalize_language, translate
 from GUI_Qt.components.accessibility import KeyboardNavigationMixin
 from GUI_Qt.components.dialogs import UnsavedChangesDialog
+from Utilities.Version import get_app_version
+from Utilities.AppPaths import get_default_backups_dir
+from Utilities.BackupManager import BackupManager
 
 
 class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
@@ -67,7 +76,10 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
 
     def showEvent(self, event):
         super().showEvent(event)
-        if self._loading:
+        # Theme/style refreshes can produce an additional show event after the
+        # user has already changed a preview control. Preserve that pending
+        # state; genuine navigation away resolves dirty settings first.
+        if self._loading or self._is_dirty:
             return
         # If user navigated away without saving, reset preview state.
         self._sync_preview_from_saved_and_retranslate()
@@ -87,6 +99,14 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
             return "English"
         return language
 
+    def _get_saved_language_code(self) -> str:
+        return normalize_language(self._get_saved_language_display(), "en")
+
+    def _select_language_code(self, language_code: str) -> None:
+        index = self.language_combo.findData(normalize_language(language_code, "en"))
+        if index >= 0:
+            self.language_combo.setCurrentIndex(index)
+
     def _get_saved_theme_is_dark(self) -> bool:
         return self.main.settings.get('theme', 'light') == 'dark'
 
@@ -96,16 +116,12 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
         This is used when entering Settings, or after global language/theme changes.
         """
         try:
-            saved_language = self._get_saved_language_display()
+            saved_language = self._get_saved_language_code()
             self._preview_lang_code = normalize_language(saved_language, self._preview_lang_code)
 
             self._loading = True
             try:
-                idx = self.language_combo.findText(saved_language)
-                if idx >= 0:
-                    self.language_combo.setCurrentIndex(idx)
-                else:
-                    self.language_combo.setCurrentText(saved_language)
+                self._select_language_code(saved_language)
 
                 saved_is_dark = self._get_saved_theme_is_dark()
                 self.theme_switch.setChecked(saved_is_dark)
@@ -128,57 +144,51 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
         except Exception:
             pass
 
-    def _apply_global_theme(self, is_dark: bool) -> None:
+    def _apply_global_theme(self, is_dark: bool) -> bool:
         """Apply qfluentwidgets theme globally (used for preview + saved apply)."""
         try:
             # Only flip if needed to avoid extra signals.
             if is_dark == isDarkTheme():
-                return
+                return False
 
-            setTheme(Theme.DARK if is_dark else Theme.LIGHT)
+            # Lazy QFluent updates defer individual widget stylesheet work until
+            # paint time instead of blocking this interaction on the full tree.
+            setTheme(Theme.DARK if is_dark else Theme.LIGHT, lazy=True)
 
-            # Keep global stylesheet + container backgrounds consistent.
+            # Keep the main window's custom controls consistent with the preview.
+            # qconfig.themeChangedFinished already refreshes container backgrounds
+            # and every connected screen, including the batch table.
             try:
                 from GUI_Qt.styles.global_styles import get_global_stylesheet
-                self.main.setStyleSheet(get_global_stylesheet())
+                stylesheet = get_global_stylesheet()
+                if self.main.styleSheet() != stylesheet:
+                    self.main.setStyleSheet(stylesheet)
             except Exception:
                 pass
-
-            try:
-                self.main.update_container_backgrounds()
-            except Exception:
-                pass
-
-            # Some custom widgets need manual theme refresh.
-            if getattr(self.main, "unified_batch_screen", None):
-                try:
-                    self.main.unified_batch_screen._update_table_theme()
-                except Exception:
-                    pass
+            return True
         except Exception:
-            pass
+            return False
 
     def _revert_preview_to_saved(self) -> None:
         """Revert any preview-only state back to saved global settings."""
         try:
             saved_is_dark = self._get_saved_theme_is_dark()
-            self._apply_global_theme(saved_is_dark)
+            theme_changed = self._apply_global_theme(saved_is_dark)
             self._preview_theme_is_dark = saved_is_dark
 
-            saved_language = self._get_saved_language_display()
+            saved_language = self._get_saved_language_code()
             self._preview_lang_code = normalize_language(saved_language, self._preview_lang_code)
 
             self._loading = True
             try:
-                idx = self.language_combo.findText(saved_language)
-                if idx >= 0:
-                    self.language_combo.setCurrentIndex(idx)
+                self._select_language_code(saved_language)
                 self.theme_switch.setChecked(saved_is_dark)
             finally:
                 self._loading = False
 
             self.retranslate_ui(preview=True)
-            self._on_theme_changed()
+            if not theme_changed:
+                self._on_theme_changed()
 
             # Restore chrome language (undo preview) when leaving Settings.
             if hasattr(self.main, "clear_language_preview"):
@@ -199,7 +209,7 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
 
         # Apply background color based on theme - using our color scheme
         is_dark = self._preview_theme_is_dark
-        bg_color = COLORS['space_indigo'] if is_dark else COLORS['platinum']
+        bg_color = get_surface_color(is_dark, 'canvas')
         text_primary = COLORS['text_primary_dark'] if is_dark else COLORS['text_primary_light']
         text_caption = COLORS['lavender_grey'] if is_dark else COLORS['text_secondary']
         self.setStyleSheet(
@@ -295,8 +305,18 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
         # NOTE: QFluentWidgets ComboBox placeholder behavior can mask index 0.
         # Insert a dummy first item so real languages are not at index 0.
         # We keep it as a visible (localized) placeholder option.
-        self.language_combo.addItem(translate(self._preview_lang_code, "settings.language.placeholder"))
-        self.language_combo.addItems(["English", "Lithuanian"])
+        self.language_combo.addItem(
+            translate(self._preview_lang_code, "settings.language.placeholder"),
+            userData=None,
+        )
+        self.language_combo.addItem(
+            translate(self._preview_lang_code, "settings.language.english"),
+            userData="en",
+        )
+        self.language_combo.addItem(
+            translate(self._preview_lang_code, "settings.language.lithuanian"),
+            userData="lt",
+        )
         self.language_combo.setPlaceholderText("")
         self.language_combo.setMinimumWidth(SIZES['field_min_width_md'])
         self.language_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
@@ -616,6 +636,90 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
 
         layout.addWidget(paths_card)
 
+        # === UPDATES CARD ===
+        updates_card = CardWidget()
+        updates_card.setBorderRadius(RADII['md'])
+        updates_layout = QVBoxLayout(updates_card)
+        updates_layout.setContentsMargins(*CARD_MARGINS)
+        updates_layout.setSpacing(CARD_SPACING)
+
+        updates_header = QHBoxLayout()
+        updates_icon = IconWidget(FluentIcon.SYNC)
+        updates_icon.setFixedSize(SIZES['icon_md'], SIZES['icon_md'])
+        updates_title = StrongBodyLabel(translate(self._preview_lang_code, "settings.updates.title"))
+        self._ui["updates_title"] = updates_title
+        updates_header.addWidget(updates_icon)
+        updates_header.addSpacing(ICON_TEXT_GAP)
+        updates_header.addWidget(updates_title)
+        updates_header.addStretch()
+        updates_layout.addLayout(updates_header)
+
+        updates_desc = CaptionLabel(translate(self._preview_lang_code, "settings.updates.desc"))
+        self._ui["updates_desc"] = updates_desc
+        updates_desc.setWordWrap(True)
+        updates_layout.addWidget(updates_desc)
+
+        update_toggle_row = QHBoxLayout()
+        update_toggle_text = QVBoxLayout()
+        update_auto_label = BodyLabel(translate(self._preview_lang_code, "settings.updates.auto"))
+        self._ui["update_auto_label"] = update_auto_label
+        update_version_label = CaptionLabel(
+            translate(self._preview_lang_code, "settings.updates.version", version=get_app_version("0.0.0"))
+        )
+        self._ui["update_version_label"] = update_version_label
+        update_toggle_text.addWidget(update_auto_label)
+        update_toggle_text.addWidget(update_version_label)
+        self.update_check_switch = SwitchButton()
+        update_toggle_row.addLayout(update_toggle_text)
+        update_toggle_row.addStretch()
+        update_toggle_row.addWidget(self.update_check_switch)
+        updates_layout.addLayout(update_toggle_row)
+
+        update_action_row = QHBoxLayout()
+        update_action_row.addStretch()
+        self.check_updates_btn = PushButton(translate(self._preview_lang_code, "settings.updates.check"))
+        self._ui["check_updates_btn"] = self.check_updates_btn
+        self.check_updates_btn.setIcon(FluentIcon.SYNC)
+        self.check_updates_btn.clicked.connect(lambda: self.main.check_for_updates(interactive=True))
+        update_action_row.addWidget(self.check_updates_btn)
+        updates_layout.addLayout(update_action_row)
+        layout.addWidget(updates_card)
+
+        # === DATA SAFETY CARD ===
+        data_card = CardWidget()
+        data_card.setBorderRadius(RADII['md'])
+        data_layout = QVBoxLayout(data_card)
+        data_layout.setContentsMargins(*CARD_MARGINS)
+        data_layout.setSpacing(CARD_SPACING)
+        data_header = QHBoxLayout()
+        data_icon = IconWidget(FluentIcon.SAVE_AS)
+        data_icon.setFixedSize(SIZES['icon_md'], SIZES['icon_md'])
+        data_title = StrongBodyLabel(translate(self._preview_lang_code, "settings.data.title"))
+        self._ui["data_title"] = data_title
+        data_header.addWidget(data_icon)
+        data_header.addSpacing(ICON_TEXT_GAP)
+        data_header.addWidget(data_title)
+        data_header.addStretch()
+        data_layout.addLayout(data_header)
+        data_desc = CaptionLabel(translate(self._preview_lang_code, "settings.data.desc"))
+        self._ui["data_desc"] = data_desc
+        data_desc.setWordWrap(True)
+        data_layout.addWidget(data_desc)
+        data_actions = QHBoxLayout()
+        data_actions.addStretch()
+        self.restore_backup_btn = PushButton(translate(self._preview_lang_code, "settings.data.restore"))
+        self._ui["restore_backup_btn"] = self.restore_backup_btn
+        self.restore_backup_btn.setIcon(FluentIcon.HISTORY)
+        self.restore_backup_btn.clicked.connect(self._restore_backup)
+        data_actions.addWidget(self.restore_backup_btn)
+        self.create_backup_btn = PrimaryPushButton(translate(self._preview_lang_code, "settings.data.backup"))
+        self._ui["create_backup_btn"] = self.create_backup_btn
+        self.create_backup_btn.setIcon(FluentIcon.SAVE_AS)
+        self.create_backup_btn.clicked.connect(self._create_backup)
+        data_actions.addWidget(self.create_backup_btn)
+        data_layout.addLayout(data_actions)
+        layout.addWidget(data_card)
+
         # === INFO CARD ===
         info_card = CardWidget()
         info_card.setBorderRadius(RADII['md'])
@@ -630,7 +734,10 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
 
         app_name = BodyLabel(translate(self._preview_lang_code, "settings.about.app"))
         self._ui["app_name"] = app_name
-        app_name.setStyleSheet(f"color: {COLORS['lavender_grey']}; background: transparent; background-color: transparent;")
+        app_name.setStyleSheet(
+            f"color: {get_text_color(isDarkTheme(), 'secondary')}; "
+            "background: transparent; background-color: transparent;"
+        )
         info_layout.addWidget(app_name)
 
         layout.addWidget(info_card)
@@ -692,6 +799,7 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
         self.auto_delete_pabaigta_switch.checkedChanged.connect(lambda: self._mark_dirty())
         if hasattr(self, 'multi_session_switch'):
             self.multi_session_switch.checkedChanged.connect(lambda: self._mark_dirty())
+        self.update_check_switch.checkedChanged.connect(lambda: self._mark_dirty())
         # Text fields
         self.kross_path_field.textChanged.connect(lambda: self._mark_dirty())
         self.repo_path_field.textChanged.connect(lambda: self._mark_dirty())
@@ -701,18 +809,13 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
     def _load_settings(self):
         """Load current settings from database"""
         # Load language
-        language_display = self._get_saved_language_display()
-        self._preview_lang_code = normalize_language(language_display, self._preview_lang_code)
-        index = self.language_combo.findText(language_display)
-        if index >= 0:
-            self.language_combo.setCurrentIndex(index)
-        else:
-            # Fallback: force the visible value even if it doesn't match items
-            self.language_combo.setCurrentText(language_display)
+        language_code = self._get_saved_language_code()
+        self._preview_lang_code = normalize_language(language_code, self._preview_lang_code)
+        self._select_language_code(language_code)
 
         # Safety: ComboBox should never show placeholder when we have a saved value
         if not self.language_combo.currentText():
-            self.language_combo.setCurrentText(language_display)
+            self._select_language_code(language_code)
 
         # Load browser
         browser = self.main.settings.get('browser_choice', 'Chrome')
@@ -755,8 +858,9 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
         # Load paths
         self.kross_path_field.setText(self.main.settings.get('kross_download_path', ''))
         self.repo_path_field.setText(self.main.settings.get('repository_path', ''))
+        self.update_check_switch.setChecked(self.main.settings.get('update_check_enabled', True))
 
-    def _on_language_change(self, language):
+    def _on_language_change(self, _language_text):
         """Handle language change (no longer auto-saves)"""
         if self._loading:
             return
@@ -767,15 +871,8 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
 
         # Live preview ONLY within Settings screen.
         # Live preview within Settings + app chrome (navigation) only.
-        self._preview_lang_code = normalize_language(language, self._preview_lang_code)
-
-        # Ensure combo shows an actual value, not placeholder.
-        if not self.language_combo.currentText():
-            idx = self.language_combo.findText(language)
-            if idx >= 0:
-                self.language_combo.setCurrentIndex(idx)
-            else:
-                self.language_combo.setCurrentText(language)
+        language_code = self.language_combo.currentData()
+        self._preview_lang_code = normalize_language(language_code, self._preview_lang_code)
 
         self.retranslate_ui(preview=True)
 
@@ -795,8 +892,12 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
         but is reverted when leaving Settings unless Save is clicked.
         """
         self._preview_theme_is_dark = bool(is_dark)
-        self._apply_global_theme(self._preview_theme_is_dark)
-        self._on_theme_changed()
+        theme_changed = self._apply_global_theme(self._preview_theme_is_dark)
+        # A real theme change synchronously emits themeChangedFinished, to which
+        # this screen is already connected. Refresh manually only for same-theme
+        # preview synchronization.
+        if not theme_changed:
+            self._on_theme_changed()
 
     def retranslate_ui(self, preview: bool = False):
         """Update visible strings.
@@ -820,12 +921,15 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
             self._ui["lang_label"].setText(tr("settings.language.label"))
 
         # Placeholders
-        # Update language placeholder item (index 0)
-        if hasattr(self, "language_combo") and self.language_combo.count() > 0:
+        # Update the placeholder and language names without changing their codes.
+        if hasattr(self, "language_combo") and self.language_combo.count() >= 3:
+            previous = self.language_combo.blockSignals(True)
             try:
                 self.language_combo.setItemText(0, tr("settings.language.placeholder"))
-            except Exception:
-                pass
+                self.language_combo.setItemText(1, tr("settings.language.english"))
+                self.language_combo.setItemText(2, tr("settings.language.lithuanian"))
+            finally:
+                self.language_combo.blockSignals(previous)
         if hasattr(self, "kross_path_field"):
             self.kross_path_field.setPlaceholderText(tr("settings.paths.placeholder"))
         if hasattr(self, "repo_path_field"):
@@ -888,6 +992,27 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
         if "repo_browse_btn" in self._ui:
             self._ui["repo_browse_btn"].setText(tr("settings.paths.browse"))
 
+        if "updates_title" in self._ui:
+            self._ui["updates_title"].setText(tr("settings.updates.title"))
+        if "updates_desc" in self._ui:
+            self._ui["updates_desc"].setText(tr("settings.updates.desc"))
+        if "update_auto_label" in self._ui:
+            self._ui["update_auto_label"].setText(tr("settings.updates.auto"))
+        if "update_version_label" in self._ui:
+            self._ui["update_version_label"].setText(
+                tr("settings.updates.version", version=get_app_version("0.0.0"))
+            )
+        if "check_updates_btn" in self._ui:
+            self._ui["check_updates_btn"].setText(tr("settings.updates.check"))
+        if "data_title" in self._ui:
+            self._ui["data_title"].setText(tr("settings.data.title"))
+        if "data_desc" in self._ui:
+            self._ui["data_desc"].setText(tr("settings.data.desc"))
+        if "create_backup_btn" in self._ui:
+            self._ui["create_backup_btn"].setText(tr("settings.data.backup"))
+        if "restore_backup_btn" in self._ui:
+            self._ui["restore_backup_btn"].setText(tr("settings.data.restore"))
+
         if "info_title" in self._ui:
             self._ui["info_title"].setText(tr("settings.about.title"))
         if "app_name" in self._ui:
@@ -900,7 +1025,7 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
     def _update_scroll_style(self):
         """Update scroll area styling based on current theme"""
         is_dark = getattr(self, "_preview_theme_is_dark", isDarkTheme())
-        bg_color = COLORS['space_indigo'] if is_dark else COLORS['platinum']
+        bg_color = get_surface_color(is_dark, 'canvas')
 
         self.scroll.setStyleSheet(f"""
             QScrollArea {{
@@ -957,11 +1082,108 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
             text_field.setText(folder)
             # Path will be saved when user clicks Save button
 
+    def _create_backup(self) -> None:
+        master_password = self.main.get_unlocked_master_password(parent=self)
+        if not master_password:
+            return
+        default = get_default_backups_dir() / f"ultrabike_{datetime.now():%Y%m%d_%H%M%S}.ubbackup"
+        path, _selected = QFileDialog.getSaveFileName(
+            self,
+            self.main.i18n.tr("settings.data.backup"),
+            str(default),
+            "UltraBike backup (*.ubbackup)",
+        )
+        if not path:
+            return
+        try:
+            BackupManager(self.main.db).create(path, master_password)
+            InfoBar.success(
+                title=self.main.i18n.tr("settings.data.backup_done"),
+                content=str(path),
+                parent=self,
+                position=InfoBarPosition.TOP,
+                duration=5000,
+            )
+        except Exception as error:
+            InfoBar.error(
+                title=self.main.i18n.tr("common.error"),
+                content=str(error),
+                parent=self,
+                position=InfoBarPosition.TOP,
+                duration=5000,
+            )
+
+    def _restore_backup(self) -> None:
+        path, _selected = QFileDialog.getOpenFileName(
+            self,
+            self.main.i18n.tr("settings.data.restore"),
+            str(get_default_backups_dir()),
+            "UltraBike backup (*.ubbackup)",
+        )
+        if not path:
+            return
+        password, accepted = QInputDialog.getText(
+            self,
+            self.main.i18n.tr("settings.data.restore"),
+            self.main.i18n.tr("settings.data.password"),
+            QLineEdit.EchoMode.Password,
+        )
+        if not accepted:
+            return
+        manager = BackupManager(self.main.db)
+        try:
+            info = manager.inspect(path, password)
+            dialog = MessageBox(
+                self.main.i18n.tr("settings.data.restore_confirm"),
+                self.main.i18n.tr(
+                    "settings.data.restore_confirm_body",
+                    version=info.app_version,
+                    date=info.created_at,
+                ),
+                self,
+            )
+            dialog.yesButton.setText(self.main.i18n.tr("settings.data.restore"))
+            dialog.cancelButton.setText(self.main.i18n.tr("common.cancel"))
+            if not dialog.exec():
+                return
+            manager.restore(path, password)
+            self.main.credential_manager.session_manager.clear_session()
+            InfoBar.success(
+                title=self.main.i18n.tr("settings.data.restore_done"),
+                content=self.main.i18n.tr("settings.data.restart"),
+                parent=self,
+                position=InfoBarPosition.TOP,
+                duration=3000,
+            )
+            def restart_application():
+                if getattr(sys, "frozen", False):
+                    program = sys.executable
+                    arguments = [arg for arg in sys.argv[1:] if arg != "--smoke-test"]
+                else:
+                    program = sys.executable
+                    arguments = [str(Path(__file__).resolve().parents[2] / "main.py")]
+                QProcess.startDetached(program, arguments)
+                QApplication.instance().quit()
+
+            QTimer.singleShot(750, restart_application)
+        except Exception as error:
+            InfoBar.error(
+                title=self.main.i18n.tr("common.error"),
+                content=str(error),
+                parent=self,
+                position=InfoBarPosition.TOP,
+                duration=5000,
+            )
+
     def _save_all_settings(self):
         """Save all settings to database"""
         try:
             # Get current values
-            language = self.language_combo.currentText() or self._get_saved_language_display()
+            language = self.language_combo.currentData() or self._get_saved_language_code()
+            current_language = (
+                self.main.i18n.language.code if hasattr(self.main, "i18n") else "en"
+            )
+            language_code = normalize_language(language, current_language)
             browser = self.browser_combo.currentText()
             download_images = self.download_images_switch.isChecked()
             auto_delete_pabaigta = self.auto_delete_pabaigta_switch.isChecked()
@@ -978,11 +1200,12 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
             theme_name = 'dark' if theme_is_dark else 'light'
             kross_path = self.kross_path_field.text()
             repo_path = self.repo_path_field.text()
+            update_check_enabled = self.update_check_switch.isChecked()
 
             # Commit the settings as one unit so a write failure cannot leave a
             # half-applied configuration behind.
             new_settings = {
-                'language': language,
+                'language': Language(language_code).display,
                 'browser_choice': browser,
                 'download_images': download_images,
                 'auto_delete_pabaigta_files': auto_delete_pabaigta,
@@ -991,6 +1214,7 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
                 'multi_session_enabled': bool(multi_session_enabled),
                 'browser_count': int(browser_count),
                 'theme': theme_name,
+                'update_check_enabled': bool(update_check_enabled),
             }
             if kross_path:
                 new_settings['kross_download_path'] = kross_path
@@ -998,36 +1222,20 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
                 new_settings['repository_path'] = repo_path
             self.main.settings.set_many(new_settings)
 
-            # Apply theme globally now that it is saved
-            self.main._apply_saved_theme()
-            self.main.update_container_backgrounds()
+            # Theme toggles are already applied by the live preview. Only handle
+            # a programmatic mismatch here; do not reload the entire widget tree
+            # merely because the user clicked Save.
+            if theme_is_dark != isDarkTheme():
+                self._apply_global_theme(theme_is_dark)
+            self._preview_theme_is_dark = theme_is_dark
 
-            # Update settings screen background + scroll styling after theme apply
-            self._on_theme_changed()
-
-            # Sync preview to global theme after applying
-            self._preview_theme_is_dark = isDarkTheme()
-
-            # Update batch upload screen table if it exists
-            if getattr(self.main, "unified_batch_screen", None):
-                try:
-                    self.main.unified_batch_screen._update_table_theme()
-                except Exception:
-                    pass
-
-            # Apply language globally (in case user changed it and wants persistence)
+            # The language value was persisted in the transaction above. Emit a
+            # global retranslation only when it actually changed, without a
+            # second database write or duplicate manual screen refresh.
             if hasattr(self.main, "i18n"):
-                self.main.i18n.set_language(language, persist=True)
-                # Sync preview to global language after applying
+                if language_code != self.main.i18n.language.code:
+                    self.main.i18n.set_language(language_code, persist=False)
                 self._preview_lang_code = self.main.i18n.language.code
-                self.retranslate_ui(preview=False)
-
-                # Ensure chrome is in the new global language.
-                if hasattr(self.main, "clear_language_preview"):
-                    try:
-                        self.main.clear_language_preview()
-                    except Exception:
-                        pass
 
             # Show success message
             InfoBar.success(
@@ -1149,7 +1357,7 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
         )
 
         is_dark = isDarkTheme()
-        bg_color = COLORS['space_indigo'] if is_dark else COLORS['platinum']
+        bg_color = get_surface_color(is_dark, 'canvas')
 
         text_primary = COLORS['text_primary_dark'] if is_dark else COLORS['text_primary_light']
         text_caption = COLORS['lavender_grey'] if is_dark else COLORS['text_secondary']

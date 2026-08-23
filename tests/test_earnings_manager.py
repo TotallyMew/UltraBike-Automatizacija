@@ -76,6 +76,45 @@ def test_custom_brand_can_be_archived_without_losing_history(manager):
         manager.create_entry("SKU-2", "bicycle", brand_id=brand_id, now=at(2))
 
 
+def test_bulk_edit_updates_shared_metadata_atomically_and_preserves_payouts(manager):
+    first = manager.create_entry("ONE", "bicycle", now=at(1))
+    second = manager.create_entry("TWO", "bicycle", now=at(2))
+    brand_id = manager.add_brand("Bulk brand", now=at(3))
+    manager.set_rate_cents("frameset", 275)
+
+    updated = manager.bulk_update_entries(
+        [first, second, first],
+        update_brand=True,
+        brand_id=brand_id,
+        product_type="frameset",
+        earned_at=at(4, 14, 30),
+        now=at(5),
+    )
+
+    assert updated == 2
+    rows = {row["id"]: row for row in manager.list_entries()}
+    for entry_id in (first, second):
+        assert rows[entry_id]["brand_id"] == brand_id
+        assert rows[entry_id]["brand_name"] == "Bulk brand"
+        assert rows[entry_id]["product_type"] == "frameset"
+        assert rows[entry_id]["earned_at"] == "2026-08-04T14:30:00.000000Z"
+        assert rows[entry_id]["payout_cents"] == 100
+
+    with pytest.raises(ValueError, match="Unknown earning entry"):
+        manager.bulk_update_entries(
+            [first, 999_999], update_brand=True, brand_id=None, now=at(6)
+        )
+    assert manager.list_entries()[0]["brand_id"] == brand_id
+
+
+def test_bulk_edit_requires_a_selection_and_a_field(manager):
+    entry_id = manager.create_entry("ONE", "bicycle", now=at(1))
+    with pytest.raises(ValueError, match="Select at least one"):
+        manager.bulk_update_entries([], update_brand=True)
+    with pytest.raises(ValueError, match="Choose at least one field"):
+        manager.bulk_update_entries([entry_id])
+
+
 def test_stopwatch_excludes_pauses_and_links_entries(manager):
     session_id = manager.start_session("stopwatch", now=at(1, 9))
     manager.pause_session(now=at(1, 10))
@@ -169,6 +208,77 @@ def test_goal_replacement_requires_explicit_archive_or_cancel(manager):
     second = manager.create_goal(2000, replace_status=GoalStatus.ARCHIVED, now=at(2))
     assert manager._goal(first)["status"] == "archived"
     assert manager._goal(second)["status"] == "active"
+
+
+def test_goal_adjustment_changes_only_goal_progress(manager):
+    goal_id = manager.create_goal(500, now=at(1, 8))
+    manager.create_entry("PAID-PRODUCT", "bicycle", now=at(1, 9))
+
+    adjustment_id = manager.add_goal_adjustment(
+        goal_id, 200, "Opening balance", now=at(1, 10)
+    )
+
+    progress = manager.goal_progress(goal_id, now=at(1, 11))
+    assert progress["earned_cents"] == 300
+    assert progress["earnings_cents"] == 100
+    assert progress["adjustment_cents"] == 200
+    assert progress["product_count"] == 1
+    assert manager.summary(now=at(1, 11))["all_cents"] == 100
+    assert manager.list_goal_adjustments(goal_id) == [
+        {
+            "id": adjustment_id,
+            "goal_id": goal_id,
+            "amount_cents": 200,
+            "note": "Opening balance",
+            "created_at": "2026-08-01T10:00:00.000000Z",
+        }
+    ]
+
+
+def test_goal_adjustment_can_complete_goal_but_requires_active_goal(manager):
+    goal_id = manager.create_goal(250, now=at(1, 8))
+    manager.add_goal_adjustment(goal_id, 250, now=at(1, 9))
+
+    assert manager.active_goal() is None
+    completed = manager._goal(goal_id)
+    assert completed["status"] == "completed"
+    assert completed["final_earned_cents"] == 250
+    assert completed["final_product_count"] == 0
+    assert manager.summary(now=at(1, 10))["all_cents"] == 0
+
+    with pytest.raises(ValueError, match="active goal"):
+        manager.add_goal_adjustment(goal_id, 100, now=at(1, 10))
+    with pytest.raises(ValueError, match="greater than zero"):
+        manager.add_goal_adjustment(goal_id, 0, now=at(1, 10))
+
+
+def test_goal_adjustment_can_set_a_higher_current_total_from_the_difference(manager):
+    goal_id = manager.create_goal(1_000, now=at(1, 8))
+    manager.create_entry("PAID-PRODUCT", "bicycle", now=at(1, 9))
+    manager.add_goal_adjustment(goal_id, 200, "Opening balance", now=at(1, 10))
+
+    adjustment_id, difference_cents = manager.add_goal_adjustment_to_total(
+        goal_id,
+        450,
+        "Updated account total",
+        now=at(1, 11),
+    )
+
+    assert difference_cents == 150
+    progress = manager.goal_progress(goal_id, now=at(1, 12))
+    assert progress["earned_cents"] == 450
+    assert progress["earnings_cents"] == 100
+    assert progress["adjustment_cents"] == 350
+    assert manager.list_goal_adjustments(goal_id)[0] == {
+        "id": adjustment_id,
+        "goal_id": goal_id,
+        "amount_cents": 150,
+        "note": "Updated account total",
+        "created_at": "2026-08-01T11:00:00.000000Z",
+    }
+
+    with pytest.raises(ValueError, match="greater than current progress"):
+        manager.add_goal_adjustment_to_total(goal_id, 450, now=at(1, 13))
 
 
 def test_forecast_uses_recent_products_and_tracked_hourly_rate(manager):

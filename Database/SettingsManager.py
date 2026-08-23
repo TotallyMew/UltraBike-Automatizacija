@@ -86,6 +86,21 @@ class SettingsManager:
             ('window_height', '800', 'int', 'ui',
              'Window height in pixels', '800'),
 
+            ('window_x', '-1', 'int', 'ui',
+             'Last normal window X position', '-1'),
+
+            ('window_y', '-1', 'int', 'ui',
+             'Last normal window Y position', '-1'),
+
+            ('window_maximized', 'false', 'bool', 'ui',
+             'Whether the main window was maximized', 'false'),
+
+            ('navigation_compact', 'false', 'bool', 'ui',
+             'Last navigation rail state', 'false'),
+
+            ('last_authenticated_route', 'upload', 'string', 'ui',
+             'Last authenticated page route', 'upload'),
+
             ('theme', 'light', 'string', 'ui',
              'UI theme (light/dark)', 'light'),
 
@@ -122,6 +137,20 @@ class SettingsManager:
 
              ('standard_workdays_per_week', '5', 'int', 'earnings',
               'Normal workdays per week used for income projections', '5'),
+
+             ('earnings_celebration_animations', 'true', 'bool', 'earnings',
+              'Show positive checkpoint and quest-completion animations', 'true'),
+
+             ('earnings_celebration_sound', 'false', 'bool', 'earnings',
+              'Play a local chime for quest completion and personal records', 'false'),
+
+             ('earnings_celebration_sound_volume', '45', 'int', 'earnings',
+              'Local success-chime volume from zero to one hundred percent', '45'),
+
+             # Personal Spotify connection. The client ID is a public OAuth
+             # identifier; refresh tokens are stored separately using DPAPI.
+             ('spotify_client_id', 'fe9530444b434392b178a8874d9b5020', 'string', 'spotify',
+              'Spotify Web API client identifier', 'fe9530444b434392b178a8874d9b5020'),
 
              # Updates
              ('update_check_enabled', 'true', 'bool', 'updates',
@@ -202,7 +231,7 @@ class SettingsManager:
         """Persist a group of settings atomically."""
         if not values:
             return
-        with self.db.conn:
+        with self.db.write_lock, self.db.conn:
             cursor = self.db.conn.cursor()
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             for key, value in values.items():

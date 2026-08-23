@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from openpyxl import Workbook, load_workbook
@@ -180,6 +181,8 @@ class CheckpointTests(unittest.TestCase):
             checkpoint = RunCheckpoint.create(run_dir, config)
             checkpoint.upsert_result(result_row("p1", "unmatched", title="Unknown"))
             checkpoint.mark_cancelled()
+            checkpoint.data["compatibility"].pop("download_product_photos")
+            checkpoint.save()
 
             self.assertEqual(find_latest_compatible_run(config), run_dir)
             resumed = RunCheckpoint.load(run_dir, config)
@@ -387,6 +390,167 @@ class ReportTests(unittest.TestCase):
             self.assertEqual(record["size_guide_status"], "not_available")
             self.assertEqual(record["attempts"], 9)
 
+    def test_integrated_run_upgrades_old_single_geometry_capture(self) -> None:
+        from tools.orbea_table_image_downloader import (
+            AVAILABILITY_PROBE_VERSION,
+            GEOMETRY_CAPTURE_VERSION,
+        )
+
+        class DummyReporter:
+            def emit(self, *_args, **_kwargs):
+                pass
+
+        class DummyDriver:
+            def quit(self):
+                pass
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            catalogue = root / "catalogue.xlsx"
+            build_catalogue(catalogue)
+            config = OrbeaRunConfig(catalogue, root / "runs")
+            checkpoint = RunCheckpoint.create(
+                create_run_directory(config.output_root), config
+            )
+            url = "https://www.orbea.com/en-be/onna-20"
+            checkpoint.upsert_result(
+                result_row(
+                    "p1",
+                    "code_match",
+                    sku="ONNA20",
+                    title="Orbea Onna 20",
+                    catalogue_url=url,
+                    catalogue_model="ONNA 20",
+                )
+            )
+            checkpoint.upsert_image(
+                url,
+                {
+                    "availability_probe_version": AVAILABILITY_PROBE_VERSION,
+                    "geometry_capture_version": GEOMETRY_CAPTURE_VERSION - 1,
+                    "geometry_status": "downloaded",
+                    "size_guide_status": "not_available",
+                    "attempts": 1,
+                    "retryable": False,
+                },
+            )
+            service = OrbeaAutomationService(
+                object(), image_driver_factory=lambda *_args: DummyDriver()
+            )
+            capture_result = {
+                "availability_probe_version": AVAILABILITY_PROBE_VERSION,
+                "geometry_status": "downloaded",
+                "size_guide_status": "not_available",
+                "geometry_dimensions": (640, 480),
+                "size_guide_dimensions": None,
+                "geometry_position": "",
+                "geometry_position_supported": False,
+                "geometry_size_selector_supported": True,
+                "geometry_variants": [
+                    {
+                        "size": "XS",
+                        "wheel_size": '27.5"',
+                        "filename": "geometry-xs.png",
+                        "status": "downloaded",
+                    }
+                ],
+                "geometry_error": "",
+                "size_guide_error": "",
+                "errors": [],
+                "retryable": False,
+            }
+            with patch(
+                "tools.orbea_table_image_downloader.capture_orbea_tables",
+                return_value=capture_result,
+            ) as capture:
+                service._download_images(
+                    config,
+                    checkpoint,
+                    DummyReporter(),
+                    CancellationToken(),
+                    None,
+                    retry_failed=False,
+                )
+
+            capture.assert_called_once()
+            record = checkpoint.images[url]
+            self.assertEqual(
+                record["geometry_capture_version"], GEOMETRY_CAPTURE_VERSION
+            )
+            self.assertEqual(record["geometry_variants"][0]["size"], "XS")
+
+    def test_product_photo_option_uses_unique_matched_catalogue_links(self) -> None:
+        class DummyReporter:
+            def __init__(self):
+                self.updates = []
+
+            def emit(self, *args):
+                self.updates.append(args)
+
+        class FakePhotoService:
+            def __init__(self):
+                self.calls = []
+
+            def run_many(self, urls, output_dir, **kwargs):
+                self.calls.append((tuple(urls), Path(output_dir)))
+                kwargs["progress"](
+                    SimpleNamespace(
+                        current=1000,
+                        total=1000,
+                        message="Product photos complete",
+                    )
+                )
+                return SimpleNamespace(
+                    products=1,
+                    variants=3,
+                    views=4,
+                    files=(Path(output_dir) / "one.png", Path(output_dir) / "two.png"),
+                    failures=(),
+                    unavailable=("missing-view",),
+                    cancelled=False,
+                )
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            catalogue = root / "catalogue.xlsx"
+            build_catalogue(catalogue)
+            config = OrbeaRunConfig(
+                catalogue,
+                root / "runs",
+                download_product_photos=True,
+            )
+            checkpoint = RunCheckpoint.create(
+                create_run_directory(config.output_root), config
+            )
+            url = "https://cms.orbea.com/en-be/orca-m30i"
+            for row_key, sku in (("p1", "U10707SV"), ("p2", "U10708SV")):
+                checkpoint.upsert_result(
+                    result_row(
+                        row_key,
+                        "code_match",
+                        sku=sku,
+                        title="Orbea ORCA M30i",
+                        catalogue_url=url,
+                        catalogue_model="ORCA M30i",
+                    )
+                )
+
+            fake = FakePhotoService()
+            reporter = DummyReporter()
+            service = OrbeaAutomationService(
+                object(), photo_service_factory=lambda: fake
+            )
+            service._download_product_photos(
+                checkpoint, reporter, CancellationToken(), None
+            )
+
+            self.assertEqual(fake.calls, [((url,), checkpoint.run_dir / "product-photos")])
+            self.assertTrue(checkpoint.data["product_photos_completed"])
+            self.assertEqual(checkpoint.data["product_photos"]["products"], 1)
+            self.assertEqual(checkpoint.data["product_photos"]["files"], 2)
+            self.assertEqual(checkpoint.counts()["product_photos"], 2)
+            self.assertEqual(reporter.updates[-1][0], "product_photos")
+
     def test_formatted_workbook_manifest_and_duplicate_url_job(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -438,6 +602,21 @@ class ReportTests(unittest.TestCase):
                     "canonical_url": canonical,
                     "geometry_status": "downloaded",
                     "geometry_image": "images/orca/geometry.png",
+                    "geometry_variants": [
+                        {
+                            "size": "XS",
+                            "wheel_size": '27.5"',
+                            "filename": "geometry-xs.png",
+                            "status": "downloaded",
+                        },
+                        {
+                            "size": "M",
+                            "wheel_size": '29"',
+                            "filename": "geometry-m.png",
+                            "status": "downloaded",
+                        },
+                    ],
+                    "folder": "images/orca",
                     "size_guide_status": "not_available",
                     "size_guide_image": "images/orca/size-guide-cm.png",
                     "retryable": False,
@@ -488,6 +667,13 @@ class ReportTests(unittest.TestCase):
                 rows = list(csv.DictReader(handle))
             self.assertEqual(len(rows), 3)
             self.assertEqual(rows[0]["Geometry Status"], "downloaded")
+            self.assertEqual(rows[0]["Geometry Sizes"], "XS; M")
+            self.assertEqual(rows[0]["Geometry Wheel Sizes"], '27.5"; 29"')
+            self.assertEqual(
+                rows[0]["Geometry PNGs"],
+                f"{Path('images/orca/geometry-xs.png')}; "
+                f"{Path('images/orca/geometry-m.png')}",
+            )
             self.assertEqual(rows[2]["Geometry Status"], "not_available")
 
     def test_existing_match_excel_is_cleaned_and_sorted(self) -> None:

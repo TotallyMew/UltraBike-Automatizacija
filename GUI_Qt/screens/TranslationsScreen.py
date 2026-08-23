@@ -22,7 +22,11 @@ from qfluentwidgets import (
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
 from GUI_Qt.components.dialogs import DestructiveActionDialog
 from GUI_Qt.widgets import enable_table_copy
-from GUI_Qt.styles.theme_config import COLORS, FONTS, RADII, PADDINGS, SIZES, rgba_from_hex
+from GUI_Qt.styles.theme_config import (
+    COLORS, COMPONENT_COLORS, FONTS, RADII, PADDINGS, SIZES,
+    get_accent_colors, get_selection_bg, get_subtle_item_hover_bg,
+    get_surface_color, rgba_from_hex,
+)
 from GUI_Qt.styles.screen_theme import (
     PAGE_MARGINS,
     PAGE_SPACING,
@@ -194,7 +198,7 @@ class TranslationsScreen(ResponsiveWidget):
         """Initialize UI with Fluent Design"""
         # Apply background color
         is_dark = isDarkTheme()
-        bg_color = COLORS['space_indigo'] if is_dark else COLORS['platinum']
+        bg_color = get_surface_color(is_dark, 'canvas')
 
         self.setStyleSheet(f"""
             TranslationsScreen {{
@@ -246,7 +250,7 @@ class TranslationsScreen(ResponsiveWidget):
         self.stats_label.setProperty("ubAllowBg", True)
         self.stats_label.setStyleSheet(f"""
             background-color: {COLORS['lavender_grey']};
-            color: white;
+            color: {COLORS['space_indigo']};
             padding: {PADDINGS['badge']};
             border-radius: {RADII['sm']}px;
             font-weight: 500;
@@ -438,13 +442,12 @@ class TranslationsScreen(ResponsiveWidget):
     def _update_table_theme(self):
         """Update table styling based on current theme"""
         is_dark = isDarkTheme()
-        bg_color = COLORS['bg_alt_dark'] if is_dark else COLORS['bg_light']
-        alt_bg = COLORS['bg_alt_dark'] if is_dark else COLORS['bg_alt_light']
-        border_color = COLORS['border_dark'] if is_dark else COLORS['border_light']
-
-        # Header colors: lavender_grey for dark mode, space_indigo for light mode
-        header_bg = COLORS['lavender_grey'] if is_dark else COLORS['space_indigo']
-        header_text = COLORS['space_indigo'] if is_dark else COLORS['text_white']
+        table_colors = COMPONENT_COLORS['table']
+        bg_color = table_colors['row_bg_dark' if is_dark else 'row_bg_light']
+        alt_bg = table_colors['row_alt_bg_dark' if is_dark else 'row_alt_bg_light']
+        border_color = table_colors['border_dark' if is_dark else 'border_light']
+        header_bg = table_colors['header_bg_dark' if is_dark else 'header_bg_light']
+        header_text = table_colors['header_text_dark' if is_dark else 'header_text_light']
 
         text_color = COLORS['text_primary_dark'] if is_dark else COLORS['text_primary_light']
 
@@ -461,11 +464,11 @@ class TranslationsScreen(ResponsiveWidget):
                 border-bottom: 1px solid {border_color};
             }}
             QTableWidget::item:selected {{
-                background-color: {COLORS['lavender_grey']};
-                color: {COLORS['space_indigo'] if is_dark else COLORS['text_white']};
+                background-color: {get_selection_bg()};
+                color: {text_color};
             }}
             QTableWidget::item:hover {{
-                background-color: {rgba_from_hex(COLORS['lavender_grey'], 0.1) if is_dark else rgba_from_hex(COLORS['space_indigo'], 0.05)};
+                background-color: {get_subtle_item_hover_bg(is_dark)};
             }}
             QHeaderView::section {{
                 background-color: {header_bg};
@@ -597,7 +600,7 @@ class TranslationsScreen(ResponsiveWidget):
 
             # Category badge
             brand_item = QTableWidgetItem(category)
-            brand_item.setForeground(QColor(COLORS['lavender_grey']))
+            brand_item.setForeground(QColor(get_accent_colors(isDarkTheme())['base']))
             self.table.setItem(row_idx, 0, brand_item)
 
             # Original text
@@ -822,7 +825,7 @@ class TranslationsScreen(ResponsiveWidget):
     def _on_theme_changed(self):
         """Handle theme change event"""
         is_dark = isDarkTheme()
-        bg_color = COLORS['space_indigo'] if is_dark else COLORS['platinum']
+        bg_color = get_surface_color(is_dark, 'canvas')
 
         self.setStyleSheet(f"""
             TranslationsScreen {{

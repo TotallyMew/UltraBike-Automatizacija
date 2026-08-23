@@ -379,5 +379,5 @@ batch_processor.process_batch(items, master_password=password)
 - [GUI_Qt/dialogs/BatchUploadDialog.py](GUI_Qt/dialogs/BatchUploadDialog.py) - User interface
 
 **Related Documentation:**
-- [Config/LanguageConfig.py](Config/LanguageConfig.py) - Language code constants
-- [Database/SessionManager.py](Database/SessionManager.py) - Encryption strategies
+- [Database/SessionManager.py](../Database/SessionManager.py) - Encryption strategies
+- [Pimbo workflow](pimbo-workflow.md) - Supported product automation

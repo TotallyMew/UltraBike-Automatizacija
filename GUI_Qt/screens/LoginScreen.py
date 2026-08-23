@@ -4,65 +4,16 @@ Email, password, and browser selection with Selenium integration
 """
 
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout
-from PySide6.QtCore import Qt, QThread, Signal, QTimer
+from PySide6.QtCore import Qt, QTimer
 from qfluentwidgets import (
     LineEdit, PasswordLineEdit, ComboBox, PrimaryPushButton,
     IndeterminateProgressRing, BodyLabel, TitleLabel, InfoBar, InfoBarPosition, CardWidget, isDarkTheme
 )
 
-from GUI_Qt.styles.theme_config import COLORS, FONTS, SIZES
+from GUI_Qt.styles.theme_config import FONTS, SIZES, get_surface_color
 from GUI_Qt.styles.screen_theme import CARD_SPACING, CARD_SPACING_LARGE, CENTER_FORM_MARGINS, ROW_SPACING, CONTENT_SPACING
 
-from Config.BrowserConfig.BrowserManager import BrowserManager
-from Config.LoginConfig.LoginHandler import LoginHandler
-
-
-class LoginWorker(QThread):
-    """Background worker for login process"""
-    finished = Signal(bool, str, object)  # success, message, driver
-
-    def __init__(self, email, password, browser_choice, credential_manager, tr):
-        super().__init__()
-        self.email = email
-        self.password = password
-        self.browser_choice = browser_choice
-        self.credential_manager = credential_manager
-        self.tr = tr
-        self.driver = None
-
-    def run(self):
-        """Perform login in background thread"""
-        try:
-            # Setup browser
-            browser_manager = BrowserManager()
-            self.driver = browser_manager.setup_browser(
-                self.browser_choice,
-                retry_callback=lambda: False
-            )
-
-            if self.driver is None:
-                self.finished.emit(False, self.tr("login.browser_init_failed"), None)
-                return
-
-            # Attempt login
-            login_handler = LoginHandler(self.driver, self.credential_manager)
-            success = login_handler.login(
-                credentials_callback=lambda: (self.email, self.password),
-                retry_callback=lambda: False,
-                max_attempts=1
-            )
-
-            if success:
-                self.finished.emit(True, self.tr("login.ok"), self.driver)
-            else:
-                if self.driver:
-                    self.driver.quit()
-                self.finished.emit(False, self.tr("login.invalid_credentials"), None)
-
-        except Exception as e:
-            if self.driver:
-                self.driver.quit()
-            self.finished.emit(False, str(e), None)
+from GUI_Qt.workers.login_workers import PimboLoginWorker as LoginWorker
 
 
 class LoginScreen(QWidget):
@@ -80,7 +31,7 @@ class LoginScreen(QWidget):
 
         # Background to match the rest of the app
         is_dark = isDarkTheme()
-        bg_color = COLORS['space_indigo'] if is_dark else COLORS['platinum']
+        bg_color = get_surface_color(is_dark, 'canvas')
         self.setStyleSheet(f"""
             LoginScreen {{
                 background-color: {bg_color};
@@ -263,7 +214,7 @@ class LoginScreen(QWidget):
 
         # Start login worker
         self.login_worker = LoginWorker(email, password, browser, self.main.credential_manager, self.main.i18n.tr)
-        self.login_worker.finished.connect(self._on_login_complete)
+        self.login_worker.result.connect(self._on_login_complete)
         self.login_worker.start()
 
         # Preload heavy screens while Selenium login runs (avoids first-switch lag)

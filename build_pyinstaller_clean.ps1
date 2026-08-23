@@ -63,3 +63,10 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host "Build complete." -ForegroundColor Green
 Write-Host ("Output: .\\{0}\\UltraBike_Automatizacija.exe" -f $DistDir) -ForegroundColor Green
+
+$builtExe = Join-Path $DistDir "UltraBike_Automatizacija.exe"
+$smoke = Start-Process -FilePath $builtExe -ArgumentList "--smoke-test" -Wait -PassThru -WindowStyle Hidden
+if ($smoke.ExitCode -ne 0) {
+  throw "Packaged smoke test failed with exit code $($smoke.ExitCode)"
+}
+Write-Host "Packaged smoke test passed." -ForegroundColor Green

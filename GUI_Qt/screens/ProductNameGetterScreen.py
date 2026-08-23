@@ -130,6 +130,10 @@ class ProductNameGetterScreen(CodeGetterScreen):
         self._worker.progress_update.connect(self._on_progress)
         self._worker.done.connect(self._on_done)
         self._worker.log.connect(lambda msg: print(f"[ProductNameGetter] {msg}"))
+        if hasattr(self.main, "track_worker"):
+            self.main.track_worker(
+                self._worker, "name_scanner", "product_name_getter"
+            )
         self._worker.start()
 
     def _on_progress(self, current: int, label: str):

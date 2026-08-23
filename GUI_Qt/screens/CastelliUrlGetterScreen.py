@@ -409,11 +409,11 @@ class CastelliUrlGetterScreen(ResponsiveWidget):
     def _update_table_theme(self):
         is_dark = isDarkTheme()
         tc = COMPONENT_COLORS["table"]
-        bg = tc["row_alt_bg_dark"] if is_dark else tc["row_alt_bg_light"]
-        alt_bg = tc["row_bg_dark"] if is_dark else tc["row_bg_light"]
+        bg = tc["row_bg_dark"] if is_dark else tc["row_bg_light"]
+        alt_bg = tc["row_alt_bg_dark"] if is_dark else tc["row_alt_bg_light"]
         border = tc["border_dark"] if is_dark else tc["border_light"]
-        header_bg = COLORS["lavender_grey"] if is_dark else COLORS["space_indigo"]
-        header_text = COLORS["space_indigo"] if is_dark else COLORS["text_white"]
+        header_bg = tc["header_bg_dark"] if is_dark else tc["header_bg_light"]
+        header_text = tc["header_text_dark"] if is_dark else tc["header_text_light"]
         text_color = COLORS["text_primary_dark"] if is_dark else COLORS["text_primary_light"]
 
         from GUI_Qt.styles.theme_config import get_scrollbar_handle_bg, get_scrollbar_handle_hover_bg, get_selection_bg
@@ -587,6 +587,10 @@ class CastelliUrlGetterScreen(ResponsiveWidget):
         self._worker.progress_update.connect(self._on_progress)
         self._worker.done.connect(self._on_done)
         self._worker.log.connect(lambda msg: print(f"[CastelliUrlGetter] {msg}"))
+        if hasattr(self.main, "track_worker"):
+            self.main.track_worker(
+                self._worker, "url_scanner", "castelli_url_getter", total=len(self._rows)
+            )
         self._worker.start()
 
     def _on_row_update(self, row: int, status: str, url: str):

@@ -74,6 +74,37 @@ class OrbeaScreenTests(unittest.TestCase):
         self.assertEqual(self.screen._search_edit.text(), "orbea")
         self.assertTrue(self.screen._search_edit.isReadOnly())
         self.assertEqual(self.screen._excel_sort_btn.text(), "Sort existing Excel")
+        self.assertFalse(self.screen._table_images_check.isChecked())
+        self.assertFalse(self.screen._product_photos_check.isChecked())
+        self.assertTrue(self.screen._table_images_check.isHidden())
+        self.assertTrue(self.screen._product_photos_check.isHidden())
+        self.assertTrue(self.screen._photo_card.isHidden())
+
+    def test_catalogue_scan_never_starts_image_downloads(self):
+        self.screen._table_images_check.setChecked(True)
+        self.screen._product_photos_check.setChecked(True)
+
+        config = self.screen._create_run_config()
+
+        self.assertFalse(config.download_images)
+        self.assertFalse(config.download_product_photos)
+        self.assertFalse(self.settings.values["orbea_download_table_images"])
+        self.assertFalse(self.settings.values["orbea_download_product_photos"])
+
+    def test_task_sections_show_one_workflow_at_a_time(self):
+        expected = {
+            "setup": self.screen._setup_page,
+            "progress": self.screen._progress_page,
+            "photos": self.screen._photos_page,
+            "descriptions": self.screen._descriptions_page,
+            "results": self.screen._results_page,
+        }
+        for index, (route, active_page) in enumerate(expected.items()):
+            self.screen._switch_section(route)
+            self.app.processEvents()
+            self.assertEqual(self.screen._section_tabs.currentIndex(), index)
+            for page in expected.values():
+                self.assertEqual(page.isHidden(), page is not active_page)
 
     def test_dynamic_ids_and_multi_completeness_reach_typed_config(self):
         options = PimboFilterOptions(
@@ -124,6 +155,23 @@ class OrbeaScreenTests(unittest.TestCase):
         self.assertTrue(self.screen._closing)
         self.screen.refresh_filter_options(show_errors=False)
         self.assertFalse(self.screen._closing)
+
+    def test_activation_refreshes_once_after_login_time_preload(self):
+        driver = object()
+        self.main.driver = driver
+        calls = []
+        self.screen.refresh_filter_options = lambda **kwargs: calls.append(kwargs)
+
+        self.screen.on_activated()
+        self.screen.on_activated()
+
+        self.assertEqual(calls, [{"show_errors": False}])
+
+    def test_worker_module_does_not_eagerly_import_spreadsheet_or_widget_stacks(self):
+        import GUI_Qt.orbea.workers as workers
+
+        self.assertNotIn("openpyxl", workers.__dict__)
+        self.assertNotIn("QWidget", workers.__dict__)
 
 
 if __name__ == "__main__":

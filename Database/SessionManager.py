@@ -351,7 +351,7 @@ class SessionManager:
         Store encrypted external-service credentials in database using Scrypt KDF.
 
         Args:
-            service_key: Unique identifier for the service (e.g., "deepl_api")
+            service_key: Unique identifier for the external brand portal
             username: Username or API key
             password: Password or secret to encrypt
             master_password: Master password for encryption
@@ -467,6 +467,92 @@ class SessionManager:
         cursor = self.db.conn.cursor()
         cursor.execute("DELETE FROM external_credentials WHERE service_key = ?", (service_key,))
         self.db.conn.commit()
+
+    def _decrypt_stored_secret(
+        self,
+        encrypted_password: str,
+        salt_value: str,
+        kdf_params_json: str | None,
+        master_password: str,
+    ) -> str:
+        """Decrypt one credential row without triggering migration commits."""
+
+        if kdf_params_json is None:
+            key = self._derive_key_legacy_sha256(master_password, salt_value)
+        else:
+            params = json.loads(kdf_params_json)
+            if params.get("kdf") != "scrypt":
+                raise ValueError("Unsupported credential KDF")
+            salt = base64.b64decode(salt_value, validate=True)
+            key = self._derive_key_scrypt_params(master_password, salt, params)
+        return Fernet(base64.urlsafe_b64encode(key)).decrypt(
+            encrypted_password.encode()
+        ).decode()
+
+    def _encrypt_stored_secret(self, secret: str, master_password: str) -> tuple[str, str, str]:
+        salt = secrets.token_bytes(16)
+        key = self._derive_key_scrypt(master_password, salt)
+        encrypted = Fernet(base64.urlsafe_b64encode(key)).encrypt(secret.encode()).decode()
+        return (
+            encrypted,
+            base64.b64encode(salt).decode("ascii"),
+            json.dumps(self._get_kdf_params(), sort_keys=True),
+        )
+
+    def change_master_password(self, current_password: str, new_password: str) -> None:
+        """Atomically re-encrypt every saved credential with a new password."""
+
+        if not self.verify_master_password(current_password):
+            raise ValueError("Current master password is incorrect")
+        if not isinstance(new_password, str) or len(new_password) < 10:
+            raise ValueError("New master password must contain at least 10 characters")
+
+        admin_rows = self.db.conn.execute(
+            "SELECT id, encrypted_password, salt, kdf_params FROM credentials"
+        ).fetchall()
+        external_rows = self.db.conn.execute(
+            "SELECT service_key, encrypted_password, salt, kdf_params FROM external_credentials"
+        ).fetchall()
+
+        decrypted_admin = [
+            (row[0], self._decrypt_stored_secret(row[1], row[2], row[3], current_password))
+            for row in admin_rows
+        ]
+        decrypted_external = [
+            (row[0], self._decrypt_stored_secret(row[1], row[2], row[3], current_password))
+            for row in external_rows
+        ]
+        stamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        with self.db.write_lock, self.db.conn:
+            for row_id, secret in decrypted_admin:
+                encrypted, salt, params = self._encrypt_stored_secret(secret, new_password)
+                self.db.conn.execute(
+                    "UPDATE credentials SET encrypted_password=?, salt=?, kdf_params=?, updated_at=? WHERE id=?",
+                    (encrypted, salt, params, stamp, row_id),
+                )
+            for service_key, secret in decrypted_external:
+                encrypted, salt, params = self._encrypt_stored_secret(secret, new_password)
+                self.db.conn.execute(
+                    "UPDATE external_credentials SET encrypted_password=?, salt=?, kdf_params=?, updated_at=? "
+                    "WHERE service_key=?",
+                    (encrypted, salt, params, stamp, service_key),
+                )
+            self._store_master_password_verifier(new_password, self.db.conn.cursor())
+
+        self.clear_session()
+
+    def reset_master_password(self, new_password: str) -> None:
+        """Reset local security while preserving all non-secret application data."""
+
+        if not isinstance(new_password, str) or len(new_password) < 10:
+            raise ValueError("New master password must contain at least 10 characters")
+        with self.db.write_lock, self.db.conn:
+            self.db.conn.execute("DELETE FROM credentials")
+            self.db.conn.execute("DELETE FROM external_credentials")
+            self.db.conn.execute("DELETE FROM settings WHERE key='master_password_hash'")
+            self._store_master_password_verifier(new_password, self.db.conn.cursor())
+        self.clear_session()
     
     def verify_master_password(self, master_password: str) -> bool:
         """Verify the master password and migrate legacy SHA-256 verifiers."""

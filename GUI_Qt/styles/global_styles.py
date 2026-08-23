@@ -16,6 +16,7 @@ from GUI_Qt.styles.theme_config import (
     get_subtle_border,
     get_subtle_item_hover_bg,
     get_focus_color,
+    get_surface_color,
     get_text_color,
 )
 
@@ -28,10 +29,20 @@ def get_global_stylesheet():
     focus = get_focus_color(is_dark)
     text_primary = get_text_color(is_dark, 'primary')
     text_secondary = get_text_color(is_dark, 'secondary')
-    surface = COLORS['bg_alt_dark'] if is_dark else COLORS['bg_light']
+    surface = get_surface_color(is_dark)
     border = COLORS['border_dark'] if is_dark else COLORS['border_light']
+    table_colors = COMPONENT_COLORS['table']
 
     return f"""
+        /* Text belongs to its containing surface. Individual badges can opt
+           into a fill with a more specific per-widget rule. */
+        QLabel, FluentLabelBase, BodyLabel, CaptionLabel,
+        StrongBodyLabel, TitleLabel, SubtitleLabel {{
+            background: transparent;
+            background-color: transparent;
+            border: none;
+        }}
+
         /* =====================
            Inputs (global)
            ===================== */
@@ -154,10 +165,10 @@ def get_global_stylesheet():
         }}
 
         QHeaderView::section {{
-            color: {COLORS['text_white']};
-            background-color: {COLORS['lavender_grey'] if is_dark else COLORS['space_indigo']};
+            color: {table_colors['header_text_dark' if is_dark else 'header_text_light']};
+            background-color: {table_colors['header_bg_dark' if is_dark else 'header_bg_light']};
             border: none;
-            border-right: 1px solid {COLORS['border_dark'] if is_dark else COLORS['lavender_grey']};
+            border-right: 1px solid {table_colors['border_dark' if is_dark else 'border_light']};
             padding: {PADDINGS['table_header']};
             font-weight: 600;
         }}

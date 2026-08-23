@@ -116,10 +116,29 @@ COLORS = {
     'blush_rose': '#E36588',
     'flag_red': '#C81D25',
 
+    # Theme roles. Keep brand swatches above stable and use these roles in UI
+    # code so canvases and surfaces do not drift between feature screens.
+    'canvas_dark': '#1B1E2B',
+    'canvas_light': '#EDF2F4',
+    'surface_dark': '#242737',
+    'surface_light': '#FFFFFF',
+    'surface_alt_dark': '#292D40',
+    'surface_alt_light': '#F7F9FB',
+    'accent_light': '#2B2D42',
+    'accent_dark': '#8D99AE',
+    'accent_hover_light': '#3B3E59',
+    'accent_hover_dark': '#A5B0C1',
+    'accent_pressed_light': '#202234',
+    'accent_pressed_dark': '#758197',
+    'accent_text_light': '#FFFFFF',
+    'accent_text_dark': '#2B2D42',
+
     # Functional colors
     'success': '#10B981',      # Emerald green (fills / charts)
     'warning': '#F59E0B',      # Amber (fills / charts)
     'error': '#C81D25',        # Flag red
+    'on_success': '#062A20',   # Foreground on bright success fills
+    'on_warning': '#2B2D42',   # Foreground on bright warning fills
     'focus_ring': '#8D99AE',   # Lavender grey - for accessibility focus indicators
 
     # Accessible foreground variants.  Bright semantic fills do not provide
@@ -148,13 +167,13 @@ COLORS = {
     'text_tertiary_light': '#596273',   # Tertiary text on light surfaces
 
     # Background colors
-    'bg_dark': '#1E1E1E',              # Dark background
+    'bg_dark': '#1B1E2B',              # Dark app canvas
     'bg_light': '#FFFFFF',             # Light background
-    'bg_alt_dark': '#2A2A2A',          # Alternate dark background
-    'bg_alt_light': '#F9FAFB',         # Alternate light background
+    'bg_alt_dark': '#292D40',           # Alternate dark surface
+    'bg_alt_light': '#F7F9FB',          # Alternate light surface
 
     # Border colors
-    'border_dark': '#3A3A3A',
+    'border_dark': '#3A4058',
     'border_light': '#E5E7EB',
 
     # Excel export colors (for consistency)
@@ -354,10 +373,6 @@ FONTS = {
     'size_caption_sm': '11px',
     'size_caption_2': '10px',
 
-    # Compatibility aliases (keep for existing code)
-    'size_title': '28px',
-    'size_subtitle': '20px',
-
     # Line heights
     'lineheight_title': '1.4',
     'lineheight_body': '1.5',
@@ -371,49 +386,75 @@ FONTS = {
 # Component-specific colors (for consistent theming)
 COMPONENT_COLORS = {
     'input': {
-        'bg_dark': '#2A2A2A',
+        'bg_dark': '#292D40',
         'bg_light': '#FFFFFF',
-        'border_dark': '#3A3A3A',
+        'border_dark': '#3A4058',
         'border_light': '#D1D5DB',
-        'text_dark': '#E0E0E0',
+        'text_dark': '#E7EAF0',
         'text_light': '#1F2937',
-        'placeholder_dark': '#6B7280',
-        'placeholder_light': '#9CA3AF',
+        'placeholder_dark': '#9CA3AF',
+        'placeholder_light': '#6B7280',
     },
     'button': {
-        'primary_bg': '#8D99AE',        # Lavender Grey
-        'primary_hover': '#9BA7B8',
+        # Legacy static values. New code should use get_accent_colors().
+        'primary_bg': '#2B2D42',
+        'primary_hover': '#3B3E59',
         'primary_text': '#FFFFFF',
-        'secondary_bg_dark': '#2A2A2A',
+        'secondary_bg_dark': '#292D40',
         'secondary_bg_light': '#F3F4F6',
-        'secondary_hover_dark': '#3A3A3A',
+        'secondary_hover_dark': '#34384F',
         'secondary_hover_light': '#E5E7EB',
-        'secondary_text_dark': '#E0E0E0',
+        'secondary_text_dark': '#E7EAF0',
         'secondary_text_light': '#374151',
     },
     'card': {
-        'bg_dark': '#1E1E1E',
+        'bg_dark': '#242737',
         'bg_light': '#FFFFFF',
-        'border_dark': '#2A2A2A',
+        'border_dark': '#363B52',
         'border_light': '#E5E7EB',
     },
     'table': {
-        'header_bg_dark': '#2A2A2A',
-        'header_bg_light': '#F9FAFB',
-        'row_bg_dark': '#1E1E1E',
+        'header_bg_dark': '#34384F',
+        'header_bg_light': '#2B2D42',
+        'header_text_dark': '#F7F9FB',
+        'header_text_light': '#FFFFFF',
+        'row_bg_dark': '#242737',
         'row_bg_light': '#FFFFFF',
-        'row_alt_bg_dark': '#252525',
-        'row_alt_bg_light': '#F9FAFB',
-        'border_dark': '#3A3A3A',
+        'row_alt_bg_dark': '#292D40',
+        'row_alt_bg_light': '#F7F9FB',
+        'border_dark': '#3A4058',
         'border_light': '#E5E7EB',
     },
 }
 
+
+def get_accent_colors(is_dark: bool) -> dict[str, str]:
+    """Return the interactive accent ramp and its accessible foreground."""
+    suffix = 'dark' if is_dark else 'light'
+    return {
+        'base': COLORS[f'accent_{suffix}'],
+        'hover': COLORS[f'accent_hover_{suffix}'],
+        'pressed': COLORS[f'accent_pressed_{suffix}'],
+        'text': COLORS[f'accent_text_{suffix}'],
+    }
+
+
+def get_surface_color(is_dark: bool, role: str = 'surface') -> str:
+    """Return a canvas/surface role for the active theme."""
+    role = (role or 'surface').strip().lower()
+    suffix = 'dark' if is_dark else 'light'
+    if role == 'canvas':
+        return COLORS[f'canvas_{suffix}']
+    if role in ('alternate', 'alt', 'subtle'):
+        return COLORS[f'surface_alt_{suffix}']
+    return COLORS[f'surface_{suffix}']
+
 def apply_theme(app):
     """Apply Fluent Design theme to the application"""
     setTheme(Theme.AUTO)  # Respects system light/dark mode
-    # Use Lavender Grey as the primary accent color - sophisticated and modern
-    setThemeColor(THEME_COLORS['secondary'])
+    # A deeper indigo keeps QFluent's white button/icon foregrounds accessible.
+    # Theme-aware custom controls use get_accent_colors() in dark mode.
+    setThemeColor(QColor(COLORS['focus_ring_light']))
 
 def get_input_style(is_dark: bool, has_error: bool = False, is_valid: bool = False) -> str:
     """Generate consistent input field stylesheet"""
@@ -436,4 +477,371 @@ def get_input_style(is_dark: bool, has_error: bool = False, is_valid: bool = Fal
         padding: {PADDINGS['input']};
         font-family: {FONTS['family']};
         font-size: {FONTS['size_body']};
+    """
+
+
+def get_form_input_style(is_dark: bool, selector: str, *, calendar: bool = False) -> str:
+    """Return a complete themed style for spin/date controls in form dialogs."""
+    input_colors = COMPONENT_COLORS['input']
+    input_text = input_colors['text_dark'] if is_dark else input_colors['text_light']
+    disabled_bg = COLORS['bg_alt_dark'] if is_dark else '#F1F3F5'
+    border = COLORS['border_dark'] if is_dark else COLORS['border_light']
+    secondary_text = get_text_color(is_dark, 'secondary')
+    focus = get_focus_color(is_dark)
+    calendar_rules = ""
+    if calendar:
+        icon_color = 'white' if is_dark else 'black'
+        calendar_rules = f"""
+            {selector}::drop-down {{
+                subcontrol-origin: border;
+                subcontrol-position: top right;
+                width: 36px;
+                background: transparent;
+                border: none;
+            }}
+            {selector}::down-arrow {{
+                image: url(:/qfluentwidgets/images/icons/Calendar_{icon_color}.svg);
+                width: {SIZES['icon_xs']}px;
+                height: {SIZES['icon_xs']}px;
+            }}
+            QCalendarWidget QWidget {{
+                background-color: {COLORS['bg_dark'] if is_dark else COLORS['bg_light']};
+                color: {get_text_color(is_dark, 'primary')};
+            }}
+            QCalendarWidget QToolButton {{
+                color: {get_text_color(is_dark, 'primary')};
+                background: transparent;
+                border: none;
+            }}
+            QCalendarWidget QAbstractItemView {{
+                color: {get_text_color(is_dark, 'primary')};
+                background-color: {COLORS['bg_dark'] if is_dark else COLORS['bg_light']};
+                selection-background-color: {get_selection_bg()};
+                selection-color: {get_text_color(is_dark, 'primary')};
+                outline: none;
+            }}
+        """
+
+    return f"""
+        {selector} {{
+            {get_input_style(is_dark)}
+            padding: 0 {SPACING['md']}px;
+            selection-background-color: {get_selection_bg()};
+            selection-color: {input_text};
+        }}
+
+        {selector}:hover {{
+            border-color: {get_subtle_border(is_dark)};
+        }}
+
+        {selector}:focus {{
+            border: 2px solid {focus};
+        }}
+
+        {selector}:disabled {{
+            background-color: {disabled_bg};
+            color: {secondary_text};
+            border-color: {border};
+        }}
+
+        {calendar_rules}
+    """
+
+
+def get_dialog_button_style(is_dark: bool, *, primary: bool) -> str:
+    """Return token-based primary or secondary dialog button styling."""
+    button_colors = COMPONENT_COLORS['button']
+    border = COLORS['border_dark'] if is_dark else COLORS['border_light']
+    focus = get_focus_color(is_dark)
+    if primary:
+        accent = get_accent_colors(is_dark)
+        return f"""
+            PrimaryPushButton {{
+                min-width: 96px;
+                background-color: {accent['base']};
+                color: {accent['text']};
+                border: 1px solid {accent['base']};
+                border-radius: {RADII['sm']}px;
+                padding: 0 {SPACING['base']}px;
+                font-weight: {FONTS['weight_semibold']};
+            }}
+            PrimaryPushButton:hover {{
+                background-color: {accent['hover']};
+                border-color: {accent['hover']};
+            }}
+            PrimaryPushButton:pressed {{
+                background-color: {accent['pressed']};
+                border-color: {accent['pressed']};
+            }}
+            PrimaryPushButton:focus {{ border: 2px solid {focus}; }}
+            PrimaryPushButton:disabled {{
+                color: {get_text_color(is_dark, 'tertiary')};
+                background-color: {COLORS['bg_alt_dark'] if is_dark else '#E6E9ED'};
+                border-color: {border};
+            }}
+        """
+
+    secondary_bg = (
+        button_colors['secondary_bg_dark']
+        if is_dark
+        else button_colors['secondary_bg_light']
+    )
+    secondary_hover = (
+        button_colors['secondary_hover_dark']
+        if is_dark
+        else button_colors['secondary_hover_light']
+    )
+    secondary_button_text = (
+        button_colors['secondary_text_dark']
+        if is_dark
+        else button_colors['secondary_text_light']
+    )
+    return f"""
+        PushButton {{
+            min-width: 96px;
+            background-color: {secondary_bg};
+            color: {secondary_button_text};
+            border: 1px solid {border};
+            border-radius: {RADII['sm']}px;
+            padding: 0 {SPACING['base']}px;
+        }}
+        PushButton:hover {{
+            background-color: {secondary_hover};
+            border-color: {get_subtle_border(is_dark)};
+        }}
+        PushButton:pressed {{ background-color: {border}; }}
+        PushButton:focus {{ border: 2px solid {focus}; }}
+        PushButton:disabled {{
+            color: {get_text_color(is_dark, 'tertiary')};
+            background-color: {COLORS['bg_alt_dark'] if is_dark else '#E6E9ED'};
+            border-color: {border};
+        }}
+    """
+
+
+def get_dialog_danger_button_style(is_dark: bool) -> str:
+    """Return a restrained destructive treatment for dialog actions."""
+    danger = get_status_text_color('error', is_dark)
+    border = COLORS['border_dark'] if is_dark else COLORS['border_light']
+    hover = COLORS['status_error_bg_dark'] if is_dark else COLORS['status_error_bg_light']
+    focus = get_focus_color(is_dark)
+    return f"""
+        PushButton {{
+            min-width: 96px;
+            color: {danger};
+            background: transparent;
+            border: 1px solid {border};
+            border-radius: {RADII['sm']}px;
+            padding: 0 {SPACING['base']}px;
+        }}
+        PushButton:hover {{
+            background-color: {hover};
+            border-color: {danger};
+        }}
+        PushButton:pressed {{
+            background-color: {rgba_from_hex(COLORS['flag_red'], 0.18)};
+            border-color: {danger};
+        }}
+        PushButton:focus {{ border: 2px solid {focus}; }}
+        PushButton:disabled {{
+            color: {get_text_color(is_dark, 'tertiary')};
+            background-color: {COLORS['bg_alt_dark'] if is_dark else '#E6E9ED'};
+            border-color: {border};
+        }}
+    """
+
+
+def get_dialog_section_style(is_dark: bool) -> str:
+    """Return a subtle grouped surface for settings and management dialogs."""
+    border = COMPONENT_COLORS['card']['border_dark' if is_dark else 'border_light']
+    return f"""
+        QWidget#earningsDialogSection {{
+            background-color: {get_details_card_bg(is_dark)};
+            border: 1px solid {border};
+            border-radius: {RADII['md']}px;
+        }}
+        QWidget#earningsDialogSection QLabel,
+        QWidget#earningsDialogSection BodyLabel,
+        QWidget#earningsDialogSection CaptionLabel,
+        QWidget#earningsDialogSection StrongBodyLabel {{
+            background: transparent;
+            border: none;
+        }}
+    """
+
+
+def get_dialog_table_style(is_dark: bool) -> str:
+    """Return the compact Fluent table treatment used inside dialogs."""
+    table = COMPONENT_COLORS['table']
+    background = table['row_bg_dark' if is_dark else 'row_bg_light']
+    alternate = table['row_alt_bg_dark' if is_dark else 'row_alt_bg_light']
+    border = table['border_dark' if is_dark else 'border_light']
+    text = get_text_color(is_dark, 'primary')
+    header = table['header_bg_dark' if is_dark else 'header_bg_light']
+    header_text = table['header_text_dark' if is_dark else 'header_text_light']
+    hover = get_subtle_item_hover_bg(is_dark)
+    return f"""
+        QTableWidget {{
+            color: {text};
+            background-color: {background};
+            alternate-background-color: {alternate};
+            border: 1px solid {border};
+            border-radius: {RADII['md']}px;
+            gridline-color: transparent;
+            outline: none;
+            selection-background-color: {get_selection_bg()};
+            selection-color: {text};
+        }}
+        QTableWidget::viewport {{
+            background-color: {background};
+            border-radius: {RADII['md']}px;
+        }}
+        QTableWidget::item {{
+            border: none;
+            border-bottom: 1px solid {border};
+            padding: {PADDINGS['table_cell']};
+        }}
+        QTableWidget::item:hover {{ background-color: {hover}; }}
+        QTableWidget::item:selected {{
+            color: {text};
+            background-color: {get_selection_bg()};
+        }}
+        QHeaderView::section {{
+            color: {header_text};
+            background-color: {header};
+            border: none;
+            border-right: 1px solid {get_subtle_border(is_dark)};
+            padding: {PADDINGS['table_header']};
+            font-weight: {FONTS['weight_semibold']};
+        }}
+        QTableCornerButton::section {{
+            background-color: {header};
+            border: none;
+        }}
+    """
+
+
+def get_form_dialog_style(is_dark: bool, object_name: str) -> str:
+    """Return the shared surface treatment for compact vertical form dialogs."""
+    surface = COLORS['bg_dark'] if is_dark else COLORS['bg_light']
+    text = get_text_color(is_dark, 'primary')
+
+    return f"""
+        QDialog#{object_name} {{
+            background-color: {surface};
+            color: {text};
+            font-family: {FONTS['family']};
+            font-size: {FONTS['size_body']};
+        }}
+
+        QDialog#{object_name} QLabel,
+        QDialog#{object_name} BodyLabel,
+        QDialog#{object_name} CheckBox {{
+            background: transparent;
+            color: {text};
+        }}
+    """
+
+
+def get_calendar_popup_style(is_dark: bool, object_name: str) -> str:
+    """Return the shared Fluent surface/navigation style for a QCalendarWidget."""
+    surface = COMPONENT_COLORS['card']['bg_dark' if is_dark else 'bg_light']
+    border = COMPONENT_COLORS['card']['border_dark' if is_dark else 'border_light']
+    text = get_text_color(is_dark, 'primary')
+    secondary = get_text_color(is_dark, 'secondary')
+    hover = get_hover_bg(is_dark)
+    input_colors = COMPONENT_COLORS['input']
+    input_bg = input_colors['bg_dark' if is_dark else 'bg_light']
+    input_border = input_colors['border_dark' if is_dark else 'border_light']
+
+    return f"""
+        QCalendarWidget#{object_name} {{
+            background-color: {surface};
+            color: {text};
+            border: 1px solid {border};
+            border-radius: {RADII['md']}px;
+            font-family: {FONTS['family']};
+        }}
+
+        QCalendarWidget#{object_name} QWidget#qt_calendar_navigationbar {{
+            min-height: 44px;
+            max-height: 44px;
+            background-color: {surface};
+            border: none;
+            border-bottom: 1px solid {border};
+        }}
+
+        QCalendarWidget#{object_name} QToolButton {{
+            min-height: 32px;
+            color: {text};
+            background: transparent;
+            border: none;
+            border-radius: {RADII['sm']}px;
+            padding: 0 {SPACING['sm']}px;
+            font-size: {FONTS['size_body']};
+            font-weight: {FONTS['weight_semibold']};
+        }}
+
+        QCalendarWidget#{object_name} QToolButton:hover,
+        QCalendarWidget#{object_name} QToolButton:pressed {{
+            background-color: {hover};
+        }}
+
+        QCalendarWidget#{object_name} QToolButton#qt_calendar_prevmonth,
+        QCalendarWidget#{object_name} QToolButton#qt_calendar_nextmonth {{
+            min-width: 32px;
+            max-width: 32px;
+            padding: 0;
+            font-size: 20px;
+            font-weight: {FONTS['weight_medium']};
+        }}
+
+        QCalendarWidget#{object_name} QSpinBox#qt_calendar_yearedit {{
+            min-height: 32px;
+            max-height: 32px;
+            background-color: {input_bg};
+            color: {text};
+            border: 1px solid {input_border};
+            border-radius: {RADII['sm']}px;
+            padding: 0 {SPACING['sm']}px;
+            selection-background-color: {get_selection_bg()};
+            selection-color: {text};
+        }}
+
+        QCalendarWidget#{object_name} QMenu {{
+            color: {text};
+            background-color: {surface};
+            border: 1px solid {border};
+            border-radius: {RADII['sm']}px;
+            padding: {SPACING['xs']}px;
+        }}
+
+        QCalendarWidget#{object_name} QMenu::item {{
+            padding: {SPACING['sm']}px {SPACING['md']}px;
+            border-radius: {RADII['xs']}px;
+        }}
+
+        QCalendarWidget#{object_name} QMenu::item:selected {{
+            color: {text};
+            background-color: {hover};
+        }}
+
+        QCalendarWidget#{object_name} QTableView#qt_calendar_calendarview {{
+            color: {text};
+            background-color: {surface};
+            alternate-background-color: {surface};
+            border: none;
+            outline: none;
+            selection-background-color: transparent;
+            selection-color: {text};
+            font-size: {FONTS['size_body_sm']};
+        }}
+
+        QCalendarWidget#{object_name} QHeaderView::section {{
+            color: {secondary};
+            background: transparent;
+            border: none;
+            font-size: {FONTS['size_caption']};
+            font-weight: {FONTS['weight_medium']};
+        }}
     """

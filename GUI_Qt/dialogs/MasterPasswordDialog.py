@@ -7,7 +7,7 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout
 from PySide6.QtCore import Qt
 from qfluentwidgets import (
     MessageBox, PasswordLineEdit, BodyLabel, TitleLabel,
-    CaptionLabel, PrimaryPushButton, InfoBar, InfoBarPosition
+    CaptionLabel, PrimaryPushButton, PushButton, InfoBar, InfoBarPosition
 )
 
 from GUI_Qt.styles.theme_config import SIZES, SPACING
@@ -244,6 +244,10 @@ class MasterPasswordPromptDialog(QWidget):
         self.unlock_button.clicked.connect(self._handle_unlock)
         center_layout.addWidget(self.unlock_button)
 
+        self.reset_button = PushButton(self.main.i18n.tr("master.reset.action"))
+        self.reset_button.clicked.connect(self._handle_reset)
+        center_layout.addWidget(self.reset_button)
+
         # Horizontally center
         h_layout = QHBoxLayout()
         h_layout.addStretch(1)
@@ -311,3 +315,50 @@ class MasterPasswordPromptDialog(QWidget):
             # Clear password field
             self.password_field.clear()
             self.password_field.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def _handle_reset(self):
+        dialog = MessageBox(
+            self.main.i18n.tr("master.reset.title"),
+            self.main.i18n.tr("master.reset.content"),
+            self,
+        )
+        new_password = PasswordLineEdit(dialog)
+        new_password.setPlaceholderText(self.main.i18n.tr("master.password.placeholder"))
+        confirm_password = PasswordLineEdit(dialog)
+        confirm_password.setPlaceholderText(self.main.i18n.tr("master.confirm.placeholder"))
+        dialog.textLayout.addWidget(new_password)
+        dialog.textLayout.addWidget(confirm_password)
+        dialog.yesButton.setText(self.main.i18n.tr("master.reset.action"))
+        dialog.cancelButton.setText(self.main.i18n.tr("common.cancel"))
+        if not dialog.exec():
+            return
+        if len(new_password.text()) < 10 or new_password.text() != confirm_password.text():
+            InfoBar.error(
+                title=self.main.i18n.tr("common.error"),
+                content=self.main.i18n.tr("master.reset.invalid"),
+                position=InfoBarPosition.TOP,
+                duration=4000,
+                parent=self,
+            )
+            return
+        try:
+            self.main.credential_manager.reset_master_password(new_password.text())
+            self.main._unlocked_master_password = new_password.text()
+        except Exception as error:
+            InfoBar.error(
+                title=self.main.i18n.tr("common.error"),
+                content=str(error),
+                position=InfoBarPosition.TOP,
+                duration=4000,
+                parent=self,
+            )
+            return
+        InfoBar.success(
+            title=self.main.i18n.tr("master.reset.done"),
+            content=self.main.i18n.tr("master.reset.done_content"),
+            position=InfoBarPosition.TOP,
+            duration=3000,
+            parent=self,
+        )
+        if self.on_success_callback:
+            self.on_success_callback(None, None)

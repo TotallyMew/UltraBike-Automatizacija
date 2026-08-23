@@ -367,6 +367,10 @@ class AbusUrlGetterScreen(CastelliUrlGetterScreen):
         self._worker.progress_update.connect(self._on_progress)
         self._worker.done.connect(self._on_done)
         self._worker.log.connect(lambda msg: print(f"[AbusUrlGetter] {msg}"))
+        if hasattr(self.main, "track_worker"):
+            self.main.track_worker(
+                self._worker, "url_scanner", "abus_url_getter", total=len(self._rows)
+            )
         self._worker.start()
 
     def _on_progress(self, current: int, total: int):

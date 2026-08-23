@@ -43,7 +43,7 @@ from qfluentwidgets import (
 )
 
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
-from GUI_Qt.styles.theme_config import COLORS, FONTS, RADII, SIZES
+from GUI_Qt.styles.theme_config import COLORS, FONTS, RADII, SIZES, get_surface_color
 from GUI_Qt.styles.screen_theme import (
     PAGE_MARGINS,
     PAGE_SPACING,
@@ -230,7 +230,7 @@ class PinarelloImageScreen(ResponsiveWidget):
 
     def _apply_theme(self):
         is_dark = isDarkTheme()
-        bg_color = COLORS["space_indigo"] if is_dark else COLORS["platinum"]
+        bg_color = get_surface_color(is_dark, 'canvas')
         self.setStyleSheet(
             f"""
             PinarelloImageScreen {{
@@ -776,6 +776,8 @@ class PinarelloImageScreen(ResponsiveWidget):
         )
         self.preview_worker.progress.connect(self._append_log)
         self.preview_worker.finished.connect(self._on_preview_finished)
+        if hasattr(self.main, "track_worker"):
+            self.main.track_worker(self.preview_worker, "image_tool", "pinarello_images")
         self.preview_worker.start()
 
     def _on_preview_finished(self, success: bool, message: str, preview_data):
@@ -968,6 +970,10 @@ class PinarelloImageScreen(ResponsiveWidget):
         self.worker.progress_text.connect(self._append_log)
         self.worker.progress_data.connect(self._update_progress)
         self.worker.finished.connect(self._on_finished)
+        if hasattr(self.main, "track_worker"):
+            self.main.track_worker(
+                self.worker, "image_tool", "pinarello_images", output_path=output_dir
+            )
         self.worker.start()
 
     def _on_finished(self, success: bool, message: str, results):

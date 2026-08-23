@@ -30,7 +30,28 @@ from .models import (
     RunCancelled,
     RunProgress,
 )
+from .photos import (
+    OrbeaPhotoBatchResult,
+    OrbeaPhotoProduct,
+    OrbeaPhotoProgress,
+    OrbeaPhotoRunResult,
+    OrbeaPhotoService,
+    OrbeaPhotoVariant,
+    download_orbea_photo_batches,
+    download_orbea_photos,
+    normalize_orbea_product_url,
+    parse_orbea_photo_product,
+    unique_orbea_product_urls,
+)
 from .service import OrbeaAutomationService, run_pipeline
+from .table_images import (
+    OrbeaTableBatchResult,
+    OrbeaTableImageService,
+    OrbeaTableProductResult,
+    OrbeaTableProgress,
+    normalize_orbea_table_url,
+    unique_orbea_table_urls,
+)
 
 __all__ = [
     "CancellationToken",
@@ -43,8 +64,18 @@ __all__ = [
     "MatchResult",
     "OrbeaAutomationService",
     "OrbeaDescriptionService",
+    "OrbeaPhotoBatchResult",
+    "OrbeaPhotoProduct",
+    "OrbeaPhotoProgress",
+    "OrbeaPhotoRunResult",
+    "OrbeaPhotoService",
+    "OrbeaPhotoVariant",
     "OrbeaRunConfig",
     "OrbeaRunResult",
+    "OrbeaTableBatchResult",
+    "OrbeaTableImageService",
+    "OrbeaTableProductResult",
+    "OrbeaTableProgress",
     "PimboFilterOptions",
     "PimboFilterSpec",
     "RunCancelled",
@@ -54,7 +85,14 @@ __all__ = [
     "extract_template_codes",
     "find_latest_compatible_run",
     "normalize_code",
+    "normalize_orbea_table_url",
     "run_pipeline",
     "run_description_extraction",
+    "download_orbea_photos",
+    "download_orbea_photo_batches",
+    "normalize_orbea_product_url",
+    "parse_orbea_photo_product",
+    "unique_orbea_product_urls",
+    "unique_orbea_table_urls",
     "select_representative_variant",
 ]

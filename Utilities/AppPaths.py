@@ -74,3 +74,9 @@ def get_default_logs_dir() -> Path:
     path = get_data_dir() / "logs"
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def get_default_backups_dir() -> Path:
+    path = get_data_dir() / "backups"
+    path.mkdir(parents=True, exist_ok=True)
+    return path

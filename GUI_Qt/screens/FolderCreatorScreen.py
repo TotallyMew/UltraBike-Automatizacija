@@ -50,7 +50,9 @@ from selenium.webdriver.support import expected_conditions as EC
 
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
 from GUI_Qt.components.dialogs import DestructiveActionDialog
-from GUI_Qt.styles.theme_config import COLORS, FONTS, RADII, PADDINGS, SIZES, rgba_from_hex
+from GUI_Qt.styles.theme_config import (
+    COLORS, FONTS, RADII, PADDINGS, SIZES, get_surface_color, rgba_from_hex,
+)
 from GUI_Qt.styles.screen_theme import (
     PAGE_MARGINS,
     PAGE_SPACING,
@@ -203,7 +205,7 @@ class FolderCreatorScreen(ResponsiveWidget):
 
     def _apply_theme(self):
         is_dark = isDarkTheme()
-        bg_color = COLORS['space_indigo'] if is_dark else COLORS['platinum']
+        bg_color = get_surface_color(is_dark, 'canvas')
         self.setStyleSheet(f"""
             FolderCreatorScreen {{
                 background-color: {bg_color};
@@ -211,13 +213,16 @@ class FolderCreatorScreen(ResponsiveWidget):
             }}
         """)
 
-        panel_bg = COLORS['lavender_grey'] if is_dark else COLORS['bg_light']
+        panel_bg = get_surface_color(is_dark)
+        panel_border = COLORS['border_dark'] if is_dark else COLORS['border_light']
         item_divider = rgba_from_hex(COLORS['text_white'], 0.08) if is_dark else rgba_from_hex(COLORS['space_indigo'], 0.10)
 
         if hasattr(self, 'products_list') and self.products_list is not None:
             self.products_list.setStyleSheet(f"""
                 QListWidget {{
                     background-color: {panel_bg};
+                    color: {COLORS['text_primary_dark'] if is_dark else COLORS['text_primary_light']};
+                    border: 1px solid {panel_border};
                     border-radius: {RADII['sm']}px;
                     padding: {PADDINGS['combo_item']};
                 }}
@@ -234,6 +239,8 @@ class FolderCreatorScreen(ResponsiveWidget):
             self.preview_tree.setStyleSheet(f"""
                 QTreeWidget {{
                     background-color: {panel_bg};
+                    color: {COLORS['text_primary_dark'] if is_dark else COLORS['text_primary_light']};
+                    border: 1px solid {panel_border};
                     border-radius: {RADII['sm']}px;
                     padding: {PADDINGS['combo_item']};
                 }}
@@ -528,6 +535,8 @@ class FolderCreatorScreen(ResponsiveWidget):
         self._set_busy(True)
         self._scrape_worker = ScrapeProductsWorker(self.main.driver, tr)
         self._scrape_worker.finished.connect(self._on_scrape_finished)
+        if hasattr(self.main, "track_worker"):
+            self.main.track_worker(self._scrape_worker, "folder_job", "folders")
         self._scrape_worker.start()
 
     def _on_scrape_finished(self, success: bool, message: str, products):
@@ -599,6 +608,14 @@ class FolderCreatorScreen(ResponsiveWidget):
         self._set_busy(True)
         self._create_worker = CreateFoldersWorker(self._products, repository_path, tr)
         self._create_worker.finished.connect(self._on_create_finished)
+        if hasattr(self.main, "track_worker"):
+            self.main.track_worker(
+                self._create_worker,
+                "folder_job",
+                "folders",
+                total=len(self._products),
+                output_path=repository_path,
+            )
         self._create_worker.start()
 
     def _on_create_finished(self, success: bool, message: str):

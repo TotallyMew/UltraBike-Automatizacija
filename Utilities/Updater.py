@@ -96,6 +96,32 @@ def sha256_file(path: str) -> str:
     return h.hexdigest()
 
 
+def download_verified_update(
+    manifest: UpdateManifest,
+    filename_hint: str,
+    progress_cb: Optional[Callable[[int, int], None]] = None,
+) -> str:
+    """Download and verify an installer, removing every untrusted partial file."""
+    path = ""
+    try:
+        path = download_to_temp(
+            manifest.url,
+            filename_hint,
+            progress_cb=progress_cb,
+        )
+        actual = sha256_file(path)
+        if actual.lower() != str(manifest.sha256 or "").lower():
+            raise RuntimeError("Downloaded update failed SHA256 verification")
+        return path
+    except Exception:
+        if path:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+        raise
+
+
 def download_to_temp(
     url: str,
     filename_hint: str,

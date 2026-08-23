@@ -7,47 +7,26 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QBoxLayout, QToolButton, QFrame,
     QTextEdit, QTabWidget, QPushButton, QInputDialog
 )
-from PySide6.QtCore import Qt, Signal, QThread
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeySequence, QShortcut, QPalette, QColor
 from qfluentwidgets import (
     CardWidget, TransparentToolButton, FluentIcon,
     TitleLabel, BodyLabel, CaptionLabel, InfoBar, InfoBarPosition,
     isDarkTheme, PrimaryPushButton, LineEdit, PushButton, ComboBox, qconfig,
-    IndeterminateProgressRing, ScrollArea, IconWidget
+    ScrollArea, IconWidget
 )
 from Managers.DescriptionManager import DescriptionManager
-from Managers.DeepLTranslator import DeepLTranslator
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
 from GUI_Qt.components.dialogs import DestructiveActionDialog, UnsavedChangesDialog
-from GUI_Qt.styles.theme_config import COLORS, FONTS, RADII, PADDINGS, rgba_from_hex
+from GUI_Qt.styles.theme_config import (
+    COLORS, FONTS, RADII, PADDINGS, get_accent_colors, get_surface_color,
+    get_text_color, rgba_from_hex,
+)
 from GUI_Qt.styles.theme_config import SIZES
 from GUI_Qt.styles.screen_theme import (
     PAGE_MARGINS, PAGE_SPACING, ICON_TEXT_GAP, PANEL_MARGINS, CONTENT_SPACING, ROW_SPACING,
     apply_screen_theme, get_responsive_margins, get_responsive_spacing
 )
-
-
-class TranslationWorker(QThread):
-    """Background worker for DeepL translation."""
-    finished = Signal(dict)  # translations result
-    error = Signal(str)  # error message
-
-    def __init__(self, translator, text, source_lang):
-        super().__init__()
-        self.translator = translator
-        self.text = text
-        self.source_lang = source_lang
-
-    def run(self):
-        """Execute translation in background."""
-        try:
-            translations = self.translator.translate_description_all_languages(
-                self.text,
-                source_lang=self.source_lang
-            )
-            self.finished.emit(translations)
-        except Exception as e:
-            self.error.emit(str(e))
 
 
 class DescriptionsScreen(ResponsiveWidget):
@@ -148,15 +127,9 @@ class DescriptionsScreen(ResponsiveWidget):
         header.addStretch()
 
         # Current description name
-        is_dark = isDarkTheme()
         self.current_name_label = BodyLabel("")
-        self.current_name_label.setStyleSheet(f"""
-            background-color: {COLORS['lavender_grey']};
-            color: white;
-            padding: {PADDINGS['pill']};
-            border-radius: {RADII['sm']}px;
-            font-weight: 600;
-        """)
+        self.current_name_label.setProperty("ubAllowBg", True)
+        self._style_current_name()
         self.current_name_label.setVisible(False)
         header.addWidget(self.current_name_label)
 
@@ -288,26 +261,13 @@ class DescriptionsScreen(ResponsiveWidget):
         action_layout = QHBoxLayout()
         action_layout.setSpacing(CONTENT_SPACING)
 
-        # Progress ring for translation (hidden initially)
-        self.progress_ring = IndeterminateProgressRing(self)
-        self.progress_ring.setFixedSize(24, 24)
-        self.progress_ring.hide()
-
-        self.translate_btn = PushButton("")
-        self.translate_btn.setIcon(FluentIcon.GLOBE.icon())
-        self.translate_btn.setFixedHeight(SIZES['button_height_sm'])
-        self.translate_btn.setEnabled(False)
-        self.translate_btn.clicked.connect(self._auto_translate_description)
-
         self.save_btn = PrimaryPushButton("")
         self.save_btn.setIcon(FluentIcon.SAVE.icon())
         self.save_btn.setFixedHeight(SIZES['button_height_sm'])
         self.save_btn.setEnabled(False)
         self.save_btn.clicked.connect(self._handle_save)
 
-        action_layout.addWidget(self.progress_ring)
         action_layout.addStretch()
-        action_layout.addWidget(self.translate_btn)
         action_layout.addWidget(self.save_btn)
 
         right_layout.addLayout(action_layout)
@@ -329,7 +289,10 @@ class DescriptionsScreen(ResponsiveWidget):
         warning = QHBoxLayout()
         warning_icon = FluentIcon.INFO.icon()
         warning_label = CaptionLabel("")
-        warning_label.setStyleSheet(f"color: {COLORS['lavender_grey']}; font-weight: 500; background: transparent; background-color: transparent;")
+        warning_label.setStyleSheet(
+            f"color: {get_text_color(isDarkTheme(), 'secondary')}; font-weight: 500; "
+            "background: transparent; background-color: transparent;"
+        )
 
         warning.addWidget(warning_label)
         warning.addStretch()
@@ -376,8 +339,6 @@ class DescriptionsScreen(ResponsiveWidget):
         self.new_btn.setToolTip(tr("descriptions.new.tip"))
         self.delete_btn.setText(tr("descriptions.delete"))
         self.delete_btn.setToolTip(tr("descriptions.delete.tip"))
-        self.translate_btn.setText(tr("descriptions.translate"))
-        self.translate_btn.setToolTip(tr("descriptions.translate.tip"))
         self.save_btn.setText(tr("descriptions.save"))
         self.save_btn.setToolTip(tr("descriptions.save.tip"))
         self.name_label.setText(tr("descriptions.name.label"))
@@ -403,10 +364,11 @@ class DescriptionsScreen(ResponsiveWidget):
     def _style_list(self):
         """Apply styling to description list"""
         is_dark = isDarkTheme()
-        bg = COLORS['lavender_grey'] if is_dark else COLORS['bg_light']
+        bg = get_surface_color(is_dark)
         border = COLORS['border_dark'] if is_dark else COLORS['border_light']
-        text = COLORS['space_indigo'] if is_dark else COLORS['text_primary_light']
-        hover_bg = rgba_from_hex(COLORS['space_indigo'], 0.12 if is_dark else 0.05)
+        text = get_text_color(is_dark)
+        hover_bg = rgba_from_hex(COLORS['lavender_grey'] if is_dark else COLORS['space_indigo'], 0.16 if is_dark else 0.05)
+        accent = get_accent_colors(is_dark)
         self.description_scroll.setStyleSheet(f"""
             ScrollArea {{
                 background-color: {bg};
@@ -431,8 +393,8 @@ class DescriptionsScreen(ResponsiveWidget):
                 border-radius: {RADII['xs']}px;
             }}
             QToolButton[role="folder"]:checked {{
-                background-color: {COLORS['space_indigo']};
-                color: {COLORS['text_white']};
+                background-color: {accent['base']};
+                color: {accent['text']};
                 border-radius: {RADII['xs']}px;
             }}
             QToolButton[role="description"] {{
@@ -448,14 +410,25 @@ class DescriptionsScreen(ResponsiveWidget):
                 background-color: {hover_bg};
             }}
             QToolButton[role="description"]:checked {{
-                background-color: {COLORS['space_indigo']};
-                color: {COLORS['text_white']};
+                background-color: {accent['base']};
+                color: {accent['text']};
                 border-radius: {RADII['xs']}px;
             }}
             QFrame[role="folderContent"] {{
                 background: transparent;
                 margin-left: 4px;
             }}
+        """)
+
+    def _style_current_name(self):
+        """Style the intentional selected-description badge."""
+        accent = get_accent_colors(isDarkTheme())
+        self.current_name_label.setStyleSheet(f"""
+            background-color: {accent['base']};
+            color: {accent['text']};
+            padding: {PADDINGS['pill']};
+            border-radius: {RADII['sm']}px;
+            font-weight: 600;
         """)
 
     def _clear_layout(self, layout):
@@ -538,6 +511,7 @@ class DescriptionsScreen(ResponsiveWidget):
     def _style_tabs(self):
         """Apply styling to tab widget"""
         is_dark = isDarkTheme()
+        accent = get_accent_colors(is_dark)
         self.tabs.setStyleSheet(f"""
             QTabWidget::pane {{
                 border: 1px solid {COLORS['border_dark'] if is_dark else COLORS['border_light']};
@@ -558,8 +532,8 @@ class DescriptionsScreen(ResponsiveWidget):
                 font-size: {FONTS['size_body']};
             }}
             QTabBar::tab:selected {{
-                background-color: {COLORS['lavender_grey']};
-                color: white;
+                background-color: {accent['base']};
+                color: {accent['text']};
                 font-weight: {FONTS['weight_semibold']};
             }}
             QTabBar::tab:hover:!selected {{
@@ -695,7 +669,6 @@ class DescriptionsScreen(ResponsiveWidget):
                 lv_editor.textChanged.connect(self._on_content_changed)
 
                 self.save_btn.setEnabled(True)
-                self.translate_btn.setEnabled(True)
                 self.delete_btn.setEnabled(True)
 
                 if notify:
@@ -719,7 +692,6 @@ class DescriptionsScreen(ResponsiveWidget):
         """Handle content change in editors"""
         self.has_unsaved_changes = True
         self.save_btn.setEnabled(True)
-        self.translate_btn.setEnabled(True)
         self._update_title_indicator()
 
     def _on_name_changed(self):
@@ -792,7 +764,6 @@ class DescriptionsScreen(ResponsiveWidget):
         lv_editor.clear()
 
         self.save_btn.setEnabled(True)
-        self.translate_btn.setEnabled(True)
         self.delete_btn.setEnabled(False)
         self._select_description_button("")
 
@@ -820,7 +791,6 @@ class DescriptionsScreen(ResponsiveWidget):
                 self._start_new_description(notify=False)
                 self.has_unsaved_changes = False
                 self.save_btn.setEnabled(False)
-                self.translate_btn.setEnabled(False)
                 self.current_name_label.setVisible(False)
             return True
         return False
@@ -975,7 +945,7 @@ class DescriptionsScreen(ResponsiveWidget):
     def _apply_theme(self):
         """Apply theme to screen components"""
         is_dark = isDarkTheme()
-        bg_color = COLORS['space_indigo'] if is_dark else COLORS['platinum']
+        bg_color = get_surface_color(is_dark, 'canvas')
 
         self.setStyleSheet(f"""
             DescriptionsScreen {{
@@ -988,6 +958,9 @@ class DescriptionsScreen(ResponsiveWidget):
         if hasattr(self, 'description_list'):
             self._style_list()
 
+        if hasattr(self, 'current_name_label'):
+            self._style_current_name()
+
         if hasattr(self, 'tabs'):
             self._style_tabs()
             # Update all HTML editors
@@ -997,11 +970,19 @@ class DescriptionsScreen(ResponsiveWidget):
                 if editor:
                     self._style_editor(editor)
 
+        for container in getattr(self, '_editor_containers', []):
+            warning_label = getattr(container, '_warning_label', None)
+            if warning_label is not None:
+                warning_label.setStyleSheet(
+                    f"color: {get_text_color(is_dark, 'secondary')}; font-weight: 500; "
+                    "background: transparent; background-color: transparent;"
+                )
+
     def _style_editor(self, editor):
         """Apply styling to HTML editor"""
         is_dark = isDarkTheme()
-        bg = COLORS['lavender_grey'] if is_dark else COLORS['bg_light']
-        text = COLORS['space_indigo'] if is_dark else COLORS['text_primary_light']
+        bg = get_surface_color(is_dark)
+        text = get_text_color(is_dark)
         border = COLORS['border_dark'] if is_dark else COLORS['border_light']
         editor.setStyleSheet(f"""
             QTextEdit {{
@@ -1020,150 +1001,12 @@ class DescriptionsScreen(ResponsiveWidget):
         try:
             palette = editor.palette()
             if is_dark:
-                palette.setColor(QPalette.ColorRole.PlaceholderText, QColor(43, 45, 66, 140))
+                palette.setColor(QPalette.ColorRole.PlaceholderText, QColor(COLORS['text_tertiary_dark']))
             else:
                 palette.setColor(QPalette.ColorRole.PlaceholderText, QColor(107, 114, 128, 180))
             editor.setPalette(palette)
         except Exception:
             pass
-
-    def _auto_translate_description(self):
-        """Auto-translate current description using DeepL."""
-        # Get API key from settings
-        api_key = self.main.settings.get('deepl_api_key', '')
-
-        if not api_key or api_key == "TEMPLATE_API_KEY_REPLACE_ME":
-            InfoBar.warning(
-                title=self.main.i18n.tr("common.warning"),
-                content="Please configure DeepL API key in Settings first",
-                orient=Qt.Orientation.Horizontal,
-                isClosable=True,
-                position=InfoBarPosition.TOP,
-                duration=4000,
-                parent=self
-            )
-            return
-
-        # Determine which tab is active and get that content
-        current_tab_index = self.tabs.currentIndex()
-        tab_lang_map = {0: ("lt", "Lithuanian"), 1: ("en", "English"), 2: ("lv", "Latvian")}
-
-        if current_tab_index not in tab_lang_map:
-            return
-
-        source_code, source_display = tab_lang_map[current_tab_index]
-
-        # Get editor from current tab
-        if current_tab_index == 0:
-            source_editor = self.lt_editor.findChild(QTextEdit)
-        elif current_tab_index == 1:
-            source_editor = self.en_editor.findChild(QTextEdit)
-        else:
-            source_editor = self.lv_editor.findChild(QTextEdit)
-
-        source_html = source_editor.toPlainText().strip()
-
-        if not source_html or len(source_html) < 10:
-            InfoBar.warning(
-                title=self.main.i18n.tr("common.warning"),
-                content=f"Please enter {source_display} description first",
-                orient=Qt.Orientation.Horizontal,
-                isClosable=True,
-                position=InfoBarPosition.TOP,
-                duration=3000,
-                parent=self
-            )
-            return
-
-        # Translate in background
-        try:
-            translator = DeepLTranslator(api_key)
-
-            # Show progress
-            self.progress_ring.start()
-            self.progress_ring.show()
-            self.translate_btn.setEnabled(False)
-
-            # Create worker
-            self.translation_worker = TranslationWorker(translator, source_html, source_code.upper())
-            self.translation_worker.finished.connect(self._on_translation_finished)
-            self.translation_worker.error.connect(self._on_translation_error)
-            self.translation_worker.start()
-
-        except Exception as e:
-            self.progress_ring.stop()
-            self.progress_ring.hide()
-            self.translate_btn.setEnabled(True)
-
-            InfoBar.error(
-                title=self.main.i18n.tr("common.error"),
-                content=str(e),
-                orient=Qt.Orientation.Horizontal,
-                isClosable=True,
-                position=InfoBarPosition.TOP,
-                duration=4000,
-                parent=self
-            )
-
-    def _on_translation_finished(self, translations: dict):
-        """Handle successful translation."""
-        # Hide progress
-        self.progress_ring.stop()
-        self.progress_ring.hide()
-        self.translate_btn.setEnabled(True)
-
-        # Get editors
-        lt_editor = self.lt_editor.findChild(QTextEdit)
-        en_editor = self.en_editor.findChild(QTextEdit)
-        lv_editor = self.lv_editor.findChild(QTextEdit)
-
-        # Temporarily disconnect signals
-        lt_editor.textChanged.disconnect(self._on_content_changed)
-        en_editor.textChanged.disconnect(self._on_content_changed)
-        lv_editor.textChanged.disconnect(self._on_content_changed)
-
-        # Update editors with translations
-        if "lt" in translations:
-            lt_editor.setPlainText(translations["lt"])
-        if "en" in translations:
-            en_editor.setPlainText(translations["en"])
-        if "lv" in translations:
-            lv_editor.setPlainText(translations["lv"])
-
-        # Reconnect signals
-        lt_editor.textChanged.connect(self._on_content_changed)
-        en_editor.textChanged.connect(self._on_content_changed)
-        lv_editor.textChanged.connect(self._on_content_changed)
-
-        # Mark as changed
-        self.has_unsaved_changes = True
-        self._update_title_indicator()
-
-        InfoBar.success(
-            title=self.main.i18n.tr("common.success"),
-            content="Descriptions translated to all languages successfully",
-            orient=Qt.Orientation.Horizontal,
-            isClosable=True,
-            position=InfoBarPosition.TOP,
-            duration=3000,
-            parent=self
-        )
-
-    def _on_translation_error(self, error: str):
-        """Handle translation error."""
-        self.progress_ring.stop()
-        self.progress_ring.hide()
-        self.translate_btn.setEnabled(True)
-
-        InfoBar.error(
-            title=self.main.i18n.tr("common.error"),
-            content=f"Translation failed: {error}",
-            orient=Qt.Orientation.Horizontal,
-            isClosable=True,
-            position=InfoBarPosition.TOP,
-            duration=5000,
-            parent=self
-        )
 
     def _on_breakpoint_changed(self, breakpoint: str):
         """Respond to breakpoint changes - adjust margins and spacing."""

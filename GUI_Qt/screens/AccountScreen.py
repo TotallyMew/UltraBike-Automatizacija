@@ -13,6 +13,8 @@ from qfluentwidgets import (
     LineEdit,
     PasswordLineEdit,
     PrimaryPushButton,
+    PushButton,
+    MessageBox,
     TransparentToolButton,
     FluentIcon,
     InfoBar,
@@ -129,26 +131,45 @@ class AccountScreen(ResponsiveWidget):
         p_layout.addWidget(self._ui["ps_caption"])
 
         self._ui["ps_email_label"] = BodyLabel("")
-        self.ps_email = LineEdit()
+        self.admin_email = LineEdit()
         p_layout.addWidget(self._ui["ps_email_label"])
-        p_layout.addWidget(self.ps_email)
+        p_layout.addWidget(self.admin_email)
 
         self._ui["ps_password_label"] = BodyLabel("")
-        self.ps_password = PasswordLineEdit()
+        self.admin_password = PasswordLineEdit()
         p_layout.addWidget(self._ui["ps_password_label"])
-        p_layout.addWidget(self.ps_password)
+        p_layout.addWidget(self.admin_password)
 
         btn_row = QHBoxLayout()
         btn_row.addStretch(1)
-        self._ui["ps_view"] = PrimaryPushButton("")
-        self._ui["ps_view"].clicked.connect(self._view_admin_credentials)
-        btn_row.addWidget(self._ui["ps_view"])
-        self._ui["ps_save"] = PrimaryPushButton("")
-        self._ui["ps_save"].clicked.connect(self._save_admin_credentials)
-        btn_row.addWidget(self._ui["ps_save"])
+        self._ui["admin_view"] = PrimaryPushButton("")
+        self._ui["admin_view"].clicked.connect(self._view_admin_credentials)
+        btn_row.addWidget(self._ui["admin_view"])
+        self._ui["admin_save"] = PrimaryPushButton("")
+        self._ui["admin_save"].clicked.connect(self._save_admin_credentials)
+        btn_row.addWidget(self._ui["admin_save"])
         p_layout.addLayout(btn_row)
 
         layout.addWidget(self.admin_card)
+
+        self.security_card = CardWidget()
+        self.security_card.setObjectName("accountCardSecurity")
+        self.security_card.setBorderRadius(RADII['md'])
+        security_layout = QVBoxLayout(self.security_card)
+        security_layout.setContentsMargins(*PANEL_MARGINS)
+        security_layout.setSpacing(MID_SPACING)
+        self._ui["security_title"] = StrongBodyLabel("")
+        security_layout.addWidget(self._ui["security_title"])
+        self._ui["security_caption"] = BodyLabel("")
+        self._ui["security_caption"].setWordWrap(True)
+        security_layout.addWidget(self._ui["security_caption"])
+        security_actions = QHBoxLayout()
+        security_actions.addStretch()
+        self._ui["change_master"] = PushButton("")
+        self._ui["change_master"].clicked.connect(self._change_master_password)
+        security_actions.addWidget(self._ui["change_master"])
+        security_layout.addLayout(security_actions)
+        layout.addWidget(self.security_card)
 
         # External brand credentials
         self.brand_card = CardWidget()
@@ -250,7 +271,7 @@ class AccountScreen(ResponsiveWidget):
 
     def _clear_sensitive_fields(self):
         try:
-            self.ps_password.clear()
+            self.admin_password.clear()
         except Exception:
             pass
         try:
@@ -313,9 +334,9 @@ class AccountScreen(ResponsiveWidget):
 
         # Admin email can be read without decrypting password
         try:
-            self.ps_email.setText(self.main.credential_manager.get_last_saved_email() or "")
+            self.admin_email.setText(self.main.credential_manager.get_last_saved_email() or "")
         except Exception:
-            self.ps_email.setText("")
+            self.admin_email.setText("")
 
         # External usernames are stored plaintext; passwords require master to decrypt, but we don't show them
         try:
@@ -342,11 +363,15 @@ class AccountScreen(ResponsiveWidget):
         self._ui["ps_title"].setText(tr("account.admin.title"))
         self._ui["ps_caption"].setText(tr("account.admin.caption"))
         self._ui["ps_email_label"].setText(tr("account.email"))
-        self.ps_email.setPlaceholderText(tr("account.email.placeholder"))
+        self.admin_email.setPlaceholderText(tr("account.email.placeholder"))
         self._ui["ps_password_label"].setText(tr("account.password"))
-        self.ps_password.setPlaceholderText(tr("account.password.placeholder"))
-        self._ui["ps_view"].setText(tr("account.view"))
-        self._ui["ps_save"].setText(tr("account.save"))
+        self.admin_password.setPlaceholderText(tr("account.password.placeholder"))
+        self._ui["admin_view"].setText(tr("account.view"))
+        self._ui["admin_save"].setText(tr("account.save"))
+
+        self._ui["security_title"].setText(tr("account.security.title"))
+        self._ui["security_caption"].setText(tr("account.security.caption"))
+        self._ui["change_master"].setText(tr("account.security.change"))
 
         self._ui["brand_title"].setText(tr("account.external.title"))
         self._ui["brand_caption"].setText(tr("account.external.caption"))
@@ -382,9 +407,57 @@ class AccountScreen(ResponsiveWidget):
             return None
         return master
 
+    def _change_master_password(self):
+        dialog = MessageBox(
+            self.main.i18n.tr("account.security.change"),
+            self.main.i18n.tr("account.security.change_desc"),
+            self,
+        )
+        current = PasswordLineEdit(dialog)
+        current.setPlaceholderText(self.main.i18n.tr("account.security.current"))
+        new = PasswordLineEdit(dialog)
+        new.setPlaceholderText(self.main.i18n.tr("account.security.new"))
+        confirm = PasswordLineEdit(dialog)
+        confirm.setPlaceholderText(self.main.i18n.tr("master.confirm.placeholder"))
+        dialog.textLayout.addWidget(current)
+        dialog.textLayout.addWidget(new)
+        dialog.textLayout.addWidget(confirm)
+        dialog.yesButton.setText(self.main.i18n.tr("account.security.change"))
+        dialog.cancelButton.setText(self.main.i18n.tr("common.cancel"))
+        if not dialog.exec():
+            return
+        if len(new.text()) < 10 or new.text() != confirm.text():
+            InfoBar.error(
+                title=self.main.i18n.tr("common.error"),
+                content=self.main.i18n.tr("master.reset.invalid"),
+                position=InfoBarPosition.TOP,
+                duration=4000,
+                parent=self,
+            )
+            return
+        try:
+            self.main.credential_manager.change_master_password(current.text(), new.text())
+            self.main._unlocked_master_password = new.text()
+        except Exception as error:
+            InfoBar.error(
+                title=self.main.i18n.tr("common.error"),
+                content=str(error),
+                position=InfoBarPosition.TOP,
+                duration=4000,
+                parent=self,
+            )
+            return
+        InfoBar.success(
+            title=self.main.i18n.tr("account.security.changed"),
+            content=self.main.i18n.tr("account.security.changed_desc"),
+            position=InfoBarPosition.TOP,
+            duration=3000,
+            parent=self,
+        )
+
     def _save_admin_credentials(self):
-        email = self.ps_email.text().strip()
-        password = self.ps_password.text().strip()
+        email = self.admin_email.text().strip()
+        password = self.admin_password.text().strip()
 
         if not email or not password:
             InfoBar.warning(
@@ -404,7 +477,7 @@ class AccountScreen(ResponsiveWidget):
 
         try:
             self.main.credential_manager.save_credentials(email, password, master)
-            self.ps_password.clear()
+            self.admin_password.clear()
             InfoBar.success(
                 title=self.main.i18n.tr("common.success"),
                 content=self.main.i18n.tr("account.saved"),
@@ -443,8 +516,8 @@ class AccountScreen(ResponsiveWidget):
                     parent=self,
                 )
                 return
-            self.ps_email.setText(email)
-            self.ps_password.setText(password)
+            self.admin_email.setText(email)
+            self.admin_password.setText(password)
 
             # Auto-clear decrypted password after a short delay.
             self._password_view_token += 1

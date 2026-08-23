@@ -88,10 +88,14 @@ class DropZoneWidget(QWidget):
         icon.setFixedSize(SIZES['icon_huge'], SIZES['icon_huge'])
 
         self.title_label = BodyLabel("")
-        self.title_label.setStyleSheet(f"font-size: {FONTS['size_subtitle_2']}; color: {COLORS['lavender_grey']};")
+        self.title_label.setStyleSheet(
+            f"font-size: {FONTS['size_subtitle_2']}; color: {get_text_color(isDarkTheme())};"
+        )
 
         self.subtitle_label = CaptionLabel("")
-        self.subtitle_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self.subtitle_label.setStyleSheet(
+            f"color: {get_text_color(isDarkTheme(), 'secondary')};"
+        )
 
         layout.addStretch()
         layout.addWidget(icon, 0, Qt.AlignmentFlag.AlignCenter)
@@ -129,6 +133,12 @@ class DropZoneWidget(QWidget):
 
     def _apply_style(self, drag_active: bool):
         is_dark = isDarkTheme()
+        self.title_label.setStyleSheet(
+            f"font-size: {FONTS['size_subtitle_2']}; color: {get_text_color(is_dark)};"
+        )
+        self.subtitle_label.setStyleSheet(
+            f"color: {get_text_color(is_dark, 'secondary')};"
+        )
         border = COLORS['lavender_grey'] if is_dark else COLORS['space_indigo']
         dashed = COLORS['lavender_grey']
         from GUI_Qt.styles.theme_config import get_hover_bg
@@ -579,11 +589,11 @@ class SpecCheckerScreen(ResponsiveWidget):
     def _update_table_theme(self):
         is_dark = isDarkTheme()
         tc = COMPONENT_COLORS['table']
-        bg = tc['row_alt_bg_dark'] if is_dark else tc['row_alt_bg_light']
-        alt_bg = tc['row_bg_dark'] if is_dark else tc['row_bg_light']
+        bg = tc['row_bg_dark'] if is_dark else tc['row_bg_light']
+        alt_bg = tc['row_alt_bg_dark'] if is_dark else tc['row_alt_bg_light']
         border = tc['border_dark'] if is_dark else tc['border_light']
-        header_bg = COLORS['lavender_grey'] if is_dark else COLORS['space_indigo']
-        header_text = COLORS['space_indigo'] if is_dark else COLORS['text_white']
+        header_bg = tc['header_bg_dark' if is_dark else 'header_bg_light']
+        header_text = tc['header_text_dark' if is_dark else 'header_text_light']
         text_color = COLORS['text_primary_dark'] if is_dark else COLORS['text_primary_light']
 
         from GUI_Qt.styles.theme_config import (
@@ -816,6 +826,10 @@ class SpecCheckerScreen(ResponsiveWidget):
         self._worker.progress_update.connect(self._on_progress)
         self._worker.done.connect(self._on_done)
         self._worker.log.connect(lambda msg: print(f"[SpecChecker] {msg}"))
+        if hasattr(self.main, "track_worker"):
+            self.main.track_worker(
+                self._worker, "spec_scanner", "spec_checker", total=len(self._codes)
+            )
         self._worker.start()
 
     def _on_row_update(self, row: int, status: str, notes: str):

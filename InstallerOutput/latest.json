@@ -1,6 +1,0 @@
-﻿{
-    "version":  "2.0.0",
-    "url":  "https://github.com/TotallyMew/UltraBike_Automatizacija_Release/releases/download/v2.0.0/UltraBike_Automatizacija_Setup_2.0.0.exe",
-    "sha256":  "0b2340e7bafe976762c6868a2cf34ac9a8309b7a9e311e043d906be3ad8dabab",
-    "notes":  "Critical update: Fixed UAC race condition causing update failures; Made SHA256 verification mandatory for security; Increased download timeout to 120s for slow connections; Enforced HTTPS for all update URLs"
-}

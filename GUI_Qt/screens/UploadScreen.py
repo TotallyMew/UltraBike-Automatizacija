@@ -28,7 +28,7 @@ from GUI_Qt.components.accessibility import KeyboardNavigationMixin
 from GUI_Qt.components.dialogs import DestructiveActionDialog
 from GUI_Qt.styles.theme_config import (
     COLORS, COMPONENT_COLORS, FONTS, RADII, SIZES, SPACING,
-    rgba_from_hex, get_status_text_color,
+    rgba_from_hex, get_accent_colors, get_input_style, get_status_text_color,
 )
 from GUI_Qt.styles.screen_theme import (
     PAGE_MARGINS,
@@ -536,7 +536,6 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
 
         self._apply_text_theme()
         self._apply_attr_card_theme()
-        self._update_attr_table_theme()
         self._apply_action_bar_theme()
 
         self.retranslate_ui()
@@ -1022,8 +1021,13 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
         self.clear_button.setEnabled(False)
         self.progress_ring.setVisible(True)
         self.status_label.setText(self.main.i18n.tr("upload.status.uploading"))
-        self.status_label.setStyleSheet(f"color: {COLORS['lavender_grey']}; background: transparent; background-color: transparent;")
+        self.status_label.setStyleSheet(
+            f"color: {get_accent_colors(isDarkTheme())['base']}; "
+            "background: transparent; background-color: transparent;"
+        )
 
+        if hasattr(self.main, "track_worker"):
+            self.main.track_worker(self.upload_worker, "upload", "upload")
         self.upload_worker.start()
 
     def _on_retry_request(self, operation_name):
@@ -1046,10 +1050,7 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
         input_widget = QLineEdit()
         input_widget.setPlaceholderText(self.main.i18n.tr("upload.retry.placeholder"))
         input_widget.setMinimumWidth(SIZES['panel_min_width'])
-        input_text = COLORS['space_indigo'] if isDarkTheme() else COLORS['text_primary_light']
-        input_widget.setStyleSheet(f"""
-            background-color: {COLORS['lavender_grey']};
-            color: {input_text};
+        input_widget.setStyleSheet(get_input_style(isDarkTheme()) + f"""
             font-size: {FONTS['size_body_lg']};
             font-family: {FONTS['family']};
             margin-top: {SPACING['sm']}px;
@@ -1269,10 +1270,6 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
             result.append({"name": name, "value": value, "field": defn["field"]})
         return result
 
-    def _update_attr_table_theme(self):
-        """No-op — kept for compatibility with theme change calls."""
-        pass
-
     def _clear_form(self) -> None:
         """Clear user-editable fields with confirmation dialog (keeps selected brand)."""
         confirmed = DestructiveActionDialog.ask(
@@ -1314,7 +1311,6 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
 
         self._apply_options_card_theme()
         self._apply_attr_card_theme()
-        self._update_attr_table_theme()
         self._apply_action_bar_theme()
         self._apply_text_theme()
 
