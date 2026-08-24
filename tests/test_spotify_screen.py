@@ -173,3 +173,63 @@ def test_now_playing_renders_podcast_episode_show_and_publisher():
         app.processEvents()
     finally:
         database.close()
+
+
+def test_volume_change_targets_selected_device_and_survives_playback_poll(monkeypatch):
+    app = QApplication.instance() or QApplication([])
+    database = DatabaseManager(":memory:")
+    try:
+        settings = SettingsManager(database)
+        main = _Main(database, settings)
+        screen = SpotifyScreen(main)
+        commands = []
+        volume_calls = []
+        monkeypatch.setattr(screen.spotify, "is_connected", lambda: True)
+        monkeypatch.setattr(
+            screen.spotify,
+            "set_volume",
+            lambda percent, *, device_id=None: volume_calls.append((percent, device_id)),
+        )
+
+        def capture_command(name, callback):
+            commands.append((name, callback))
+            return True
+
+        monkeypatch.setattr(screen, "_run_command", capture_command)
+        screen.device_combo.addItem("Desktop", userData="device-1")
+        screen.device_combo.setCurrentIndex(0)
+        screen.player_card.setEnabled(True)
+        screen.volume_slider.setEnabled(True)
+
+        screen.volume_slider.setValue(67)
+        assert screen._pending_volume == 67
+        screen._volume_commit_timer.stop()
+
+        # A stale playback poll must not replace the user's staged value.
+        screen._apply_playback(
+            {
+                "is_playing": True,
+                "progress_ms": 1_000,
+                "item": {"id": "track-1", "name": "Track", "duration_ms": 60_000},
+                "device": {
+                    "id": "device-1",
+                    "name": "Desktop",
+                    "volume_percent": 40,
+                    "supports_volume": True,
+                },
+            }
+        )
+        assert screen.volume_slider.value() == 67
+
+        screen._commit_volume()
+        assert screen._pending_volume is None
+        assert commands[0][0] == "volume"
+        commands[0][1]()
+        assert volume_calls == [(67, "device-1")]
+
+        screen.close()
+        screen.deleteLater()
+        main.deleteLater()
+        app.processEvents()
+    finally:
+        database.close()

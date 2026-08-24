@@ -76,7 +76,7 @@ def _manager(now: datetime | None = None):
     return database, settings, http, manager
 
 
-def test_schema_v5_upgrades_v4_and_preserves_sessions(tmp_path: Path):
+def test_schema_v6_upgrades_v4_and_preserves_sessions(tmp_path: Path):
     path = tmp_path / "v4.db"
     connection = sqlite3.connect(path)
     connection.execute(
@@ -112,7 +112,7 @@ def test_schema_v5_upgrades_v4_and_preserves_sessions(tmp_path: Path):
 
     upgraded = DatabaseManager(path)
     try:
-        assert upgraded.conn.execute("PRAGMA user_version").fetchone()[0] == 5
+        assert upgraded.conn.execute("PRAGMA user_version").fetchone()[0] == 6
         assert upgraded.conn.execute("SELECT id FROM work_sessions").fetchone()[0] == 7
         for table in ("spotify_auth", "spotify_plays", "spotify_play_artists"):
             assert upgraded.conn.execute(

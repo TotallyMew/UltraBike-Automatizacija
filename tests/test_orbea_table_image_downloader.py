@@ -178,6 +178,71 @@ class CaptureAvailabilityTests(unittest.TestCase):
 
         self.assertEqual(path.name, "geometry-s-m.png")
 
+    def test_geometry_wheel_size_reports_every_table_column(self) -> None:
+        class Header:
+            def __init__(self, text):
+                self.text = text
+
+        class Table:
+            def find_elements(self, _by, _selector):
+                return [Header("Concept"), Header('27.5"'), Header('29"')]
+
+        self.assertEqual(downloader.geometry_wheel_size(Table()), '27.5"; 29"')
+
+    def test_geometry_capture_retries_one_failed_size(self) -> None:
+        table = object()
+        capture_target = object()
+
+        class Driver:
+            def execute_script(self, _script, _element):
+                return capture_target
+
+        size_details = {
+            "options": [
+                {"value": "XS", "text": "XS"},
+                {"value": "M", "text": "M"},
+            ]
+        }
+        with patch.object(
+            downloader, "click_control"
+        ), patch.object(
+            downloader, "wait_for_geometry_table", return_value=table
+        ), patch.object(
+            downloader, "geometry_size_details", return_value=(object(), size_details)
+        ), patch.object(
+            downloader,
+            "set_geometry_size",
+            side_effect=[RuntimeError("table still updating"), (table, "XS"), (table, "M")],
+        ) as set_size, patch.object(
+            downloader,
+            "set_geometry_position",
+            return_value=(table, "", False),
+        ), patch.object(
+            downloader, "screenshot_element", return_value=(640, 480)
+        ), patch.object(
+            downloader, "geometry_wheel_size", return_value='29"'
+        ), patch.object(
+            downloader, "png_dimensions", return_value=(640, 480)
+        ), patch.object(
+            downloader.shutil, "copy2"
+        ), patch.object(
+            downloader.os, "replace"
+        ), patch.object(
+            downloader, "close_table_dialog"
+        ):
+            _dimensions, _position, _supported, variants = downloader.capture_geometry(
+                Driver(),
+                self.geometry,
+                1.0,
+                "low",
+                control=object(),
+                selector_timeout=1.0,
+            )
+
+        self.assertEqual(set_size.call_count, 3)
+        self.assertEqual([variant["status"] for variant in variants], ["downloaded", "downloaded"])
+        self.assertEqual([variant["error"] for variant in variants], ["", ""])
+
     def test_navigation_failure_is_retryable_for_both_tables(self) -> None:
         driver = FakeDriver(RuntimeError("network down"))
         result = self.capture(driver)

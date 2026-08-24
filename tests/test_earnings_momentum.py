@@ -115,7 +115,7 @@ def test_schema_v4_upgrades_a_v3_session_table_without_losing_rows(tmp_path: Pat
 
     upgraded = DatabaseManager(path)
     try:
-        assert upgraded.conn.execute("PRAGMA user_version").fetchone()[0] == 5
+        assert upgraded.conn.execute("PRAGMA user_version").fetchone()[0] == 6
         row = upgraded.conn.execute("SELECT * FROM work_sessions WHERE id=1").fetchone()
         assert row["mode"] == "stopwatch"
         assert row["quest_kind"] is None

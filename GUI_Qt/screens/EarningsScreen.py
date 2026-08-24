@@ -10,7 +10,7 @@ from typing import Any
 import openpyxl
 from openpyxl.styles import Alignment, Font, PatternFill
 from PySide6.QtCore import QDate, QEvent, QPoint, QRectF, QSize, Qt, QTimer, QUrl
-from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPen, QTextCharFormat
+from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPen, QPixmap, QTextCharFormat
 from PySide6.QtMultimedia import QSoundEffect
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -617,10 +617,23 @@ class EarningsScreen(ResponsiveWidget):
 
         self.goal_quest_details = QWidget()
         self.goal_quest_details.setObjectName("earningsGoalQuestDetails")
-        details = QVBoxLayout(self.goal_quest_details)
+        details = QHBoxLayout(self.goal_quest_details)
         details.setContentsMargins(0, 0, 0, 0)
         details.setSpacing(SPACING["sm"])
         details.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
+
+        self.goal_quest_image = QLabel()
+        self.goal_quest_image.setObjectName("earningsGoalImage")
+        self.goal_quest_image.setProperty("ubAllowBg", True)
+        self.goal_quest_image.setFixedSize(76, 76)
+        self.goal_quest_image.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        details.addWidget(self.goal_quest_image, 0, Qt.AlignmentFlag.AlignTop)
+
+        metrics = QWidget()
+        metrics.setObjectName("earningsGoalQuestMetrics")
+        metrics_layout = QVBoxLayout(metrics)
+        metrics_layout.setContentsMargins(0, 0, 0, 0)
+        metrics_layout.setSpacing(SPACING["sm"])
 
         value_row = QHBoxLayout()
         value_row.setSpacing(SPACING["sm"])
@@ -633,11 +646,11 @@ class EarningsScreen(ResponsiveWidget):
         self.goal_quest_percentage.setMinimumWidth(64)
         value_row.addWidget(self.goal_quest_value, 1)
         value_row.addWidget(self.goal_quest_percentage)
-        details.addLayout(value_row)
+        metrics_layout.addLayout(value_row)
 
         self.goal_quest_progress = GoalMilestoneBar()
         self.goal_quest_progress.setFixedHeight(14)
-        details.addWidget(self.goal_quest_progress)
+        metrics_layout.addWidget(self.goal_quest_progress)
 
         footer = QHBoxLayout()
         footer.setSpacing(SPACING["sm"])
@@ -650,7 +663,8 @@ class EarningsScreen(ResponsiveWidget):
         )
         footer.addWidget(self.goal_quest_next, 1)
         footer.addWidget(self.goal_quest_remaining, 1)
-        details.addLayout(footer)
+        metrics_layout.addLayout(footer)
+        details.addWidget(metrics, 1)
         layout.addWidget(self.goal_quest_details)
         return card
 
@@ -736,6 +750,24 @@ class EarningsScreen(ResponsiveWidget):
         details.setSpacing(0)
         details.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
 
+        hero = QHBoxLayout()
+        hero.setSpacing(SPACING["md"])
+        self.goal_image = QLabel()
+        self.goal_image.setObjectName("earningsGoalImage")
+        self.goal_image.setProperty("ubAllowBg", True)
+        self.goal_image.setFixedSize(112, 84)
+        self.goal_image.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        hero.addWidget(self.goal_image, 0, Qt.AlignmentFlag.AlignTop)
+
+        primary = QWidget()
+        primary.setObjectName("earningsGoalPrimary")
+        primary_layout = QVBoxLayout(primary)
+        primary_layout.setContentsMargins(0, 0, 0, 0)
+        primary_layout.setSpacing(SPACING["xs"])
+        self.goal_custom_title = StrongBodyLabel("")
+        self.goal_custom_title.setWordWrap(True)
+        primary_layout.addWidget(self.goal_custom_title)
+
         summary = QHBoxLayout()
         summary.setSpacing(SPACING["sm"])
         self.goal_title = BodyLabel("")
@@ -747,19 +779,19 @@ class EarningsScreen(ResponsiveWidget):
         self.goal_percentage.setMinimumWidth(64)
         summary.addWidget(self.goal_title, 1)
         summary.addWidget(self.goal_percentage)
-        details.addLayout(summary)
+        primary_layout.addLayout(summary)
 
-        details.addSpacing(SPACING["xs"])
         self.goal_remaining = CaptionLabel("")
         self.goal_remaining.setWordWrap(True)
-        details.addWidget(self.goal_remaining)
+        primary_layout.addWidget(self.goal_remaining)
 
-        details.addSpacing(SPACING["sm"])
         self.goal_progress = QProgressBar()
         self.goal_progress.setRange(0, 1000)
         self.goal_progress.setTextVisible(False)
         self.goal_progress.setFixedHeight(12)
-        details.addWidget(self.goal_progress)
+        primary_layout.addWidget(self.goal_progress)
+        hero.addWidget(primary, 1)
+        details.addLayout(hero)
 
         self.goal_adjustment_block = QWidget()
         self.goal_adjustment_block.setObjectName("earningsGoalAdjustment")
@@ -1371,6 +1403,27 @@ class EarningsScreen(ResponsiveWidget):
         arrow = "↑" if delta > 0 else ("↓" if delta < 0 else "→")
         return f"{arrow} {abs(delta):.0f}% vs {label}"
 
+    @staticmethod
+    def _set_goal_picture(label: QLabel, data) -> None:
+        pixmap = QPixmap()
+        if data:
+            pixmap.loadFromData(bytes(data))
+        if pixmap.isNull():
+            label.clear()
+            label.setVisible(False)
+            return
+
+        target = label.size()
+        scaled = pixmap.scaled(
+            target,
+            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        left = max(0, (scaled.width() - target.width()) // 2)
+        top = max(0, (scaled.height() - target.height()) // 2)
+        label.setPixmap(scaled.copy(left, top, target.width(), target.height()))
+        label.setVisible(True)
+
     def _refresh_goal(self):
         tr = self.main.i18n.tr
         forecast = self.service.goal_forecast()
@@ -1393,6 +1446,10 @@ class EarningsScreen(ResponsiveWidget):
             self.goal_panel.setMaximumHeight(96)
             self.goal_empty.setText(tr("earnings.goal.empty"))
             self.goal_title.setText("")
+            self.goal_custom_title.setText("")
+            self.goal_custom_title.setVisible(False)
+            self._set_goal_picture(self.goal_image, None)
+            self._set_goal_picture(self.goal_quest_image, None)
             self.goal_percentage.setText("")
             self.goal_remaining.setText("")
             self.goal_adjustment_summary.setText("")
@@ -1419,6 +1476,11 @@ class EarningsScreen(ResponsiveWidget):
         self.goal_panel.setMinimumHeight(0)
         self.goal_panel.setMaximumHeight(16777215)
         goal = forecast["goal"]
+        custom_title = " ".join(str(goal.get("title") or "").split())
+        self.goal_custom_title.setText(custom_title)
+        self.goal_custom_title.setVisible(bool(custom_title))
+        self._set_goal_picture(self.goal_image, goal.get("image_data"))
+        self._set_goal_picture(self.goal_quest_image, goal.get("image_data"))
         earned = int(forecast.get("earned_cents") or 0)
         target = int(goal.get("target_cents") or 0)
         state = goal_progress_state(earned, target)
@@ -1442,7 +1504,7 @@ class EarningsScreen(ResponsiveWidget):
             )
         self.goal_progress.setValue(int(round(float(state["visual_percent"]) * 10)))
 
-        self.goal_quest_title.setText(tr("earnings.goal.quest.title"))
+        self.goal_quest_title.setText(custom_title or tr("earnings.goal.quest.title"))
         self.goal_quest_level.setText(
             tr(
                 "earnings.goal.quest.level",
@@ -1785,6 +1847,8 @@ class EarningsScreen(ResponsiveWidget):
             self.batch_counter.advance()
             self.add_button.animate_success()
             self.earning_burst.show_amount(payout_cents, self.add_button)
+            if self._engagement_settings["sound_enabled"]:
+                self._success_sound.play()
             InfoBar.success(title="Earning added", content=f"{sku} was added to your earnings.", parent=self, position=InfoBarPosition.TOP, duration=2500)
         except Exception as error:
             InfoBar.error(title="Could not add earning", content=str(error), parent=self, position=InfoBarPosition.TOP)
@@ -2097,15 +2161,23 @@ class EarningsScreen(ResponsiveWidget):
         dialog = GoalDialog(parent=self)
         if not dialog.exec():
             return
-        target, deadline = dialog.values()
+        target, deadline, title, image_data = dialog.values()
         try:
-            self.service.create_goal(target, deadline)
+            self.service.create_goal(
+                target, deadline, title=title, image_data=image_data
+            )
             self.refresh_all()
         except ActiveGoalError:
             replace = MessageBox("Replace active goal?", "Archive the current goal and start this new one?", self)
             replace.yesButton.setText("Archive and replace")
             if replace.exec():
-                self.service.create_goal(target, deadline, replace_status=GoalStatus.ARCHIVED)
+                self.service.create_goal(
+                    target,
+                    deadline,
+                    title=title,
+                    image_data=image_data,
+                    replace_status=GoalStatus.ARCHIVED,
+                )
                 self.refresh_all()
         except Exception as error:
             QMessageBox.warning(self, "Could not create goal", str(error))
@@ -2116,8 +2188,14 @@ class EarningsScreen(ResponsiveWidget):
             return
         dialog = GoalDialog(goal, self)
         if dialog.exec():
-            target, deadline = dialog.values()
-            self.service.update_goal(goal["id"], target, deadline)
+            target, deadline, title, image_data = dialog.values()
+            self.service.update_goal(
+                goal["id"],
+                target,
+                deadline,
+                title=title,
+                image_data=image_data,
+            )
             self.refresh_all()
 
     def _add_goal_adjustment(self):
@@ -2259,15 +2337,26 @@ class EarningsScreen(ResponsiveWidget):
             ws_sessions.cell(ws_sessions.max_row, 8).number_format = '€0.00'
             ws_sessions.cell(ws_sessions.max_row, 9).number_format = '€0.00'
 
-        ws_goals = sheet("Goal History", ["Started", "Deadline", "Status", "Target", "Completed", "Final Progress", "Goal-only Adjustments", "Products", "Tracked Hours"])
+        ws_goals = sheet(
+            "Goal History",
+            [
+                "Title", "Started", "Deadline", "Status", "Target", "Completed",
+                "Final Progress", "Goal-only Adjustments", "Products", "Tracked Hours",
+            ],
+        )
         for row in self.service.list_goals():
-            ws_goals.append([local_datetime(row["started_at"]), row.get("deadline_date"), row["status"], row["target_cents"] / 100,
-                             local_datetime(row.get("completed_at")), (row.get("final_earned_cents") or 0) / 100,
-                             (row.get("adjustment_cents") or 0) / 100,
-                             row.get("final_product_count") or 0, (row.get("final_tracked_seconds") or 0) / 3600])
-            ws_goals.cell(ws_goals.max_row, 4).number_format = '€0.00'
-            ws_goals.cell(ws_goals.max_row, 6).number_format = '€0.00'
+            ws_goals.append([
+                row.get("title") or "", local_datetime(row["started_at"]),
+                row.get("deadline_date"), row["status"], row["target_cents"] / 100,
+                local_datetime(row.get("completed_at")),
+                (row.get("final_earned_cents") or 0) / 100,
+                (row.get("adjustment_cents") or 0) / 100,
+                row.get("final_product_count") or 0,
+                (row.get("final_tracked_seconds") or 0) / 3600,
+            ])
+            ws_goals.cell(ws_goals.max_row, 5).number_format = '€0.00'
             ws_goals.cell(ws_goals.max_row, 7).number_format = '€0.00'
+            ws_goals.cell(ws_goals.max_row, 8).number_format = '€0.00'
 
         values = self.service.summary()
         ws_summary = sheet("Summary", ["Metric", "Value"])
@@ -2316,6 +2405,8 @@ class EarningsScreen(ResponsiveWidget):
         secondary = get_text_color(dark, "secondary")
         tertiary = get_text_color(dark, "tertiary")
         status = get_status_text_color("success", dark) if complete else secondary
+        image_surface = get_surface_color(dark, "alternate")
+        image_border = get_subtle_border(dark)
 
         self.goal_quest_panel.setStyleSheet(f"""
             QWidget#earningsGoalQuest {{
@@ -2325,8 +2416,15 @@ class EarningsScreen(ResponsiveWidget):
             }}
         """)
         self.goal_quest_details.setStyleSheet(
-            "QWidget#earningsGoalQuestDetails { background: transparent; border: none; }"
+            "QWidget#earningsGoalQuestDetails, QWidget#earningsGoalQuestMetrics { "
+            "background: transparent; border: none; }"
         )
+        image_style = (
+            f"QLabel#earningsGoalImage {{ background-color: {image_surface}; "
+            f"border: 1px solid {image_border}; border-radius: {RADII['md']}px; }}"
+        )
+        self.goal_quest_image.setStyleSheet(image_style)
+        self.goal_image.setStyleSheet(image_style)
         self.goal_quest_progress.setStyleSheet(f"""
             QProgressBar {{
                 background-color: {quest_track};
@@ -2368,7 +2466,8 @@ class EarningsScreen(ResponsiveWidget):
         )
 
         self.goal_details.setStyleSheet(
-            "QWidget#earningsGoalDetails { background: transparent; border: none; }"
+            "QWidget#earningsGoalDetails, QWidget#earningsGoalPrimary { "
+            "background: transparent; border: none; }"
         )
         self.goal_forecast_block.setStyleSheet(
             "QWidget#earningsGoalForecast { background: transparent; border: none; }"
@@ -2392,6 +2491,10 @@ class EarningsScreen(ResponsiveWidget):
         """)
         self.goal_title.setStyleSheet(
             f"color: {primary}; font-weight: 600; background: transparent; border: none;"
+        )
+        self.goal_custom_title.setStyleSheet(
+            f"color: {primary}; font-size: 17px; font-weight: 700; "
+            "background: transparent; border: none;"
         )
         self.goal_percentage.setStyleSheet(
             f"color: {primary}; font-weight: 600; background: transparent; border: none;"

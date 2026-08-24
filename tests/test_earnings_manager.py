@@ -210,6 +210,46 @@ def test_goal_replacement_requires_explicit_archive_or_cancel(manager):
     assert manager._goal(second)["status"] == "active"
 
 
+def test_goal_title_and_picture_are_persisted_and_editable(manager):
+    picture = b"small-picture-data"
+    goal_id = manager.create_goal(
+        1_000,
+        title="  Dream   bike fund  ",
+        image_data=picture,
+        now=at(1),
+    )
+
+    goal = manager._goal(goal_id)
+    assert goal["title"] == "Dream bike fund"
+    assert goal["image_data"] == picture
+
+    # Amount-only updates preserve customization for older callers.
+    manager.update_goal(goal_id, 1_500, None, now=at(2))
+    preserved = manager._goal(goal_id)
+    assert preserved["title"] == "Dream bike fund"
+    assert preserved["image_data"] == picture
+
+    manager.update_goal(
+        goal_id,
+        2_000,
+        None,
+        title="Workshop renovation",
+        image_data=None,
+        now=at(3),
+    )
+    updated = manager._goal(goal_id)
+    assert updated["title"] == "Workshop renovation"
+    assert updated["image_data"] is None
+
+    with pytest.raises(ValueError, match="title"):
+        manager.update_goal(
+            goal_id,
+            2_000,
+            None,
+            title="x" * (manager.GOAL_TITLE_MAX_LENGTH + 1),
+        )
+
+
 def test_goal_adjustment_changes_only_goal_progress(manager):
     goal_id = manager.create_goal(500, now=at(1, 8))
     manager.create_entry("PAID-PRODUCT", "bicycle", now=at(1, 9))

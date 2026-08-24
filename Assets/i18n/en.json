@@ -873,6 +873,7 @@
   "info.upload.title": "Upload",
   "loading.connecting": "Connecting...",
   "loading.default": "Loading...",
+  "loading.subtitle": "Product automation workspace",
   "loading.title": "UltraBike",
   "login.browser": "Browser:",
   "login.browser_init_failed": "Failed to initialize browser",

@@ -9,8 +9,28 @@ from typing import Any
 
 import openpyxl
 from openpyxl.styles import Alignment, Font, PatternFill
-from PySide6.QtCore import QDate, QEvent, QPoint, QRectF, QSize, Qt, QTimer
-from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPen, QTextCharFormat
+from PySide6.QtCore import (
+    QByteArray,
+    QBuffer,
+    QDate,
+    QEvent,
+    QIODevice,
+    QPoint,
+    QRectF,
+    QSize,
+    Qt,
+    QTimer,
+)
+from PySide6.QtGui import (
+    QBrush,
+    QColor,
+    QFont,
+    QImageReader,
+    QPainter,
+    QPen,
+    QPixmap,
+    QTextCharFormat,
+)
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QAbstractSpinBox,
@@ -86,6 +106,7 @@ from GUI_Qt.styles.theme_config import (
     get_form_dialog_style,
     get_form_input_style,
     get_selection_bg,
+    get_surface_color,
     get_status_text_color,
     get_subtle_border,
     get_subtle_item_hover_bg,
@@ -377,6 +398,22 @@ class GoalDialog(QDialog):
         layout.setContentsMargins(SPACING["xl"], SPACING["xl"], SPACING["xl"], SPACING["xl"])
         layout.setSpacing(0)
 
+        title_group = QVBoxLayout()
+        title_group.setSpacing(SPACING["sm"])
+        title_label = BodyLabel("Title (optional)")
+        self.title = LineEdit()
+        self.title.setObjectName("goalTitleInput")
+        self.title.setFixedHeight(SIZES["input_height"])
+        self.title.setMaxLength(EarningsManager.GOAL_TITLE_MAX_LENGTH)
+        self.title.setPlaceholderText("For example: New workshop bike")
+        self.title.setAccessibleName("Goal title")
+        title_label.setBuddy(self.title)
+        title_group.addWidget(title_label)
+        title_group.addWidget(self.title)
+        layout.addLayout(title_group)
+
+        layout.addSpacing(SPACING["base"])
+
         amount_group = QVBoxLayout()
         amount_group.setSpacing(SPACING["sm"])
         amount_label = BodyLabel("Target amount")
@@ -419,6 +456,34 @@ class GoalDialog(QDialog):
         deadline_group.addWidget(self.deadline)
         layout.addLayout(deadline_group)
 
+        layout.addSpacing(SPACING["base"])
+        picture_label = BodyLabel("Picture (optional)")
+        layout.addWidget(picture_label)
+        layout.addSpacing(SPACING["sm"])
+        picture_row = QHBoxLayout()
+        picture_row.setSpacing(SPACING["md"])
+        self.image_preview = QLabel("No picture selected")
+        self.image_preview.setObjectName("goalImagePreview")
+        self.image_preview.setProperty("ubAllowBg", True)
+        self.image_preview.setFixedSize(136, 88)
+        self.image_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.image_preview.setWordWrap(True)
+        self.image_preview.setAccessibleName("Goal picture preview")
+        picture_actions = QVBoxLayout()
+        picture_actions.setSpacing(SPACING["sm"])
+        self.image_choose = PushButton("Choose picture")
+        self.image_remove = PushButton("Remove")
+        self.image_choose.setIcon(FluentIcon.PHOTO)
+        self.image_remove.setIcon(FluentIcon.DELETE)
+        self.image_choose.clicked.connect(self._choose_image)
+        self.image_remove.clicked.connect(lambda: self._set_image_data(None))
+        picture_actions.addWidget(self.image_choose)
+        picture_actions.addWidget(self.image_remove)
+        picture_actions.addStretch(1)
+        picture_row.addWidget(self.image_preview)
+        picture_row.addLayout(picture_actions, 1)
+        layout.addLayout(picture_row)
+
         layout.addSpacing(SPACING["xl"])
         footer = QHBoxLayout()
         footer.setSpacing(SPACING["sm"])
@@ -441,27 +506,105 @@ class GoalDialog(QDialog):
         layout.addLayout(footer)
 
         if goal:
+            self.title.setText(str(goal.get("title") or ""))
             self.amount.setValue(int(goal["target_cents"]) / 100)
             if existing_deadline:
                 self.deadline_enabled.setChecked(True)
                 self.deadline.setDate(existing_deadline)
+        self._set_image_data((goal or {}).get("image_data"))
 
+        self.setTabOrder(self.title, self.amount)
         self.setTabOrder(self.amount, self.deadline_enabled)
         self.setTabOrder(self.deadline_enabled, self.deadline)
-        self.setTabOrder(self.deadline, self.cancel_button)
+        self.setTabOrder(self.deadline, self.image_choose)
+        self.setTabOrder(self.image_choose, self.image_remove)
+        self.setTabOrder(self.image_remove, self.cancel_button)
         self.setTabOrder(self.cancel_button, self.save_button)
         qconfig.themeChangedFinished.connect(self._apply_theme)
         self._apply_theme()
         self.adjustSize()
         self.setFixedSize(440, self.sizeHint().height())
 
+    def _choose_image(self) -> None:
+        path, _selected_filter = QFileDialog.getOpenFileName(
+            self,
+            "Choose goal picture",
+            "",
+            "Images (*.png *.jpg *.jpeg *.webp *.bmp)",
+        )
+        if not path:
+            return
+        reader = QImageReader(path)
+        reader.setAutoTransform(True)
+        image = reader.read()
+        if image.isNull():
+            QMessageBox.warning(self, "Could not use picture", "Choose a valid image file.")
+            return
+        if image.width() > 1280 or image.height() > 1280:
+            image = image.scaled(
+                1280,
+                1280,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+
+        encoded = QByteArray()
+        buffer = QBuffer(encoded)
+        buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+        image_format = "PNG" if image.hasAlphaChannel() else "JPEG"
+        quality = -1 if image_format == "PNG" else 88
+        saved = image.save(buffer, image_format, quality)
+        buffer.close()
+        data = bytes(encoded)
+        if not saved or not data or len(data) > EarningsManager.GOAL_IMAGE_MAX_BYTES:
+            QMessageBox.warning(
+                self,
+                "Could not use picture",
+                "The selected picture could not be prepared or is too large.",
+            )
+            return
+        self._set_image_data(data)
+
+    def _set_image_data(self, data) -> None:
+        self.image_data = bytes(data or b"") or None
+        pixmap = QPixmap()
+        if self.image_data:
+            pixmap.loadFromData(self.image_data)
+        if pixmap.isNull():
+            self.image_data = None
+            self.image_preview.setPixmap(QPixmap())
+            self.image_preview.setText("No picture selected")
+            self.image_remove.setEnabled(False)
+            return
+        self.image_preview.setText("")
+        self.image_preview.setPixmap(
+            pixmap.scaled(
+                self.image_preview.size(),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+        )
+        self.image_remove.setEnabled(True)
+
     def _apply_theme(self):
         dark = isDarkTheme()
         self.setStyleSheet(get_form_dialog_style(dark, self.objectName()))
+        self.title.setStyleSheet(get_form_input_style(dark, "QLineEdit"))
         self.amount.setStyleSheet(get_form_input_style(dark, "QDoubleSpinBox"))
         self.deadline.setStyleSheet(get_form_input_style(dark, "QDateEdit", calendar=True))
+        self.image_choose.setStyleSheet(get_dialog_button_style(dark, primary=False))
+        self.image_remove.setStyleSheet(get_dialog_button_style(dark, primary=False))
+        self.image_preview.setStyleSheet(
+            f"QLabel#goalImagePreview {{ background-color: {get_surface_color(dark, 'alternate')}; "
+            f"color: {get_text_color(dark, 'secondary')}; "
+            f"border: 1px solid {get_subtle_border(dark)}; "
+            f"border-radius: {RADII['md']}px; padding: {SPACING['xs']}px; }}"
+        )
         self.cancel_button.setStyleSheet(get_dialog_button_style(dark, primary=False))
         self.save_button.setStyleSheet(get_dialog_button_style(dark, primary=True))
+        self.title.setCustomFocusedBorderColor(
+            COLORS["focus_ring_light"], COLORS["focus_ring_dark"]
+        )
         self.amount.setCustomFocusedBorderColor(
             COLORS["focus_ring_light"], COLORS["focus_ring_dark"]
         )
@@ -473,8 +616,11 @@ class GoalDialog(QDialog):
         )
 
     def values(self):
-        return int(round(self.amount.value() * 100)), (
-            self.deadline.date().toPython() if self.deadline_enabled.isChecked() else None
+        return (
+            int(round(self.amount.value() * 100)),
+            self.deadline.date().toPython() if self.deadline_enabled.isChecked() else None,
+            " ".join(self.title.text().split()) or None,
+            self.image_data,
         )
 
 

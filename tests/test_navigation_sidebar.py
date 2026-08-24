@@ -17,6 +17,46 @@ def _pump(app: QApplication, cycles: int = 4) -> None:
         app.processEvents()
 
 
+def test_navigation_stays_hidden_during_startup_loading(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("ULTRABIKE_DATA_DIR", str(tmp_path))
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+
+    try:
+        window._show_loading("Connecting...")
+        window.show()
+        _pump(app)
+
+        assert window.navigationInterface.isHidden()
+
+        window.current_user = "navigation-sidebar-test"
+        window.show_main()
+        window.cancel_screen_preload()
+        _pump(app)
+
+        assert window.navigationInterface.isVisible()
+
+        window._show_loading("Downloading update...")
+        _pump(app)
+
+        assert window.navigationInterface.isVisible()
+    finally:
+        window.cancel_screen_preload()
+        try:
+            if window.spotify_screen is not None:
+                window.spotify_screen.shutdown(wait_ms=100)
+        except Exception:
+            pass
+        window.hide()
+        try:
+            window.db.close()
+        except Exception:
+            pass
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        _pump(app)
+
+
 def test_navigation_tree_stays_aligned_after_rapid_duplicate_click(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("ULTRABIKE_DATA_DIR", str(tmp_path))
     app = QApplication.instance() or QApplication([])

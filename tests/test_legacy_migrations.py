@@ -29,7 +29,7 @@ class LegacyMigrationTests(unittest.TestCase):
             database.close()
 
             migrated = DatabaseManager(path)
-            self.assertEqual(migrated.conn.execute("PRAGMA user_version").fetchone()[0], 5)
+            self.assertEqual(migrated.conn.execute("PRAGMA user_version").fetchone()[0], 6)
             work_session_columns = {
                 row["name"]
                 for row in migrated.conn.execute("PRAGMA table_info(work_sessions)")
@@ -38,6 +38,11 @@ class LegacyMigrationTests(unittest.TestCase):
                 {"quest_kind", "quest_target_value", "quest_completed_at"}
                 <= work_session_columns
             )
+            goal_columns = {
+                row["name"]
+                for row in migrated.conn.execute("PRAGMA table_info(earning_goals)")
+            }
+            self.assertTrue({"title", "image_data"} <= goal_columns)
             self.assertIsNone(
                 migrated.conn.execute(
                     "SELECT 1 FROM settings WHERE key=?", ("deep" + "l_api_key",)

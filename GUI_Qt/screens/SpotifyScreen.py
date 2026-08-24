@@ -66,6 +66,8 @@ class SpotifyScreen(ResponsiveWidget):
         self._dashboard_worker = None
         self._poll_worker = None
         self._command_worker = None
+        self._command_name: str | None = None
+        self._pending_volume: int | None = None
         self._poll_count = 0
         self._last_recent_sync_at = 0.0
         self._last_snapshot: dict[str, Any] | None = None
@@ -80,6 +82,10 @@ class SpotifyScreen(ResponsiveWidget):
         self._playback_tick_timer = QTimer(self)
         self._playback_tick_timer.setInterval(1_000)
         self._playback_tick_timer.timeout.connect(self._advance_playback_progress)
+        self._volume_commit_timer = QTimer(self)
+        self._volume_commit_timer.setSingleShot(True)
+        self._volume_commit_timer.setInterval(250)
+        self._volume_commit_timer.timeout.connect(self._commit_volume)
         qconfig.themeChangedFinished.connect(self._apply_theme)
         self._apply_theme()
         self.retranslate_ui()
@@ -196,12 +202,10 @@ class SpotifyScreen(ResponsiveWidget):
         self.volume_slider.setRange(0, 100)
         self.volume_slider.setSingleStep(5)
         self.volume_slider.setMinimumWidth(130)
-        self.volume_slider.sliderReleased.connect(self._volume_released)
+        self.volume_slider.sliderReleased.connect(self._commit_volume)
         self.volume_value = CaptionLabel("—")
         self.volume_value.setMinimumWidth(38)
-        self.volume_slider.valueChanged.connect(
-            lambda value: self.volume_value.setText(f"{int(value)}%")
-        )
+        self.volume_slider.valueChanged.connect(self._volume_changed)
         controls.addWidget(self.volume_title)
         controls.addWidget(self.volume_slider)
         controls.addWidget(self.volume_value)
@@ -350,6 +354,8 @@ class SpotifyScreen(ResponsiveWidget):
         self.spotify.disconnect()
         self._poll_timer.stop()
         self._playback_tick_timer.stop()
+        self._volume_commit_timer.stop()
+        self._pending_volume = None
         self._last_snapshot = None
         self._set_connected_state(False)
         self._clear_data()
@@ -438,33 +444,70 @@ class SpotifyScreen(ResponsiveWidget):
         if result.get("local"):
             self._apply_local(result["local"])
 
-    def _run_command(self, _name: str, callback) -> None:
+    def _run_command(self, name: str, callback) -> bool:
         if self._command_worker is not None and self._command_worker.isRunning():
-            return
+            return False
         for button in (self.previous_button, self.play_button, self.next_button):
             button.setEnabled(False)
         worker = SpotifyCallWorker(callback, self)
         self._command_worker = worker
+        self._command_name = str(name)
         worker.succeeded.connect(lambda _result: QTimer.singleShot(350, self._poll_playback))
         worker.failed.connect(lambda message: self._show_error(message, quiet=False))
         worker.finished.connect(self._command_finished)
         worker.finished.connect(worker.deleteLater)
         worker.start()
+        return True
 
     def _command_finished(self) -> None:
         self._command_worker = None
+        self._command_name = None
         for button in (self.previous_button, self.play_button, self.next_button):
             button.setEnabled(self.spotify.is_connected())
+        if self._pending_volume is not None and self.spotify.is_connected():
+            self._volume_commit_timer.start()
 
     def _toggle_playback(self) -> None:
         playback = (self._last_snapshot or {}).get("playback") or {}
         callback = self.spotify.pause if playback.get("is_playing") else self.spotify.play
         self._run_command("playback", callback)
 
-    def _volume_released(self) -> None:
-        self._run_command(
-            "volume", lambda: self.spotify.set_volume(self.volume_slider.value())
+    def _volume_changed(self, value: int) -> None:
+        """Stage a volume change from mouse, keyboard, or mouse wheel input."""
+
+        percent = max(0, min(100, int(value)))
+        self.volume_value.setText(f"{percent}%")
+        if not self.spotify.is_connected() or not self.volume_slider.isEnabled():
+            return
+        self._pending_volume = percent
+        self._volume_commit_timer.start()
+
+    def _commit_volume(self) -> None:
+        """Send the latest staged volume to the selected Spotify device."""
+
+        if self._pending_volume is None or not self.spotify.is_connected():
+            return
+        if self._command_worker is not None and self._command_worker.isRunning():
+            self._volume_commit_timer.start()
+            return
+
+        percent = self._pending_volume
+        selected_id = self.device_combo.currentData()
+        if not selected_id:
+            playback = (self._last_snapshot or {}).get("playback") or {}
+            selected_id = (playback.get("device") or {}).get("id")
+        device_id = str(selected_id or "").strip() or None
+        self._pending_volume = None
+
+        started = self._run_command(
+            "volume",
+            lambda percent=percent, device_id=device_id: self.spotify.set_volume(
+                percent, device_id=device_id
+            ),
         )
+        if not started:
+            self._pending_volume = percent
+            self._volume_commit_timer.start()
 
     def _device_changed(self, _index: int) -> None:
         device_id = self.device_combo.currentData()
@@ -533,12 +576,21 @@ class SpotifyScreen(ResponsiveWidget):
         )
         self.play_button.setIcon(FluentIcon.PAUSE if is_playing else FluentIcon.PLAY)
         volume = device.get("volume_percent")
-        if volume is not None:
+        volume_change_in_progress = (
+            self._pending_volume is not None
+            or self._command_name == "volume"
+            or self.volume_slider.isSliderDown()
+        )
+        if volume is not None and not volume_change_in_progress:
             blocker = QSignalBlocker(self.volume_slider)
             self.volume_slider.setValue(int(volume))
             del blocker
             self.volume_value.setText(f"{int(volume)}%")
-        supports_volume = bool(device.get("supports_volume", True))
+        supports_volume = (
+            bool(device)
+            and bool(device.get("supports_volume", True))
+            and not bool(device.get("is_restricted"))
+        )
         self.volume_slider.setEnabled(supports_volume)
 
     def _advance_playback_progress(self) -> None:
@@ -736,6 +788,7 @@ class SpotifyScreen(ResponsiveWidget):
     def shutdown(self, wait_ms: int = 5000) -> bool:
         self._poll_timer.stop()
         self._playback_tick_timer.stop()
+        self._volume_commit_timer.stop()
         workers = (
             self._auth_worker,
             self._dashboard_worker,

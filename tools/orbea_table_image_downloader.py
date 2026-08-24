@@ -32,7 +32,7 @@ from xml.etree import ElementTree as ET
 
 
 SCRIPT_VERSION = 1
-GEOMETRY_CAPTURE_VERSION = 3
+GEOMETRY_CAPTURE_VERSION = 4
 AVAILABILITY_PROBE_VERSION = 2
 DEFAULT_SHEET = "Matches"
 GEOMETRY_CAPTION = "Geometry chart by size"
@@ -682,6 +682,8 @@ def set_geometry_size(
 
     target_value = clean_text(matching_option.get("value"))
     if clean_text(details.get("value")).casefold() != target_value.casefold():
+        previous_table_id = getattr(table, "id", None)
+        previous_table_text = clean_text(getattr(table, "text", ""))
         driver.execute_script(
             """
             const select = arguments[0];
@@ -698,24 +700,47 @@ def set_geometry_size(
             target_value,
         )
 
-        def size_changed(_current) -> bool:
+        last_signature: tuple[str | None, str] | None = None
+        stable_reads = 0
+
+        def size_changed(_current):
+            nonlocal last_signature, stable_reads
             try:
                 current_table = wait_for_geometry_table(driver, 1.0)
                 _select, current = geometry_size_details(driver, current_table)
-                return (
+                if (
                     clean_text(current.get("value")).casefold()
-                    == target_value.casefold()
+                    != target_value.casefold()
+                ):
+                    last_signature = None
+                    stable_reads = 0
+                    return False
+
+                current_text = clean_text(getattr(current_table, "text", ""))
+                current_id = getattr(current_table, "id", None)
+                refreshed = (
+                    current_id != previous_table_id
+                    or current_text != previous_table_text
                 )
+                if not refreshed:
+                    last_signature = None
+                    stable_reads = 0
+                    return False
+
+                signature = (current_id, current_text)
+                if signature == last_signature:
+                    stable_reads += 1
+                else:
+                    last_signature = signature
+                    stable_reads = 1
+                return current_table if stable_reads >= 2 else False
             except Exception:
                 return False
 
-        WebDriverWait(driver, timeout).until(
+        table = WebDriverWait(driver, timeout, poll_frequency=0.15).until(
             size_changed,
             message=f"The geometry table did not switch to size {target}",
         )
-        # Orbea updates the table just after Tom Select changes its value.
-        time.sleep(0.6)
-        table = wait_for_geometry_table(driver, timeout)
 
     _select, final_details = geometry_size_details(driver, table)
     actual = clean_text(final_details.get("text") or final_details.get("value"))
@@ -736,12 +761,17 @@ def geometry_variant_path(destination: Path, size_label: str) -> Path:
 
 
 def geometry_wheel_size(table) -> str:
-    """Read the wheel-size heading paired with the selected frame size."""
+    """Read every wheel-size heading paired with the selected frame size."""
 
     from selenium.webdriver.common.by import By
 
     headers = table.find_elements(By.CSS_SELECTOR, "thead th")
-    return clean_text(headers[-1].text) if len(headers) > 1 else ""
+    wheel_sizes: list[str] = []
+    for header in headers[1:]:
+        value = clean_text(header.text)
+        if value and value not in wheel_sizes:
+            wheel_sizes.append(value)
+    return "; ".join(wheel_sizes)
 
 
 def set_geometry_position(
@@ -1009,44 +1039,49 @@ def capture_geometry(
                 "position": "",
                 "error": "",
             }
-            try:
-                table, actual_size = set_geometry_size(
-                    driver, table, requested_size, effective_selector_timeout
-                )
-                table, actual_position, has_position_selector = set_geometry_position(
-                    driver,
-                    table,
-                    requested_position,
-                    effective_selector_timeout,
-                )
-                capture_target = driver.execute_script(
-                    "return arguments[0].closest('#geometry-data') || arguments[0];",
-                    table,
-                )
-                dimensions = screenshot_element(driver, capture_target, variant_path)
-                variant.update(
-                    {
-                        "size": actual_size or display_size,
-                        "wheel_size": geometry_wheel_size(table),
-                        "status": TABLE_STATUS_DOWNLOADED,
-                        "dimensions": list(dimensions),
-                        "position": actual_position,
-                    }
-                )
-                if primary_path is None:
-                    primary_path = variant_path
-                    primary_position = actual_position
-                has_any_position_selector = (
-                    has_any_position_selector or has_position_selector
-                )
-            except KeyboardInterrupt:
-                raise
-            except Exception as error:
-                variant["error"] = concise_error(error)
+            for attempt in range(2):
                 try:
-                    table = wait_for_geometry_table(driver, 1.0)
-                except Exception:
-                    pass
+                    table, actual_size = set_geometry_size(
+                        driver, table, requested_size, effective_selector_timeout
+                    )
+                    table, actual_position, has_position_selector = set_geometry_position(
+                        driver,
+                        table,
+                        requested_position,
+                        effective_selector_timeout,
+                    )
+                    capture_target = driver.execute_script(
+                        "return arguments[0].closest('#geometry-data') || arguments[0];",
+                        table,
+                    )
+                    dimensions = screenshot_element(driver, capture_target, variant_path)
+                    variant.update(
+                        {
+                            "size": actual_size or display_size,
+                            "wheel_size": geometry_wheel_size(table),
+                            "status": TABLE_STATUS_DOWNLOADED,
+                            "dimensions": list(dimensions),
+                            "position": actual_position,
+                            "error": "",
+                        }
+                    )
+                    if primary_path is None:
+                        primary_path = variant_path
+                        primary_position = actual_position
+                    has_any_position_selector = (
+                        has_any_position_selector or has_position_selector
+                    )
+                    break
+                except KeyboardInterrupt:
+                    raise
+                except Exception as error:
+                    variant["error"] = concise_error(error)
+                    try:
+                        table = wait_for_geometry_table(driver, 1.0)
+                    except Exception:
+                        pass
+                    if attempt == 0:
+                        time.sleep(0.25)
             variants.append(variant)
 
         if primary_path is None:

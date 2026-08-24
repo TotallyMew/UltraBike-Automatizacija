@@ -11,6 +11,7 @@ from typing import Any, Iterable
 
 
 UTC = timezone.utc
+_UNSET = object()
 
 
 class ProductType(str, Enum):
@@ -100,6 +101,8 @@ class EarningsManager:
         ProductType.FRAMESET.value: 100,
         ProductType.OTHER.value: 75,
     }
+    GOAL_TITLE_MAX_LENGTH = 120
+    GOAL_IMAGE_MAX_BYTES = 4 * 1024 * 1024
 
     def __init__(self, db_manager, settings_manager=None, local_tz=None):
         self.db = db_manager
@@ -1085,6 +1088,8 @@ class EarningsManager:
         target_cents: int,
         deadline_date: str | date | None = None,
         *,
+        title: str | None = None,
+        image_data: bytes | bytearray | memoryview | None = None,
         replace_status: str | GoalStatus | None = None,
         now: datetime | None = None,
     ) -> int:
@@ -1100,31 +1105,55 @@ class EarningsManager:
                 raise ValueError("Active goals can only be archived or cancelled")
             self.close_goal(int(active["id"]), status=status, now=now)
         deadline = self._deadline(deadline_date)
+        title = self._goal_title(title)
+        image_data = self._goal_image_data(image_data)
         stamp = to_utc_iso(now or utc_now())
         cursor = self.db.conn.execute(
             """
             INSERT INTO earning_goals
-                (target_cents, started_at, deadline_date, status, created_at, updated_at)
-            VALUES (?, ?, ?, 'active', ?, ?)
+                (title, image_data, target_cents, started_at, deadline_date,
+                 status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, 'active', ?, ?)
             """,
-            (target_cents, stamp, deadline, stamp, stamp),
+            (title, image_data, target_cents, stamp, deadline, stamp, stamp),
         )
         self.db.conn.commit()
         return int(cursor.lastrowid)
 
     def update_goal(
         self, goal_id: int, target_cents: int, deadline_date: str | date | None,
-        *, now: datetime | None = None,
+        *, title: str | None | object = _UNSET,
+        image_data: bytes | bytearray | memoryview | None | object = _UNSET,
+        now: datetime | None = None,
     ) -> None:
-        row = self.db.conn.execute("SELECT status FROM earning_goals WHERE id=?", (goal_id,)).fetchone()
+        row = self.db.conn.execute(
+            "SELECT status, title, image_data FROM earning_goals WHERE id=?", (goal_id,)
+        ).fetchone()
         if row is None or row["status"] != GoalStatus.ACTIVE.value:
             raise ValueError("Only the active goal can be edited")
         target_cents = int(target_cents)
         if target_cents <= 0:
             raise ValueError("Goal amount must be greater than zero")
+        title = row["title"] if title is _UNSET else self._goal_title(title)
+        image_data = (
+            row["image_data"]
+            if image_data is _UNSET
+            else self._goal_image_data(image_data)
+        )
         self.db.conn.execute(
-            "UPDATE earning_goals SET target_cents=?, deadline_date=?, updated_at=? WHERE id=?",
-            (target_cents, self._deadline(deadline_date), to_utc_iso(now or utc_now()), goal_id),
+            """
+            UPDATE earning_goals
+            SET title=?, image_data=?, target_cents=?, deadline_date=?, updated_at=?
+            WHERE id=?
+            """,
+            (
+                title,
+                image_data,
+                target_cents,
+                self._deadline(deadline_date),
+                to_utc_iso(now or utc_now()),
+                goal_id,
+            ),
         )
         self.db.conn.commit()
         self.complete_goal_if_reached(now=now)
@@ -1351,6 +1380,28 @@ class EarningsManager:
     def _goal(self, goal_id: int) -> dict[str, Any] | None:
         row = self.db.conn.execute("SELECT * FROM earning_goals WHERE id=?", (goal_id,)).fetchone()
         return dict(row) if row else None
+
+    @classmethod
+    def _goal_title(cls, value: str | None) -> str | None:
+        title = " ".join(str(value or "").split())
+        if len(title) > cls.GOAL_TITLE_MAX_LENGTH:
+            raise ValueError(
+                f"Goal title cannot exceed {cls.GOAL_TITLE_MAX_LENGTH} characters"
+            )
+        return title or None
+
+    @classmethod
+    def _goal_image_data(
+        cls, value: bytes | bytearray | memoryview | None
+    ) -> bytes | None:
+        if value is None:
+            return None
+        data = bytes(value)
+        if not data:
+            return None
+        if len(data) > cls.GOAL_IMAGE_MAX_BYTES:
+            raise ValueError("Goal picture is too large")
+        return data
 
     # --------------------------------------------------------------- analytics
     def summary(self, now: datetime | None = None) -> dict[str, Any]:

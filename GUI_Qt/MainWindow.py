@@ -57,6 +57,10 @@ class MainWindow(FluentWindow):
         # Initialize backend managers
         self.driver = None
         self.current_user = None
+        # The FluentWindow navigation is created before authentication.  Keep
+        # an explicit shell state because FluentWindow may update child
+        # visibility again when the top-level window receives its show event.
+        self._authenticated_shell_visible = False
         self.logger = Logger()
         # Selenium's shared authenticated driver is single-owner. Long-running
         # tools (notably Orbea automation) use this cooperative lease so two
@@ -175,7 +179,7 @@ class MainWindow(FluentWindow):
         self._retranslate_ui(self.i18n.language.code)
 
         # Hide navigation until logged in
-        self.navigationInterface.setVisible(False)
+        self._apply_navigation_visibility()
 
         # Check session and show appropriate screen
         self._check_session()
@@ -960,6 +964,23 @@ class MainWindow(FluentWindow):
         super().resizeEvent(event)
         self._sync_navigation_for_width()
 
+    def showEvent(self, event) -> None:
+        """Keep pre-authentication screens free of the application sidebar."""
+        super().showEvent(event)
+        self._apply_navigation_visibility()
+        # Some FluentWindow layout work is queued until after showEvent. Reapply
+        # the state once that work has completed so the rail cannot flash in.
+        QTimer.singleShot(0, self._apply_navigation_visibility)
+
+    def _apply_navigation_visibility(self) -> None:
+        navigation = getattr(self, "navigationInterface", None)
+        if navigation is not None:
+            navigation.setVisible(bool(self._authenticated_shell_visible))
+
+    def _set_authenticated_shell_visible(self, visible: bool) -> None:
+        self._authenticated_shell_visible = bool(visible)
+        self._apply_navigation_visibility()
+
     @staticmethod
     def _qcolor(hex_color: str, alpha: int = 255) -> QColor:
         c = QColor(hex_color)
@@ -1147,6 +1168,10 @@ class MainWindow(FluentWindow):
         """Show loading screen"""
         from GUI_Qt.widgets.LoadingWidget import LoadingWidget
 
+        # Startup authentication uses the same loading widget as signed-in
+        # operations such as update downloads. Respect the current shell state:
+        # hidden before login, visible for an operation inside the main app.
+        self._apply_navigation_visibility()
         if self._loading_widget is None:
             self._loading_widget = LoadingWidget(message, tr=self.i18n.tr)
             self.stackedWidget.addWidget(self._loading_widget)
@@ -1238,6 +1263,7 @@ class MainWindow(FluentWindow):
         """Show login screen"""
         from GUI_Qt.screens.LoginScreen import LoginScreen
 
+        self._set_authenticated_shell_visible(False)
         if not self.login_screen:
             self.login_screen = LoginScreen(self)
 
@@ -1258,7 +1284,7 @@ class MainWindow(FluentWindow):
         from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget
 
         # Show navigation bar
-        self.navigationInterface.setVisible(True)
+        self._set_authenticated_shell_visible(True)
 
         # Create top bar if not exists
         if not self.top_bar:
@@ -1508,7 +1534,7 @@ class MainWindow(FluentWindow):
         self._current_route = None
 
         # Hide navigation bar
-        self.navigationInterface.setVisible(False)
+        self._set_authenticated_shell_visible(False)
 
         self.show_login()
 

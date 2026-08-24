@@ -6,7 +6,8 @@ from datetime import datetime, timezone
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QDate
+from PySide6.QtCore import QByteArray, QBuffer, QDate, QIODevice
+from PySide6.QtGui import QColor, QImage
 from PySide6.QtWidgets import QAbstractSpinBox, QApplication, QLayout, QWidget
 from qfluentwidgets import CheckBox, DateEdit, DoubleSpinBox, PrimaryPushButton, PushButton
 
@@ -49,6 +50,17 @@ class _Main(QWidget):
 
 def _at(hour: int) -> datetime:
     return datetime(2026, 8, 17, hour, tzinfo=timezone.utc)
+
+
+def _image_bytes() -> bytes:
+    image = QImage(40, 30, QImage.Format.Format_ARGB32)
+    image.fill(QColor("#E36588"))
+    encoded = QByteArray()
+    buffer = QBuffer(encoded)
+    buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+    assert image.save(buffer, "PNG")
+    buffer.close()
+    return bytes(encoded)
 
 
 def test_goal_progress_state_keeps_incomplete_progress_muted_and_uncapped_textual_value():
@@ -174,6 +186,32 @@ def test_goal_only_adjustment_is_visible_without_changing_earnings_metrics():
     app.processEvents()
 
 
+def test_custom_goal_title_and_picture_are_visible_in_both_goal_views():
+    app = QApplication.instance() or QApplication([])
+    main = _Main()
+    main.earnings_manager.create_goal(
+        5_000,
+        title="Dream bike fund",
+        image_data=_image_bytes(),
+        now=_at(8),
+    )
+
+    screen = EarningsScreen(main)
+    app.processEvents()
+
+    assert screen.goal_custom_title.text() == "Dream bike fund"
+    assert screen.goal_quest_title.text() == "Dream bike fund"
+    assert not screen.goal_image.isHidden()
+    assert not screen.goal_image.pixmap().isNull()
+    assert not screen.goal_quest_image.isHidden()
+    assert not screen.goal_quest_image.pixmap().isNull()
+
+    screen.deleteLater()
+    main.db.close()
+    main.deleteLater()
+    app.processEvents()
+
+
 def test_over_target_goal_reports_actual_percentage_and_above_amount():
     app = QApplication.instance() or QApplication([])
     main = _Main()
@@ -199,6 +237,8 @@ def test_goal_dialog_uses_fluent_vertical_form_and_preserves_existing_values():
         {
             "target_cents": 50_000,
             "deadline_date": "2026-08-20",
+            "title": "Dream bike fund",
+            "image_data": _image_bytes(),
         }
     )
     dialog.show()
@@ -219,9 +259,16 @@ def test_goal_dialog_uses_fluent_vertical_form_and_preserves_existing_values():
     assert dialog.deadline.displayFormat() == "dd MMM yyyy"
     assert dialog.deadline_enabled.isChecked()
     assert dialog.deadline.isEnabled()
+    assert dialog.title.text() == "Dream bike fund"
+    assert not dialog.image_preview.pixmap().isNull()
     assert dialog.save_button.isDefault()
     assert not dialog.cancel_button.autoDefault()
-    assert dialog.values() == (50_000, QDate(2026, 8, 20).toPython())
+    assert dialog.values() == (
+        50_000,
+        QDate(2026, 8, 20).toPython(),
+        "Dream bike fund",
+        _image_bytes(),
+    )
 
     dialog.close()
     dialog.deleteLater()
@@ -241,7 +288,13 @@ def test_goal_dialog_deadline_toggle_preserves_enabled_state_and_value_contract(
     dialog.deadline.setDate(QDate(2026, 8, 24))
 
     assert dialog.deadline.isEnabled()
-    assert dialog.values() == (12_575, QDate(2026, 8, 24).toPython())
+    dialog.title.setText("  New   workshop bike  ")
+    assert dialog.values() == (
+        12_575,
+        QDate(2026, 8, 24).toPython(),
+        "New workshop bike",
+        None,
+    )
 
     dialog.close()
     dialog.deleteLater()

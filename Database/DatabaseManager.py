@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 class DatabaseManager:
     """Manages SQLite database connection and schema"""
 
-    LATEST_SCHEMA_VERSION = 5
+    LATEST_SCHEMA_VERSION = 6
     
     def __init__(self, db_path=None):
         if db_path is None:
@@ -214,6 +214,8 @@ class DatabaseManager:
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS earning_goals (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT,
+                image_data BLOB,
                 target_cents INTEGER NOT NULL CHECK(target_cents > 0),
                 started_at TEXT NOT NULL,
                 deadline_date TEXT,
@@ -290,6 +292,7 @@ class DatabaseManager:
             3: self._migration_goal_adjustments,
             4: self._migration_session_quests,
             5: self._migration_spotify,
+            6: self._migration_goal_customization,
         }
         if current > self.LATEST_SCHEMA_VERSION:
             raise RuntimeError(
@@ -437,6 +440,12 @@ class DatabaseManager:
             "CREATE INDEX IF NOT EXISTS idx_spotify_play_artists_name "
             "ON spotify_play_artists(artist_name COLLATE NOCASE)"
         )
+
+    def _migration_goal_customization(self) -> None:
+        """Add optional presentation fields without changing goal accounting."""
+
+        self._ensure_column("earning_goals", "title", "TEXT")
+        self._ensure_column("earning_goals", "image_data", "BLOB")
     
     def close(self):
         """Close database connection"""
