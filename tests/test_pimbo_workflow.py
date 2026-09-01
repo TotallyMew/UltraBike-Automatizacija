@@ -9,6 +9,7 @@ from Database.DatabaseManager import DatabaseManager
 from Database.SettingsManager import SettingsManager
 from Managers.PimboProductEditor import (
     PimAiStepResult,
+    PimAutomationError,
     PimPreparationResult,
     PimPreparationStatus,
     PimboProductEditor,
@@ -67,6 +68,24 @@ class _ReviewEditor(PimboProductEditor):
         return self.version
 
 
+class _AutomaticSaveEditor(_ReviewEditor):
+    def __init__(self):
+        super().__init__(dirty=True, version=4)
+
+    def current_status(self):
+        return "Draft"
+
+    def save_button(self):
+        return self
+
+    def is_enabled(self):
+        return True
+
+    def _click(self, _element):
+        self.dirty = False
+        self.version += 1
+
+
 class _FileInput:
     def __init__(self):
         self.value = ""
@@ -92,6 +111,58 @@ class _FileDriver(_Driver):
 class _FileEditor(PimboProductEditor):
     def open_section(self, section):
         self.opened = section
+
+
+class _GroupedFileInput(_FileInput):
+    def __init__(self, context):
+        super().__init__()
+        self.context = context
+
+
+class _GroupedFileDriver(_Driver):
+    def __init__(self):
+        super().__init__()
+        self.inputs = [
+            _GroupedFileInput("Product images"),
+            _GroupedFileInput("Size tables"),
+            _GroupedFileInput("Geometry"),
+        ]
+
+    def find_elements(self, by, value):
+        if "input[type='file']" in value:
+            return self.inputs
+        return []
+
+
+class _GroupedFileEditor(PimboProductEditor):
+    def open_section(self, section):
+        self.opened = section
+
+    def _image_input_context(self, element):
+        return element.context.casefold()
+
+
+class _ValueInput:
+    def get_attribute(self, name):
+        return "" if name == "value" else None
+
+
+class _ScriptCaptureDriver(_Driver):
+    def __init__(self):
+        super().__init__()
+        self.scripts = []
+
+    def execute_script(self, script, *args):
+        self.scripts.append(script)
+        return ""
+
+
+class _ScriptCaptureEditor(PimboProductEditor):
+    def open_section(self, section):
+        return None
+
+    def _find_visible(self, by, value):
+        return _ValueInput()
 
 
 class _MagicOrderEditor(PimboProductEditor):
@@ -138,6 +209,206 @@ class _LocalizedDescriptionEditor(PimboProductEditor):
     def set_description_html(self, value):
         self.calls.append(f"description:{self.locale}:{value}")
         return self.locale != "en"
+
+
+class _LocalizedNameFallbackEditor(PimboProductEditor):
+    def __init__(self, *, lt_name="", en_name="KROSS Alta 4.0"):
+        super().__init__(_Driver())
+        self.locale = "lt"
+        self.names = {"lt": lt_name, "en": en_name}
+        self.calls = []
+
+    def switch_locale(self, locale):
+        self.locale = locale
+        self.calls.append(f"locale:{locale}")
+
+    def product_name(self):
+        self.calls.append(f"read:{self.locale}")
+        return self.names.get(self.locale, "")
+
+    def set_product_name(self, value):
+        self.calls.append(f"set:{self.locale}:{value}")
+        self.names[self.locale] = value
+        return True
+
+
+class _FamilySelectionEditor(PimboProductEditor):
+    def __init__(self, current):
+        super().__init__(_Driver())
+        self.current = current
+        self.selected = []
+
+    def open_section(self, section):
+        return None
+
+    def _find_visible(self, by, value):
+        return object()
+
+    def _combobox_value(self, placeholder):
+        return self.current
+
+    def _select_combobox(self, placeholder, value, *, required=True):
+        self.selected.append((placeholder, value))
+        self.current = value
+        return True
+
+
+class _EmptyDescriptionEditor(PimboProductEditor):
+    def __init__(self):
+        super().__init__(_Driver())
+        self.clicked = False
+
+    def switch_locale(self, locale):
+        return None
+
+    def open_section(self, section):
+        return None
+
+    def description_html(self):
+        return "<p> </p>"
+
+    def _click(self, element):
+        self.clicked = True
+
+
+class _NoSeoSnapshotEditor(PimboProductEditor):
+    def __init__(self):
+        super().__init__(_Driver())
+        self.locale = "lt"
+
+    def switch_locale(self, locale):
+        self.locale = locale
+
+    def product_name(self):
+        return f"name-{self.locale}"
+
+    def description_html(self):
+        return f"<p>description-{self.locale}</p>"
+
+    def seo_copy(self):
+        raise AssertionError("SEO must never be opened during translation validation")
+
+
+class _CategoryLeafEditor(PimboProductEditor):
+    def __init__(self):
+        super().__init__(_Driver())
+        self.category_reads = 0
+        self.clicks = 0
+
+    def switch_locale(self, locale):
+        return None
+
+    def open_section(self, section):
+        return None
+
+    def _find_visible(self, by, value):
+        return object()
+
+    def _selected_category(self):
+        self.category_reads += 1
+        return "" if self.category_reads == 1 else "Miesto dviračiai"
+
+    def _click(self, element):
+        self.clicks += 1
+
+    def _wait_until(self, predicate, message, timeout=None):
+        result = predicate()
+        if not result:
+            raise AssertionError(message)
+        return result
+
+
+class _MagicElement:
+    def __init__(self, name):
+        self.name = name
+
+    def is_displayed(self):
+        return True
+
+
+class _DescriptionMagicPanel:
+    def __init__(self):
+        self.generate = _MagicElement("generate")
+        self.apply = _MagicElement("apply")
+
+    def find_elements(self, by, value):
+        if "Generate" in value or "Regenerate" in value:
+            return [self.generate]
+        if "Apply" in value:
+            return [self.apply]
+        return []
+
+
+class _DescriptionMagicDriver(_Driver):
+    def __init__(self):
+        super().__init__()
+        self.magic = _MagicElement("magic")
+
+    def find_elements(self, by, value):
+        return [self.magic] if "MagicAI" in value else []
+
+
+class _PolishDescriptionMagicEditor(PimboProductEditor):
+    SOURCE = "<p>Pełny opis produktu KROSS ze wszystkimi informacjami.</p>"
+
+    def __init__(self):
+        super().__init__(_DescriptionMagicDriver())
+        self.current = self.SOURCE
+        self.panel = _DescriptionMagicPanel()
+        self.panel_open = False
+        self.restored = []
+        self.translated_sources = []
+
+    def switch_locale(self, locale):
+        return None
+
+    def open_section(self, section):
+        return None
+
+    def description_html(self):
+        return self.current
+
+    def _magic_panel(self, title):
+        return self.panel if self.panel_open else None
+
+    def _choose_magic_template(self, panel, template):
+        return None
+
+    def _wait_magic_apply(self, panel):
+        return None
+
+    def _click(self, element):
+        if element.name == "magic":
+            self.panel_open = True
+        elif element.name == "generate":
+            self.current = "<p>Wygenerowany opis nadal jest po polsku.</p>"
+        elif element.name == "apply":
+            self.panel_open = False
+
+    def _wait_until(self, predicate, message, timeout=None):
+        result = predicate()
+        if not result:
+            raise AssertionError(message)
+        return result
+
+    def set_description_html(self, value):
+        self.current = value
+        self.restored.append(value)
+        return True
+
+    def translate_current_description_to_lt(self, generated_html):
+        self.translated_sources.append(generated_html)
+        self.current = (
+            "<p>Šis išsamus KROSS dviračio aprašymas buvo išverstas į lietuvių "
+            "kalbą ir išsaugo visas svarbiausias produkto savybes.</p>"
+        )
+        return self.current
+
+
+class _FailedDescriptionTranslationEditor(_PolishDescriptionMagicEditor):
+    def translate_current_description_to_lt(self, generated_html):
+        self.translated_sources.append(generated_html)
+        raise PimAutomationError("field translator unavailable")
 
 
 class PimboWorkflowTests(unittest.TestCase):
@@ -202,10 +473,20 @@ class PimboWorkflowTests(unittest.TestCase):
         stale = _ReviewEditor(dirty=False, version=3).verify_manual_save(ready)
         self.assertEqual(PimPreparationStatus.FAILED, stale.status)
 
-    def test_current_editor_exposes_no_automatic_save_operation(self):
-        self.assertFalse(hasattr(PimboProductEditor, "save"))
-        self.assertFalse(hasattr(PimboProductEditor, "save_information"))
-        self.assertFalse(hasattr(PimboProductEditor, "automatic_save_disabled"))
+    def test_explicit_automatic_save_requires_a_ready_draft_and_version_increment(self):
+        ready = PimPreparationResult(
+            product_code="SKU-1",
+            product_id="p-1",
+            initial_version=4,
+            status=PimPreparationStatus.READY_FOR_REVIEW,
+        )
+        saved = _AutomaticSaveEditor().save_and_verify(ready)
+        self.assertEqual(PimPreparationStatus.SAVED_AUTOMATICALLY, saved.status)
+
+        blocked = _AutomaticSaveEditor().save_and_verify(
+            ready.with_status(PimPreparationStatus.FAILED)
+        )
+        self.assertEqual(PimPreparationStatus.FAILED, blocked.status)
 
     def test_localized_descriptions_use_one_editor_and_return_to_lt(self):
         editor = _LocalizedDescriptionEditor()
@@ -232,6 +513,127 @@ class PimboWorkflowTests(unittest.TestCase):
         self.assertEqual(2, count)
         self.assertEqual("general", editor.opened)
         self.assertEqual("C:\\one.jpg\nC:\\two.png", driver.file_input.value)
+
+    def test_table_images_are_routed_to_distinct_semantic_upload_areas(self):
+        driver = _GroupedFileDriver()
+        editor = _GroupedFileEditor(driver)
+
+        editor.upload_product_images([r"C:\bike.jpg"], skip_if_present=False)
+        editor.upload_size_table_images([r"C:\size.png"], skip_if_present=False)
+        editor.upload_geometry_images([r"C:\geometry.png"], skip_if_present=False)
+
+        self.assertEqual(r"C:\bike.jpg", driver.inputs[0].value)
+        self.assertEqual(r"C:\size.png", driver.inputs[1].value)
+        self.assertEqual(r"C:\geometry.png", driver.inputs[2].value)
+
+    def test_table_upload_never_falls_back_to_product_photo_input(self):
+        driver = _GroupedFileDriver()
+        driver.inputs = [_GroupedFileInput("Product images")]
+        editor = _GroupedFileEditor(driver)
+
+        with self.assertRaisesRegex(PimAutomationError, "Size tables"):
+            editor.upload_size_table_images([r"C:\size.png"], skip_if_present=False)
+        self.assertEqual("", driver.inputs[0].value)
+
+    def test_combobox_browser_script_keeps_newline_regex_on_one_line(self):
+        driver = _ScriptCaptureDriver()
+        editor = _ScriptCaptureEditor(driver)
+
+        editor._combobox_value("Search brands...")
+
+        script = driver.scripts[-1]
+        self.assertIn(r"split(/\n/)", script)
+        self.assertNotIn("split(/\n/)", script)
+
+    def test_product_family_replaces_draft_instead_of_treating_it_as_family(self):
+        editor = _FamilySelectionEditor("Draft")
+
+        changed = editor.ensure_product_family("Dviračiai")
+
+        self.assertTrue(changed)
+        self.assertEqual(
+            [("Search families...", "Dviračiai")],
+            editor.selected,
+        )
+
+    def test_description_magicai_is_never_opened_for_an_empty_source(self):
+        editor = _EmptyDescriptionEditor()
+
+        with self.assertRaisesRegex(PimAutomationError, "source is empty"):
+            editor.generate_description()
+
+        self.assertFalse(editor.clicked)
+
+    def test_localized_copy_snapshot_never_reads_or_opens_seo(self):
+        editor = _NoSeoSnapshotEditor()
+
+        snapshot = editor.localized_copy_snapshot("en")
+
+        self.assertEqual(
+            {"name": "name-en", "description": "<p>description-en</p>"},
+            snapshot,
+        )
+
+    def test_empty_lithuanian_name_is_seeded_from_english_and_returns_to_lt(self):
+        editor = _LocalizedNameFallbackEditor()
+
+        changed = editor.ensure_lithuanian_name_from_english()
+
+        self.assertTrue(changed)
+        self.assertEqual("KROSS Alta 4.0", editor.names["lt"])
+        self.assertEqual("lt", editor.locale)
+        self.assertEqual(
+            [
+                "locale:lt", "read:lt", "locale:en", "read:en",
+                "locale:lt", "set:lt:KROSS Alta 4.0", "read:lt",
+            ],
+            editor.calls,
+        )
+
+    def test_existing_lithuanian_name_is_never_replaced_from_english(self):
+        editor = _LocalizedNameFallbackEditor(lt_name="KROSS Alta 4.0 LT")
+
+        changed = editor.ensure_lithuanian_name_from_english()
+
+        self.assertFalse(changed)
+        self.assertEqual("KROSS Alta 4.0 LT", editor.names["lt"])
+        self.assertNotIn("locale:en", editor.calls)
+
+    def test_category_magicai_accepts_a_valid_leaf_category_in_one_click(self):
+        editor = _CategoryLeafEditor()
+
+        result = editor.suggest_category("Dviračiai")
+
+        self.assertTrue(result.success)
+        self.assertTrue(result.changed)
+        self.assertEqual("Miesto dviračiai", result.detail)
+        self.assertEqual(1, editor.clicks)
+
+    def test_non_lithuanian_description_magicai_translates_current_field_to_lt(self):
+        editor = _PolishDescriptionMagicEditor()
+
+        result = editor.generate_description()
+
+        self.assertTrue(result.success)
+        self.assertTrue(result.changed)
+        self.assertIn("Translate current field", result.detail)
+        self.assertEqual(
+            ["<p>Wygenerowany opis nadal jest po polsku.</p>"],
+            editor.translated_sources,
+        )
+        self.assertIn("lietuvių kalbą", editor.current)
+        self.assertEqual([], editor.restored)
+
+    def test_failed_description_field_translation_restores_kross_source(self):
+        editor = _FailedDescriptionTranslationEditor()
+
+        result = editor.generate_description()
+
+        self.assertTrue(result.success)
+        self.assertFalse(result.changed)
+        self.assertIn("translation failed", result.detail)
+        self.assertEqual(editor.SOURCE, editor.current)
+        self.assertEqual([editor.SOURCE], editor.restored)
 
     def test_magic_ai_orchestration_order_and_lt_return(self):
         editor = _MagicOrderEditor()
@@ -261,7 +663,7 @@ class PimboWorkflowTests(unittest.TestCase):
         )
         self.assertEqual((0,), overwritten)
 
-    def test_translation_validation_requires_name_description_seo_and_change(self):
+    def test_translation_validation_never_requires_or_reads_seo(self):
         before = {
             code: {"name": "old", "description": "<p>old</p>", "seo": {"title": "old"}}
             for code in ("en", "lv", "ee")
@@ -272,7 +674,16 @@ class PimboWorkflowTests(unittest.TestCase):
         }
         self.assertEqual("", PimboProductEditor._translation_validation_error(before, after))
         after["ee"]["seo"] = {}
-        self.assertIn("EE SEO is empty", PimboProductEditor._translation_validation_error(before, after))
+        self.assertEqual("", PimboProductEditor._translation_validation_error(before, after))
+
+    def test_description_guard_rejects_magicai_request_for_more_source_data(self):
+        self.assertFalse(
+            _is_lithuanian_copy(
+                "Supratau. Prašau pateikti turimus produkto duomenis, aprašymą, "
+                "specifikacijas ar kitą techninę informaciją, ir aš nedelsdamas "
+                "sugeneruosiu struktūrizuotą HTML aprašymą pagal reikalavimus."
+            )
+        )
 
     def test_lithuanian_description_guard(self):
         self.assertTrue(
@@ -387,6 +798,35 @@ class PimboWorkflowTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "will not discard"):
                 client.ensure_products_page()
         self.assertEqual(0, driver.navigation_calls)
+
+    def test_pimbo_safe_click_falls_back_when_sticky_toolbar_intercepts_pointer(self):
+        class Element:
+            def __init__(self):
+                self.native_clicks = 0
+
+            def click(self):
+                self.native_clicks += 1
+                raise RuntimeError("element click intercepted")
+
+        class Driver(_Driver):
+            def __init__(self):
+                super().__init__()
+                self.dom_clicks = 0
+
+            def execute_script(self, script, _element):
+                if "arguments[0].click" in script:
+                    self.dom_clicks += 1
+
+        driver = Driver()
+        element = Element()
+        clicked = PimboBrowserClient(driver)._safe_click(
+            lambda: element,
+            "covered control",
+        )
+
+        self.assertIs(element, clicked)
+        self.assertEqual(1, element.native_clicks)
+        self.assertEqual(1, driver.dom_clicks)
 
 
 if __name__ == "__main__":

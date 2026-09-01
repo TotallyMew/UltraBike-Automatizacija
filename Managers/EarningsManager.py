@@ -529,8 +529,9 @@ class EarningsManager:
     ) -> int:
         """Update shared metadata for several earnings in one transaction.
 
-        Payouts are historical snapshots and are deliberately preserved when
-        the product type is corrected in bulk.
+        A product-type correction refreshes each entry's payout from the
+        current rate, matching single-entry editing. Other bulk edits preserve
+        the existing payout snapshots.
         """
 
         ids = tuple(dict.fromkeys(int(entry_id) for entry_id in entry_ids))
@@ -569,6 +570,8 @@ class EarningsManager:
         if ptype is not None:
             assignments.append("product_type=?")
             values.append(ptype)
+            assignments.append("payout_cents=?")
+            values.append(self.get_rate_cents(ptype))
         if earned_stamp is not None:
             assignments.append("earned_at=?")
             values.append(earned_stamp)

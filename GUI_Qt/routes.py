@@ -89,6 +89,8 @@ ROUTES = (
               _lazy("GUI_Qt.screens.OakleyUrlGetterScreen", "OakleyUrlGetterScreen", "oakley_url_getter_screen")),
     RouteSpec("orbea", "nav.orbea", "brand_tools", FluentIcon.ROBOT,
               _lazy("GUI_Qt.screens.OrbeaScreen", "OrbeaScreen", "orbea_screen")),
+    RouteSpec("kross", "nav.kross", "brand_tools", FluentIcon.ROBOT,
+              _lazy("GUI_Qt.screens.KrossScreen", "KrossScreen", "kross_screen")),
     RouteSpec("account", "nav.account", "system", FluentIcon.PEOPLE,
               _lazy("GUI_Qt.screens.AccountScreen", "AccountScreen", "account_screen")),
     RouteSpec("settings", "nav.settings", "system", FluentIcon.SETTING,

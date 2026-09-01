@@ -95,8 +95,8 @@ class SettingsManager:
             ('window_maximized', 'false', 'bool', 'ui',
              'Whether the main window was maximized', 'false'),
 
-            ('navigation_compact', 'false', 'bool', 'ui',
-             'Last navigation rail state', 'false'),
+            ('navigation_compact', 'true', 'bool', 'ui',
+             'Last navigation rail state', 'true'),
 
             ('last_authenticated_route', 'upload', 'string', 'ui',
              'Last authenticated page route', 'upload'),
@@ -187,6 +187,23 @@ class SettingsManager:
                             cursor.execute(
                                 "UPDATE settings SET value=?, default_value=? WHERE key=?",
                                 (DEFAULT_UPDATE_MANIFEST_URL, DEFAULT_UPDATE_MANIFEST_URL, key),
+                            )
+                    except Exception:
+                        pass
+                elif key == 'navigation_compact':
+                    # Older builds recorded the desktop-width layout as an
+                    # expanded preference even when the user had not opened
+                    # the rail. Migrate that legacy default once; subsequent
+                    # explicit user choices retain the new ``true`` default.
+                    try:
+                        row = cursor.execute(
+                            "SELECT default_value FROM settings WHERE key = ?",
+                            (key,),
+                        ).fetchone()
+                        if row and str(row[0]).strip().lower() == 'false':
+                            cursor.execute(
+                                "UPDATE settings SET value='true', default_value='true' WHERE key=?",
+                                (key,),
                             )
                     except Exception:
                         pass

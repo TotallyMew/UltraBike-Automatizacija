@@ -29,11 +29,11 @@ class PimboFilterOptions:
 
 @dataclass(frozen=True)
 class PimboFilterSpec:
-    """The Pimbo filters exposed by the Orbea tab.
+    """Shared PIMBO product-list filters used by supplier automations.
 
-    The search term and Brand control intentionally are not configurable. The
-    service always searches for ``orbea`` and resets Brand to ``All brands``.
-    Select values are the opaque values discovered from Pimbo, not labels.
+    The supplier search term is supplied by each browser client and Brand is
+    reset to ``All brands``. Select values are the opaque values discovered
+    from PIMBO, not labels.
     """
 
     statuses: tuple[str, ...] = ("Draft",)

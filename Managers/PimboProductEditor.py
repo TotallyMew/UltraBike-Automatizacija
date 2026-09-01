@@ -1,8 +1,8 @@
 """Current OmnioPIM product editor automation.
 
-This module is the single write-capable boundary used by the desktop app.  It
-intentionally has no save operation: all changes remain in the browser until a
-person reviews the product and clicks Save in PIMBO.
+This module is the single write-capable boundary used by the desktop app.
+Changes remain reviewable by default; automatic Save is a separate, explicit
+operation guarded by Draft/product/version verification.
 """
 
 from __future__ import annotations
@@ -26,7 +26,9 @@ PIMBO_LOGIN_URL = "https://pim.bo.ultrabike.lt/dashboard/login"
 
 class PimPreparationStatus(str, Enum):
     READY_FOR_REVIEW = "ready_for_review"
+    NO_CHANGES = "no_changes"
     SAVED_MANUALLY = "saved_manually"
+    SAVED_AUTOMATICALLY = "saved_automatically"
     BLOCKED_NON_DRAFT = "blocked_non_draft"
     DISCARDED = "discarded"
     FAILED = "failed"
@@ -147,7 +149,17 @@ def _is_lithuanian_copy(value: str) -> bool:
         " ir ", " su ", " yra ", " bei ", " kad ", " skirt", " užtikrin",
         " dvira", " rėm", " važ", "ė", "ų", "š", "ž",
     )
-    return sum(marker in text for marker in markers) >= 3
+    rejected = (
+        "prašau pateikti",
+        "pateikite produkto duomenis",
+        "turimus produkto duomenis",
+        "negaliu sugeneruoti",
+        "neturiu produkto duomenų",
+    )
+    return (
+        sum(marker in text for marker in markers) >= 3
+        and not any(marker in text for marker in rejected)
+    )
 
 
 class PimboProductEditor:
@@ -163,6 +175,17 @@ class PimboProductEditor:
         "metadata": "metadata",
     }
     LOCALES = ("lt", "en", "lv", "ee")
+    IMAGE_GROUP_ALIASES = {
+        "geometry": ("geometry", "geometrija"),
+        "size_tables": (
+            "size tables",
+            "size table",
+            "size charts",
+            "size chart",
+            "dydžių lentelės",
+            "dydziu lenteles",
+        ),
+    }
 
     def __init__(
         self,
@@ -288,7 +311,7 @@ class PimboProductEditor:
                   (node.textContent || '').replace('*', '').trim().toLowerCase() === 'status');
                 let current = label?.parentElement;
                 for (let depth = 0; current && depth < 6; depth++, current = current.parentElement) {
-                  const lines = (current.innerText || '').split(/\n/)
+                  const lines = (current.innerText || '').split(/\\n/)
                     .map(v => v.trim().toLowerCase()).filter(Boolean);
                   const status = lines.find(line => allowed.has(line));
                   if (status) return status;
@@ -402,13 +425,23 @@ class PimboProductEditor:
             """
             const input = arguments[0];
             const placeholder = (arguments[1] || '').toLowerCase();
+            const scopes = [];
+            const combo = input.closest('[role="combobox"]');
+            if (combo) scopes.push(combo);
             let node = input.parentElement;
-            for (let depth = 0; node && depth < 5; depth++, node = node.parentElement) {
-              const values = (node.innerText || '').split(/\n/)
+            for (let depth = 0; node && depth < 4; depth++, node = node.parentElement) {
+              if (!scopes.includes(node)) scopes.push(node);
+            }
+            for (const scope of scopes) {
+              const matchingInputs = scope.querySelectorAll(
+                `input[placeholder="${CSS.escape(arguments[1] || '')}"]`
+              );
+              if (matchingInputs.length > 1) continue;
+              const values = (scope.innerText || '').split(/\\n/)
                 .map(v => v.trim()).filter(Boolean)
                 .filter(v => !v.toLowerCase().includes(placeholder.replace('...', '')))
-                .filter(v => !/^(brand|product family|family|product categories|categories|category|required)$/i.test(v));
-              if (values.length) return values[values.length - 1];
+                .filter(v => !/^(brand|product family|family|product categories|categories|category|required|draft|in review|published|disabled|status)$/i.test(v));
+              if (values.length) return values[0];
             }
             return '';
             """,
@@ -568,6 +601,31 @@ class PimboProductEditor:
         self._set_input_value(field, value)
         return True
 
+    def ensure_lithuanian_name_from_english(self) -> bool:
+        """Seed an empty LT product name from EN and finish in the LT locale."""
+
+        self.switch_locale("lt")
+        if self.product_name():
+            return False
+
+        english_name = ""
+        try:
+            self.switch_locale("en")
+            english_name = self.product_name()
+        finally:
+            self.switch_locale("lt")
+
+        if not english_name:
+            raise PimAutomationError(
+                "Lithuanian Product Name is empty and the English fallback is also empty"
+            )
+        changed = self.set_product_name(english_name)
+        if not self.product_name():
+            raise PimAutomationError(
+                "English Product Name was not retained in the Lithuanian field"
+            )
+        return changed
+
     def description_html(self) -> str:
         self.open_section("general")
         iframe = self._find_visible(By.CSS_SELECTOR, "main iframe.tox-edit-area__iframe")
@@ -582,25 +640,62 @@ class PimboProductEditor:
 
     def set_description_html(self, value: str) -> bool:
         self.open_section("general")
+        before = self.description_html()
+        if before == value:
+            return False
+        # Re-resolve after reading the old value because switching in and out of
+        # the iframe can invalidate a React-owned element reference.
+        self.open_section("general")
         iframe = self._wait_until(
             lambda: self._find_visible(By.CSS_SELECTOR, "main iframe.tox-edit-area__iframe"),
             "HugeRTE description iframe was not found",
         )
-        before = self.description_html()
-        if before == value:
-            return False
         try:
             self.driver.switch_to.frame(iframe)
             body = self.driver.find_element(By.ID, "hugerte")
             self.driver.execute_script(
-                "arguments[0].innerHTML=arguments[1];"
-                "arguments[0].dispatchEvent(new Event('input',{bubbles:true}));"
-                "arguments[0].dispatchEvent(new Event('change',{bubbles:true}));",
+                """
+                const body = arguments[0];
+                const value = arguments[1];
+                const editor = window.parent.tinymce?.activeEditor;
+                if (editor && editor.getBody && editor.getBody() === body) {
+                  editor.setContent(value);
+                  editor.fire('input');
+                  editor.fire('change');
+                  editor.save();
+                } else {
+                  body.focus();
+                  body.innerHTML = value;
+                  try {
+                    body.dispatchEvent(new InputEvent('input', {
+                      bubbles: true, inputType: 'insertFromPaste', data: value
+                    }));
+                  } catch (_) {
+                    body.dispatchEvent(new Event('input', {bubbles: true}));
+                  }
+                  body.dispatchEvent(new Event('change', {bubbles: true}));
+                  body.dispatchEvent(new Event('blur', {bubbles: true}));
+                }
+                """,
                 body,
                 value,
             )
         finally:
             self.driver.switch_to.default_content()
+        expected_text = _strip_html(value)
+        self._wait_until(
+            lambda: (
+                current
+                if (current := _strip_html(self.description_html()))
+                and (
+                    current == expected_text
+                    or expected_text[:160] in current
+                )
+                else ""
+            ),
+            "PIMBO did not retain the pasted KROSS description",
+            6.0,
+        )
         return True
 
     def set_localized_descriptions(
@@ -660,47 +755,149 @@ class PimboProductEditor:
     def set_brand(self, brand: str) -> bool:
         return self._select_combobox("Search brands...", brand)
 
+    def product_family(self) -> str:
+        return self._combobox_value("Search families...")
+
     def ensure_product_family(self, expected: str = "Dviračiai") -> bool:
         self.open_section("general")
         field = self._find_visible(By.CSS_SELECTOR, "main input[placeholder='Search families...']")
         if field is None:
             raise PimAutomationError("Product Family combobox was not found")
         current = self._combobox_value("Search families...")
-        if current:
-            if current.casefold() != expected.casefold():
-                raise PimAutomationError(
-                    f"Product Family is {current!r}; expected {expected!r}"
-                )
+        if current.casefold() == expected.casefold():
             return False
+        # The family is an explicit workflow choice. A stale/incorrect current
+        # value must be replaced, not treated as a reason to abandon the run.
         return self._select_combobox("Search families...", expected)
 
-    def upload_product_images(self, paths: Iterable[str], *, skip_if_present: bool = True) -> int:
+    def _image_input_context(self, element: Any) -> str:
+        """Return text identifying the smallest upload area around a file input."""
+
+        try:
+            context = self.driver.execute_script(
+                """
+                const input = arguments[0];
+                const selector = "input[type='file'][accept*='image']";
+                const parts = [
+                  input.name, input.id, input.getAttribute('aria-label'),
+                  input.getAttribute('data-testid'), input.getAttribute('data-slot')
+                ].filter(Boolean);
+                if (input.id) {
+                  const label = document.querySelector(`label[for="${CSS.escape(input.id)}"]`);
+                  if (label) parts.push(label.innerText || label.textContent || '');
+                }
+                let node = input.parentElement;
+                for (let depth = 0; node && depth < 8; depth++, node = node.parentElement) {
+                  if (node.querySelectorAll(selector).length !== 1) break;
+                  parts.push(node.innerText || node.textContent || '');
+                }
+                return parts.join(' ');
+                """,
+                element,
+            )
+        except Exception:
+            context = ""
+        attributes: list[str] = []
+        for name in ("name", "id", "aria-label", "data-testid", "data-slot"):
+            try:
+                attributes.append(str(element.get_attribute(name) or ""))
+            except Exception:
+                continue
+        return _clean(" ".join((str(context or ""), *attributes))).casefold()
+
+    def _image_file_inputs(self) -> list[Any]:
+        selector = "main input[type='file'][accept*='image']"
+        # Upload controls are commonly visually hidden, but Selenium can still
+        # assign local paths directly without opening the native file dialog.
+        # Keep every input so visible and hidden upload groups can be classified
+        # together instead of accidentally dropping Geometry or Size tables.
+        return list(self.driver.find_elements(By.CSS_SELECTOR, selector))
+
+    def _image_group_input(self, group: str) -> Any:
+        inputs = self._image_file_inputs()
+        if not inputs:
+            raise PimAutomationError("PIMBO image file inputs were not found")
+        contexts = [(element, self._image_input_context(element)) for element in inputs]
+        reserved_aliases = tuple(
+            alias.casefold()
+            for aliases in self.IMAGE_GROUP_ALIASES.values()
+            for alias in aliases
+        )
+        if group == "product":
+            candidates = [
+                element
+                for element, context in contexts
+                if not any(alias in context for alias in reserved_aliases)
+            ]
+            if candidates:
+                return candidates[0]
+            if len(inputs) == 1:
+                return inputs[0]
+            raise PimAutomationError(
+                "PIMBO product-photo upload area could not be distinguished from table images"
+            )
+
+        aliases = self.IMAGE_GROUP_ALIASES.get(group)
+        if not aliases:
+            raise ValueError(f"Unknown PIMBO image group: {group}")
+        matches = [
+            element
+            for element, context in contexts
+            if any(alias.casefold() in context for alias in aliases)
+        ]
+        if len(matches) == 1:
+            return matches[0]
+        label = "Geometry" if group == "geometry" else "Size tables"
+        if not matches:
+            raise PimAutomationError(f"PIMBO {label!r} image upload area was not found")
+        raise PimAutomationError(f"PIMBO {label!r} image upload area is ambiguous")
+
+    def _upload_images_to_group(
+        self,
+        paths: Iterable[str],
+        group: str,
+        *,
+        skip_if_present: bool,
+    ) -> int:
         self.open_section("general")
         files = [str(path) for path in paths if str(path)]
         if not files:
             return 0
-        if skip_if_present:
+        if skip_if_present and group == "product":
             remove_buttons = self._displayed(
                 self.driver.find_elements(By.XPATH, "//main//button[@aria-label='Remove image']")
             )
             if remove_buttons:
                 return 0
-        inputs = self._displayed(
-            self.driver.find_elements(
-                By.CSS_SELECTOR,
-                "main input[type='file'][multiple][accept*='image']",
-            )
-        )
-        if not inputs:
-            # File inputs are commonly hidden but Selenium can still send paths.
-            inputs = self.driver.find_elements(
-                By.CSS_SELECTOR,
-                "main input[type='file'][multiple][accept*='image']",
-            )
-        if not inputs:
-            raise PimAutomationError("Product image file input was not found")
-        inputs[0].send_keys("\n".join(files))
+        image_input = self._image_group_input(group)
+        image_input.send_keys("\n".join(files))
         return len(files)
+
+    def upload_product_images(self, paths: Iterable[str], *, skip_if_present: bool = True) -> int:
+        return self._upload_images_to_group(
+            paths,
+            "product",
+            skip_if_present=skip_if_present,
+        )
+
+    def upload_geometry_images(self, paths: Iterable[str], *, skip_if_present: bool = True) -> int:
+        return self._upload_images_to_group(
+            paths,
+            "geometry",
+            skip_if_present=skip_if_present,
+        )
+
+    def upload_size_table_images(
+        self,
+        paths: Iterable[str],
+        *,
+        skip_if_present: bool = True,
+    ) -> int:
+        return self._upload_images_to_group(
+            paths,
+            "size_tables",
+            skip_if_present=skip_if_present,
+        )
 
     def attribute_value(self, name: str) -> str | None:
         self.open_section("attributes")
@@ -909,6 +1106,10 @@ class PimboProductEditor:
         self.switch_locale("lt")
         self.open_section("general")
         before = self.description_html()
+        if not _strip_html(before):
+            raise PimAutomationError(
+                "Description source is empty; Description MagicAI was not run"
+            )
         for attempt in (1, 2):
             buttons = self._displayed(
                 self.driver.find_elements(By.XPATH, "//main//button[normalize-space()='MagicAI']")
@@ -933,8 +1134,41 @@ class PimboProductEditor:
                 generated = self.description_html()
                 if _is_lithuanian_copy(generated):
                     return PimAiStepResult("description", True, generated != before, attempt)
+                # Keep the generated copy and translate this description field
+                # itself into LT. This is intentionally distinct from the
+                # product-wide Translate action.
+                try:
+                    translated = self.translate_current_description_to_lt(generated)
+                    if _is_lithuanian_copy(translated):
+                        return PimAiStepResult(
+                            "description",
+                            True,
+                            translated != before,
+                            attempt,
+                            "MagicAI description translated to Lithuanian using Translate current field",
+                        )
+                    raise PimAutomationError(
+                        "Description field translation did not produce Lithuanian text"
+                    )
+                except Exception as translation_error:
+                    # The original full KROSS description is the safe final
+                    # fallback if the field-level translator itself fails.
+                    self.set_description_html(before)
+                    return PimAiStepResult(
+                        "description",
+                        True,
+                        False,
+                        attempt,
+                        "Description field translation failed; kept the complete "
+                        f"KROSS description ({translation_error})",
+                    )
             except Exception:
                 self._cancel_magic(panel)
+                try:
+                    if self.description_html() != before:
+                        self.set_description_html(before)
+                except Exception:
+                    pass
                 if attempt == 2:
                     raise
         raise PimAutomationError("MagicAI returned a non-Lithuanian or empty description twice")
@@ -950,12 +1184,23 @@ class PimboProductEditor:
         value = self.driver.execute_script(
             """
             const input = arguments[0];
-            let node = input;
-            for (let depth = 0; node && depth < 6; depth++, node = node.parentElement) {
-              const lines = (node.innerText || '').split(/\n/).map(v => v.trim()).filter(Boolean);
-              const candidates = lines.filter(v =>
-                !/search categories|product categor|magicai|suggest categor/i.test(v));
-              if (candidates.length) return candidates[candidates.length - 1];
+            const scopes = [];
+            const combo = input.closest('[role="combobox"]');
+            if (combo) scopes.push(combo);
+            let node = input.parentElement;
+            for (let depth = 0; node && depth < 4; depth++, node = node.parentElement) {
+              if (!scopes.includes(node)) scopes.push(node);
+            }
+            for (const scope of scopes) {
+              const matchingInputs = scope.querySelectorAll(
+                'input[placeholder="Search categories..."]'
+              );
+              if (matchingInputs.length > 1) continue;
+              const candidates = (scope.innerText || '').split(/\\n/)
+                .map(v => v.trim()).filter(Boolean)
+                .filter(v => !/search categories|product categor|magicai|suggest categor/i.test(v))
+                .filter(v => !/^(category|categories|required|draft|in review|published|disabled|status|import)$/i.test(v));
+              if (candidates.length) return candidates[0];
             }
             return '';
             """,
@@ -963,32 +1208,56 @@ class PimboProductEditor:
         )
         return _clean(value)
 
+    @staticmethod
+    def _valid_category(value: str) -> bool:
+        normalized = _clean(value).casefold()
+        return bool(normalized) and normalized not in {
+            "import",
+            "draft",
+            "in review",
+            "published",
+            "disabled",
+            "status",
+            "category",
+            "categories",
+        }
+
     def suggest_category(self, family: str = "Dviračiai") -> PimAiStepResult:
         self.switch_locale("lt")
         self.open_section("general")
-        last_error = ""
-        for attempt in (1, 2):
-            button = self._find_visible(
-                By.CSS_SELECTOR,
-                "main button[title='Suggest categories with MagicAI']",
+        button = self._find_visible(
+            By.CSS_SELECTOR,
+            "main button[title='Suggest categories with MagicAI']",
+        )
+        if button is None:
+            raise PimAutomationError("Category MagicAI button was not found")
+        before = self._selected_category()
+        self._click(button)
+        try:
+            after = self._wait_until(
+                lambda: (
+                    value
+                    if (value := self._selected_category()) != before
+                    and self._valid_category(value)
+                    else ""
+                ),
+                "Category MagicAI did not select a category",
+                30.0,
             )
-            if button is None:
-                raise PimAutomationError("Category MagicAI button was not found")
-            before = self._selected_category()
-            self._click(button)
-            try:
-                after = self._wait_until(
-                    lambda: (value if (value := self._selected_category()) != before else ""),
-                    "Category MagicAI did not change the category",
-                    60.0,
+            return PimAiStepResult("category", True, True, 1, after)
+        except TimeoutException as error:
+            # MagicAI is allowed to retain an already-valid category. Do not
+            # click it a second time and then wait for an artificial change.
+            current = self._selected_category()
+            if current == before and self._valid_category(current):
+                return PimAiStepResult(
+                    "category",
+                    True,
+                    False,
+                    1,
+                    f"MagicAI kept the existing category: {current}",
                 )
-                normalized = after.casefold()
-                if normalized != "import" and normalized.startswith(family.casefold()):
-                    return PimAiStepResult("category", True, after != before, attempt, after)
-                last_error = f"MagicAI suggested invalid category {after!r}"
-            except TimeoutException as error:
-                last_error = str(error)
-        raise PimAutomationError(last_error or "Category MagicAI failed twice")
+            raise PimAutomationError(str(error)) from error
 
     def fill_empty_specifications_with_ai(self, source_text: str) -> PimAiStepResult:
         source_text = str(source_text or "").strip()
@@ -1086,7 +1355,6 @@ class PimboProductEditor:
         return {
             "name": self.product_name(),
             "description": self.description_html(),
-            "seo": self.seo_copy(),
         }
 
     def _select_translation_source_lt(self, panel: Any) -> None:
@@ -1135,6 +1403,170 @@ class PimboProductEditor:
         visible = self._displayed(candidates)
         return visible[0] if visible else (candidates[0] if candidates else None)
 
+    @staticmethod
+    def _checkbox_checked(element: Any) -> bool:
+        return bool(
+            element.is_selected()
+            or element.get_attribute("aria-checked") == "true"
+            or element.get_attribute("data-state") == "checked"
+        )
+
+    def _ensure_translation_checkbox(
+        self,
+        fallback_panel: Any,
+        text: str,
+        expected: bool,
+    ) -> None:
+        panel_title = "MagicAI — Translate product copy"
+
+        def resolve() -> Any | None:
+            panel = self._magic_panel(panel_title) or fallback_panel
+            return self._panel_checkbox(panel, text)
+
+        box = resolve()
+        if box is None:
+            raise PimAutomationError(f"{text} checkbox was not found")
+        if self._checkbox_checked(box) != expected:
+            self._click(box)
+        self._wait_until(
+            lambda: (
+                candidate
+                if (candidate := resolve()) is not None
+                and self._checkbox_checked(candidate) == expected
+                else None
+            ),
+            f"{text} checkbox did not become {'checked' if expected else 'unchecked'}",
+            6.0,
+        )
+
+    def _current_field_translation_panel(self) -> Any | None:
+        phrase = "translate current field"
+        lower = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        upper = "abcdefghijklmnopqrstuvwxyz"
+        dialogs = self._displayed(self.driver.find_elements(
+            By.XPATH,
+            "//*[@role='dialog' and .//*[contains(translate(normalize-space(.), "
+            f"'{lower}', '{upper}'), '{phrase}')]]",
+        ))
+        if dialogs:
+            return dialogs[-1]
+
+        markers = self._displayed(self.driver.find_elements(
+            By.XPATH,
+            "//*[self::label or self::span or self::p or self::div]"
+            "[contains(translate(normalize-space(.), "
+            f"'{lower}', '{upper}'), '{phrase}')]",
+        ))
+        markers.sort(key=lambda item: len(_clean(getattr(item, "text", ""))))
+        for marker in markers:
+            containers = marker.find_elements(
+                By.XPATH,
+                "ancestor::div[.//button[normalize-space()='Translate']][1]",
+            )
+            visible = self._displayed(containers)
+            if visible:
+                return visible[0]
+        return None
+
+    def _description_translate_button(self) -> Any | None:
+        self.open_section("general")
+        iframe = self._find_visible(By.CSS_SELECTOR, "main iframe.tox-edit-area__iframe")
+        if iframe is None:
+            return None
+        xpath = (
+            "ancestor::div[.//button[normalize-space()='Translate' "
+            "or contains(@title, 'Translate')]][1]"
+            "//button[normalize-space()='Translate' or contains(@title, 'Translate')]"
+        )
+        buttons = self._displayed(iframe.find_elements(By.XPATH, xpath))
+        return buttons[0] if buttons else None
+
+    def _select_current_field_translation_target_lt(self, panel: Any) -> None:
+        label_xpath = (
+            ".//*[normalize-space()='Translate to']/following::select[1]"
+        )
+        native = self._displayed(panel.find_elements(By.XPATH, label_xpath))
+        if not native:
+            native = self._displayed(panel.find_elements(By.TAG_NAME, "select"))
+        for element in native:
+            selector = Select(element)
+            for option in selector.options:
+                text = _clean(option.text).casefold()
+                if "lithuanian" in text or "lietuvi" in text or text.startswith("lt"):
+                    selector.select_by_visible_text(option.text)
+                    return
+
+        combos = self._displayed(panel.find_elements(
+            By.XPATH,
+            ".//*[normalize-space()='Translate to']/following::*[@role='combobox'][1]",
+        ))
+        if not combos:
+            combos = self._displayed(panel.find_elements(By.CSS_SELECTOR, "[role='combobox']"))
+        if not combos:
+            raise PimAutomationError("Description Translate to control was not found")
+        self._click(combos[-1])
+        options = self._wait_until(
+            lambda: self._displayed(self.driver.find_elements(
+                By.XPATH,
+                "//*[@role='option' or self::button]"
+                "[contains(normalize-space(), 'Lithuanian') "
+                "or contains(normalize-space(), 'Lietuvi') "
+                "or starts-with(normalize-space(), 'LT')]",
+            )),
+            "Lithuanian (LT) translation target was not found",
+            8.0,
+        )
+        self._click(options[-1])
+
+    def translate_current_description_to_lt(self, generated_html: str) -> str:
+        """Translate the currently generated description field into Lithuanian."""
+
+        self.switch_locale("lt")
+        self.open_section("general")
+        button = self._wait_until(
+            self._description_translate_button,
+            "Description field Translate button was not found",
+            8.0,
+        )
+        self._click(button)
+        panel = self._wait_until(
+            self._current_field_translation_panel,
+            "Description field translation dialog did not open",
+            8.0,
+        )
+        current_field = self._panel_checkbox(panel, "Translate current field")
+        if current_field is None:
+            raise PimAutomationError("Translate current field checkbox was not found")
+        checked = (
+            current_field.is_selected()
+            or current_field.get_attribute("aria-checked") == "true"
+        )
+        if not checked:
+            self._click(current_field)
+        self._select_current_field_translation_target_lt(panel)
+
+        actions = self._displayed(
+            panel.find_elements(By.XPATH, ".//button[normalize-space()='Translate']")
+        )
+        if not actions:
+            raise PimAutomationError("Description field Translate action was not found")
+        self._click(actions[-1])
+        self._wait_until(
+            lambda: self._current_field_translation_panel() is None,
+            "Description field translation did not finish",
+            120.0,
+        )
+        return self._wait_until(
+            lambda: (
+                current
+                if (current := self.description_html()) != generated_html
+                and _is_lithuanian_copy(current)
+                else ""
+            ),
+            "Description field translation did not produce Lithuanian copy",
+            30.0,
+        )
+
     def _run_translation_dialog(self, overwrite: bool) -> None:
         self.switch_locale("lt")
         button = self._wait_until(
@@ -1151,20 +1583,18 @@ class PimboProductEditor:
         )
         self._select_translation_source_lt(panel)
         for language in ("English", "Latvian", "Estonian"):
-            box = self._panel_checkbox(panel, language)
-            if box is None:
-                raise PimAutomationError(f"Translation destination {language!r} was not found")
-            checked = box.is_selected() or box.get_attribute("aria-checked") == "true"
-            if not checked:
-                self._click(box)
+            self._ensure_translation_checkbox(panel, language, True)
+        self._ensure_translation_checkbox(
+            panel,
+            "Overwrite existing translations",
+            overwrite,
+        )
 
-        overwrite_box = self._panel_checkbox(panel, "Overwrite existing translations")
-        if overwrite_box is None:
-            raise PimAutomationError("Overwrite existing translations checkbox was not found")
-        checked = overwrite_box.is_selected() or overwrite_box.get_attribute("aria-checked") == "true"
-        if checked != overwrite:
-            self._click(overwrite_box)
-
+        panel = self._wait_until(
+            lambda: self._magic_panel("MagicAI — Translate product copy"),
+            "PIMBO translation panel disappeared before confirmation",
+            6.0,
+        )
         actions = self._displayed(
             panel.find_elements(By.XPATH, ".//button[normalize-space()='Translate']")
         )
@@ -1189,9 +1619,6 @@ class PimboProductEditor:
                 problems.append(f"{locale.upper()} name is empty")
             if not _strip_html(str(current.get("description") or "")):
                 problems.append(f"{locale.upper()} description is empty")
-            seo = current.get("seo") or {}
-            if not seo or not any(_clean(value) for value in seo.values()):
-                problems.append(f"{locale.upper()} SEO is empty")
             if current == before.get(locale):
                 problems.append(f"{locale.upper()} copy was not updated")
         return "; ".join(problems)
@@ -1306,3 +1733,61 @@ class PimboProductEditor:
         except TimeoutException as error:
             return result.with_status(PimPreparationStatus.FAILED, error=str(error))
         return result.with_status(PimPreparationStatus.SAVED_MANUALLY, error="")
+
+    def save_and_verify(self, result: PimPreparationResult) -> PimPreparationResult:
+        """Save a prepared Draft product and verify the version increment.
+
+        This is intentionally opt-in: callers must have already prepared a
+        ``READY_FOR_REVIEW`` result and explicitly choose an action labelled as
+        saving.  The same checks used for manual-save verification protect
+        against saving a different product or a non-Draft product.
+        """
+
+        if result.status != PimPreparationStatus.READY_FOR_REVIEW:
+            return result.with_status(
+                PimPreparationStatus.FAILED,
+                error="Only a ready_for_review product can be saved automatically",
+            )
+        if self.product_id != result.product_id:
+            return result.with_status(
+                PimPreparationStatus.FAILED,
+                error="A different PIMBO product is open; automatic Save was cancelled",
+            )
+        if self.current_status().casefold() != "draft":
+            return result.with_status(
+                PimPreparationStatus.BLOCKED_NON_DRAFT,
+                error="Product is no longer Draft; automatic Save was cancelled",
+            )
+        if result.initial_version is None:
+            return result.with_status(
+                PimPreparationStatus.FAILED,
+                error="Initial PIMBO product version was not available",
+            )
+
+        button = self.save_button()
+        if button is None or not button.is_enabled() or not self.is_dirty():
+            return result.with_status(
+                PimPreparationStatus.FAILED,
+                error="PIMBO form has no enabled Save action",
+            )
+
+        try:
+            self._click(button)
+            self._wait_until(
+                lambda: not self.is_dirty(),
+                "PIMBO still has unsaved changes after automatic Save",
+                max(self.timeout, 20.0),
+            )
+            self._wait_until(
+                lambda: (
+                    version
+                    if (version := self.current_version()) is not None
+                    and version > result.initial_version
+                    else None
+                ),
+                "PIMBO product version did not increase after automatic Save",
+                max(self.timeout, 20.0),
+            )
+        except Exception as error:
+            return result.with_status(PimPreparationStatus.FAILED, error=str(error))
+        return result.with_status(PimPreparationStatus.SAVED_AUTOMATICALLY, error="")

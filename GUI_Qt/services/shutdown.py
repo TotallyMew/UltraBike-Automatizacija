@@ -11,7 +11,7 @@ class ShutdownService:
         "spec_checker_screen", "name_getter_screen", "code_getter_screen",
         "castelli_url_getter_screen", "castelli_image_downloader_screen",
         "abus_url_getter_screen", "oakley_url_getter_screen",
-        "product_name_getter_screen", "orbea_screen",
+        "product_name_getter_screen", "orbea_screen", "kross_screen",
     )
 
     def __init__(self, main_window):

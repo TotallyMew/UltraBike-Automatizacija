@@ -17,16 +17,22 @@ class OrbeaDescriptionExtractorTests(unittest.TestCase):
     def test_normalize_url_removes_query_and_fragment(self):
         self.assertEqual(
             normalize_orbea_url(
-                "cms.orbea.com/en-au/m/kemen-adv/?campaign=test#handling"
+                "cms.orbea.com/en-au/ordu-m10i-ltd/?campaign=test#handling"
             ),
-            "https://cms.orbea.com/en-au/m/kemen-adv",
+            "https://cms.orbea.com/en-au/ordu-m10i-ltd",
         )
 
     def test_normalize_url_rejects_non_model_page(self):
         with self.assertRaises(ValueError):
             normalize_orbea_url("https://example.com/en-au/m/kemen-adv")
         with self.assertRaises(ValueError):
-            normalize_orbea_url("https://cms.orbea.com/en-au/support")
+            normalize_orbea_url("https://cms.orbea.com/")
+
+    def test_normalize_url_accepts_public_orbea_model_page(self):
+        self.assertEqual(
+            normalize_orbea_url("https://www.orbea.com/en-au/m/ordu"),
+            "https://www.orbea.com/en-au/m/ordu",
+        )
 
     def test_clean_lines_filters_controls_numbers_and_duplicates(self):
         self.assertEqual(

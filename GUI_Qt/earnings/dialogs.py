@@ -293,7 +293,7 @@ class BulkEarningEditDialog(QDialog):
         self.safety_note = CaptionLabel(
             self._t(
                 "earnings.bulk.preserve",
-                "Historical earning amounts, SKUs, names, sources, and work-session links are preserved.",
+                "SKUs, names, sources, and work-session links are preserved. Changing product type updates the earning amount to that type's current rate.",
             )
         )
         self.safety_note.setWordWrap(True)

@@ -157,6 +157,7 @@ class NavigationRouteTests(unittest.TestCase):
                 "abus_url_getter",
                 "oakley_url_getter",
                 "orbea",
+                "kross",
             ],
             "system": ["account", "settings", "info"],
         }
@@ -198,6 +199,7 @@ class NavigationRouteTests(unittest.TestCase):
         self.assertEqual(route_icons["folders"], FluentIcon.FOLDER_ADD)
         self.assertEqual(route_icons["code_getter"], FluentIcon.CODE)
         self.assertEqual(route_icons["orbea"], FluentIcon.ROBOT)
+        self.assertEqual(route_icons["kross"], FluentIcon.ROBOT)
         for key in ("castelli_url_getter", "abus_url_getter", "oakley_url_getter"):
             self.assertEqual(route_icons[key], FluentIcon.LINK)
         for key in ("basso_images", "pinarello_images", "castelli_images"):

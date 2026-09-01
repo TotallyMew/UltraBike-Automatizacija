@@ -98,7 +98,7 @@ def test_bulk_edit_updates_shared_metadata_atomically_and_preserves_payouts(mana
         assert rows[entry_id]["brand_name"] == "Bulk brand"
         assert rows[entry_id]["product_type"] == "frameset"
         assert rows[entry_id]["earned_at"] == "2026-08-04T14:30:00.000000Z"
-        assert rows[entry_id]["payout_cents"] == 100
+        assert rows[entry_id]["payout_cents"] == 275
 
     with pytest.raises(ValueError, match="Unknown earning entry"):
         manager.bulk_update_entries(

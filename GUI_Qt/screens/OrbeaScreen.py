@@ -1206,7 +1206,7 @@ class OrbeaScreen(ResponsiveWidget):
         seen: set[str] = set()
         for candidate in candidates:
             url = candidate.rstrip(".\"'()[]{}<>")
-            if not re.match(r"^https?://cms\.orbea\.com/.+/m/[^/?#]+", url, re.IGNORECASE):
+            if not re.match(r"^https?://(?:cms|www)\.orbea\.com/[^?#\s]+", url, re.IGNORECASE):
                 continue
             key = url.lower()
             if key not in seen:

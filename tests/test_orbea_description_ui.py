@@ -113,20 +113,20 @@ class OrbeaDescriptionUiTests(unittest.TestCase):
 
     def test_config_uses_urls_saved_output_and_browser_choice(self):
         self.screen._description_urls_edit.setPlainText(
-            "https://cms.orbea.com/en-au/m/kemen-adv\n"
-            "https://cms.orbea.com/en-au/m/kemen-adv\n"
+            "https://www.orbea.com/en-au/m/ordu\n"
+            "https://www.orbea.com/en-au/m/ordu\n"
             "https://example.com/not-orbea"
         )
         config = self.screen._create_description_config()
 
-        self.assertEqual(config.urls, ("https://cms.orbea.com/en-au/m/kemen-adv",))
+        self.assertEqual(config.urls, ("https://www.orbea.com/en-au/m/ordu",))
         self.assertEqual(config.output_dir, self.description_output.resolve())
         self.assertEqual(config.browser_name, "edge")
         self.assertFalse(config.show_browser)
 
     def test_extract_runs_in_worker_and_enables_output_folder(self):
         self.screen._description_urls_edit.setPlainText(
-            "https://cms.orbea.com/en-au/m/kemen-adv"
+            "https://www.orbea.com/en-au/m/ordu"
         )
         self.app.processEvents()
         self.assertTrue(self.screen._description_start_btn.isEnabled())

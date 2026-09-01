@@ -8,6 +8,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import QAbstractAnimation, QCoreApplication, QEvent, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
+from qfluentwidgets import NavigationDisplayMode
 
 from GUI_Qt.MainWindow import MainWindow
 
@@ -28,18 +29,51 @@ def test_navigation_stays_hidden_during_startup_loading(tmp_path, monkeypatch) -
         _pump(app)
 
         assert window.navigationInterface.isHidden()
+        assert window.navigationInterface.panel.isHidden()
 
+        # In menu mode QFluentWidgets can detach the panel from the hidden
+        # navigation wrapper and issue a late show directly on the window.
+        panel = window.navigationInterface.panel
+        panel.setParent(window)
+        panel.show()
+        _pump(app)
+        assert panel.isHidden()
+        panel.setParent(window.navigationInterface)
+
+        shell_visibility_transitions = []
+        set_shell_visible = window._set_authenticated_shell_visible
+
+        def record_shell_visibility(visible: bool) -> None:
+            if visible:
+                shell_visibility_transitions.append(
+                    (
+                        window.stackedWidget.currentWidget(),
+                        window._loading_widget.isHidden(),
+                    )
+                )
+            set_shell_visible(visible)
+
+        window._set_authenticated_shell_visible = record_shell_visibility
         window.current_user = "navigation-sidebar-test"
         window.show_main()
         window.cancel_screen_preload()
         _pump(app)
 
+        assert shell_visibility_transitions == [(window._main_container, True)]
         assert window.navigationInterface.isVisible()
+        assert window._loading_widget.isHidden()
+        QTest.qWait(250)
+        _pump(app)
+        assert window.navigationInterface.panel.displayMode == NavigationDisplayMode.COMPACT
+        assert window.settings.get("navigation_compact") is True
 
         window._show_loading("Downloading update...")
+        QTest.qWait(350)
         _pump(app)
 
         assert window.navigationInterface.isVisible()
+        assert window.stackedWidget.currentWidget() is window._loading_widget
+        assert window._loading_widget.isVisible()
     finally:
         window.cancel_screen_preload()
         try:

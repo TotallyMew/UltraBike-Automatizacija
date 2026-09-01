@@ -23,7 +23,7 @@ class ImageHandler:
         if self.logger:
             self.logger.error("ImageHandler", message, exception=exception, **context)
 
-    def download_kross_images(self, url, product_code):
+    def Fdownload_kross_images(self, url, product_code):
         """Download KROSS images and return their local paths."""
 
         self._log("Starting KROSS image download", url=url)

@@ -4,9 +4,9 @@ Manages navigation, state, and screen switching
 """
 
 from PySide6.QtWidgets import QWidget, QStackedWidget, QHBoxLayout, QApplication, QMessageBox
-from PySide6.QtCore import Qt, QTimer, QThread
+from PySide6.QtCore import Qt, QEvent, QTimer, QThread
 from PySide6.QtGui import QFont, QFontMetrics, QColor, QKeySequence, QShortcut
-from qfluentwidgets import FluentWindow, NavigationItemPosition, FluentIcon, MessageBox, InfoBar, InfoBarPosition, isDarkTheme
+from qfluentwidgets import FluentWindow, NavigationDisplayMode, NavigationItemPosition, FluentIcon, MessageBox, InfoBar, InfoBarPosition, isDarkTheme
 
 import threading
 import time
@@ -54,13 +54,17 @@ class MainWindow(FluentWindow):
     def __init__(self):
         super().__init__()
 
+        # QFluentWidgets can temporarily reparent its navigation panel directly
+        # onto the window while choosing a display mode. Guard both the wrapper
+        # and that detachable panel from the moment they are constructed.
+        self._authenticated_shell_visible = False
+        self.navigationInterface.installEventFilter(self)
+        self.navigationInterface.panel.installEventFilter(self)
+        self._apply_navigation_visibility()
+
         # Initialize backend managers
         self.driver = None
         self.current_user = None
-        # The FluentWindow navigation is created before authentication.  Keep
-        # an explicit shell state because FluentWindow may update child
-        # visibility again when the top-level window receives its show event.
-        self._authenticated_shell_visible = False
         self.logger = Logger()
         # Selenium's shared authenticated driver is single-owner. Long-running
         # tools (notably Orbea automation) use this cooperative lease so two
@@ -146,6 +150,7 @@ class MainWindow(FluentWindow):
         self.abus_url_getter_screen = None
         self.oakley_url_getter_screen = None
         self.orbea_screen = None
+        self.kross_screen = None
 
         # Top bar reference
         self.top_bar = None
@@ -286,6 +291,7 @@ class MainWindow(FluentWindow):
                 (getattr(self, 'abus_url_getter_screen', None), "nav.abus_url_getter"),
                 (getattr(self, 'oakley_url_getter_screen', None), "nav.oakley_url_getter"),
                 (getattr(self, 'orbea_screen', None), "nav.orbea"),
+                (getattr(self, 'kross_screen', None), "nav.kross"),
             ]
 
             for screen, key in mapping:
@@ -804,6 +810,7 @@ class MainWindow(FluentWindow):
                 getattr(self, "abus_url_getter_screen", None),
                 getattr(self, "oakley_url_getter_screen", None),
                 getattr(self, "orbea_screen", None),
+                getattr(self, "kross_screen", None),
             ):
                 if screen is not None and hasattr(screen, "retranslate_ui"):
                     try:
@@ -817,14 +824,16 @@ class MainWindow(FluentWindow):
     def _init_window(self):
         """Initialize window layout"""
         # FluentWindow automatically handles navigation layout
-        # Use a desktop-sized label rail and collapse it automatically only
-        # when the content area needs the space.
+        # Start with the compact icon rail. The user can expand it after the
+        # authenticated shell becomes visible.
         self.navigationInterface.setExpandWidth(self.NAVIGATION_EXPAND_WIDTH)
         try:
             self.navigationInterface.setMinimumExpandWidth(1100)
         except Exception:
             pass
-        self.navigationInterface.expand(useAni=False)
+        self.navigationInterface.displayModeChanged.connect(
+            self._on_navigation_display_mode_changed
+        )
 
         # The NavigationInterface shows a return/back button by default.
         # In this app it isn't wired to a stack navigation action, so hide it.
@@ -937,10 +946,14 @@ class MainWindow(FluentWindow):
 
     def _sync_navigation_for_width(self, force: bool = False) -> None:
         """Keep the navigation usable without crowding minimum-size pages."""
+        if not getattr(self, "_authenticated_shell_visible", False):
+            self._apply_navigation_visibility()
+            return
+
         compact = self.width() < 1120
         if force and not compact:
             try:
-                compact = bool(self.settings.get("navigation_compact", False))
+                compact = bool(self.settings.get("navigation_compact", True))
             except Exception:
                 pass
         if not force and compact == self._last_navigation_compact:
@@ -960,6 +973,17 @@ class MainWindow(FluentWindow):
             except Exception:
                 pass
 
+    def _on_navigation_display_mode_changed(self, mode) -> None:
+        """Remember a signed-in user's compact/expanded rail choice."""
+        if not getattr(self, "_authenticated_shell_visible", False):
+            return
+        compact = mode != NavigationDisplayMode.EXPAND
+        self._last_navigation_compact = compact
+        try:
+            self.settings.set("navigation_compact", compact)
+        except Exception:
+            pass
+
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         self._sync_navigation_for_width()
@@ -972,10 +996,28 @@ class MainWindow(FluentWindow):
         # the state once that work has completed so the rail cannot flash in.
         QTimer.singleShot(0, self._apply_navigation_visibility)
 
+    def eventFilter(self, watched, event) -> bool:
+        """Reject late navigation show events until authentication finishes."""
+        navigation = getattr(self, "navigationInterface", None)
+        panel = getattr(navigation, "panel", None) if navigation is not None else None
+        is_navigation_part = watched is navigation or watched is panel
+        if (
+            is_navigation_part
+            and event.type() == QEvent.Type.Show
+            and not getattr(self, "_authenticated_shell_visible", False)
+        ):
+            watched.hide()
+            return True
+        return super().eventFilter(watched, event)
+
     def _apply_navigation_visibility(self) -> None:
         navigation = getattr(self, "navigationInterface", None)
         if navigation is not None:
-            navigation.setVisible(bool(self._authenticated_shell_visible))
+            visible = bool(self._authenticated_shell_visible)
+            navigation.setVisible(visible)
+            panel = getattr(navigation, "panel", None)
+            if panel is not None:
+                panel.setVisible(visible)
 
     def _set_authenticated_shell_visible(self, visible: bool) -> None:
         self._authenticated_shell_visible = bool(visible)
@@ -1283,9 +1325,6 @@ class MainWindow(FluentWindow):
         from GUI_Qt.widgets.TopBar import TopBar
         from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget
 
-        # Show navigation bar
-        self._set_authenticated_shell_visible(True)
-
         # Create top bar if not exists
         if not self.top_bar:
             self.top_bar = TopBar(
@@ -1339,7 +1378,17 @@ class MainWindow(FluentWindow):
             }}
         """)
 
-        self.stackedWidget.setCurrentWidget(self._main_container)
+        # ``FluentWindow`` uses an animated stack. Its default pop-out mode
+        # leaves the loading widget as current until the animation finishes,
+        # so revealing navigation immediately would expose two UI states at
+        # once. Pop the authenticated shell in instead; this changes the
+        # current widget synchronously before navigation becomes visible.
+        self.stackedWidget.setCurrentWidget(self._main_container, popOut=False)
+        if self._loading_widget is not None:
+            self._loading_widget.hide()
+
+        # Show navigation bar after the loading transition has been suppressed.
+        self._set_authenticated_shell_visible(True)
 
         # If any screens were pre-constructed before content_stack existed, add them now.
         self._add_created_screens_to_stack()

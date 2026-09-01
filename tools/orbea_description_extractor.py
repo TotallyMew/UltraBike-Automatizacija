@@ -85,10 +85,10 @@ def normalize_orbea_url(value: str) -> str:
         raw = "https://" + raw
     parsed = urlparse(raw)
     host = parsed.netloc.lower().split(":", 1)[0]
-    if host != "cms.orbea.com":
-        raise ValueError("Only cms.orbea.com model-page URLs are supported")
-    if not parsed.path or "/m/" not in parsed.path.lower():
-        raise ValueError("Expected an Orbea model URL containing /m/")
+    if host not in {"cms.orbea.com", "www.orbea.com"}:
+        raise ValueError("Only www.orbea.com or cms.orbea.com model-page URLs are supported")
+    if not parsed.path or parsed.path == "/":
+        raise ValueError("Expected an Orbea model URL path")
     normalized_path = re.sub(r"/{2,}", "/", parsed.path).rstrip("/")
     return urlunparse(("https", parsed.netloc.lower(), normalized_path, "", "", ""))
 

@@ -7,11 +7,31 @@
 # via Utilities/AppPaths.py so it should NOT be shipped alongside the executable.
 
 from pathlib import Path
+import PySide6
 
 block_cipher = None
 
 # PyInstaller provides SPECPATH; __file__ may be undefined depending on how the spec is executed.
 ROOT = Path(SPECPATH).resolve() if 'SPECPATH' in globals() else Path.cwd().resolve()
+
+# PySide 6.11 is built against a newer Visual C++ runtime than the Python 3.13
+# interpreter on this workstation.  In a one-file build, Python's older root
+# VCRUNTIME wins DLL search order over PySide6's private copy and QtCore fails
+# with WinError 127.  Put PySide's matching runtime at the bundle root.
+_pyside_dir = Path(PySide6.__file__).resolve().parent
+_qt_runtime_binaries = [
+    (str(_pyside_dir / name), ".")
+    for name in (
+        "concrt140.dll",
+        "msvcp140.dll",
+        "msvcp140_1.dll",
+        "msvcp140_2.dll",
+        "msvcp140_codecvt_ids.dll",
+        "vcruntime140.dll",
+        "vcruntime140_1.dll",
+    )
+    if (_pyside_dir / name).is_file()
+]
 
 # Non-sensitive runtime resources that must be available in frozen builds
 _datas = [
@@ -35,7 +55,7 @@ if _icon.exists():
 a = Analysis(
     [str(ROOT / "main.py")],
     pathex=[str(ROOT)],
-    binaries=[],
+    binaries=_qt_runtime_binaries,
     datas=_datas,
     hiddenimports=[
         # Authenticated screens are registered by module name and imported lazily.
@@ -64,6 +84,11 @@ a = Analysis(
         # The Orbea screen loads these services lazily after login. Keep them
         # explicit so frozen builds include the complete workflow.
         "GUI_Qt.screens.OrbeaScreen",
+        "GUI_Qt.screens.KrossScreen",
+        "GUI_Qt.kross.workers",
+        "tools.kross_automation",
+        "tools.kross_automation.dimensions",
+        "tools.kross_automation.service",
         "tools.orbea_automation",
         "tools.orbea_automation.catalogue",
         "tools.orbea_automation.checkpoint",

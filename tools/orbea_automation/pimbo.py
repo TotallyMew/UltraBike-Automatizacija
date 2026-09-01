@@ -50,9 +50,20 @@ def _same_label(left: Any, right: Any) -> bool:
 class PimboBrowserClient:
     """Cancellable controller for the existing authenticated Pimbo driver."""
 
-    def __init__(self, driver: Any, *, cancellation: Any = None) -> None:
+    def __init__(
+        self,
+        driver: Any,
+        *,
+        cancellation: Any = None,
+        search_term: str = "orbea",
+        expected_brand: str | None = "orbea",
+        run_name: str = "Orbea",
+    ) -> None:
         self.driver = driver
         self.cancellation = cancellation
+        self.search_term = _clean(search_term)
+        self.expected_brand = _clean(expected_brand).casefold() if expected_brand else ""
+        self.run_name = _clean(run_name) or "Pimbo"
 
     @staticmethod
     def _by():
@@ -78,7 +89,7 @@ class PimboBrowserClient:
 
     def _check_cancelled(self) -> None:
         if self._cancelled():
-            raise RunCancelled("The Orbea run was stopped")
+            raise RunCancelled(f"The {self.run_name} run was stopped")
 
     def _wait_until(
         self,
@@ -102,6 +113,50 @@ class PimboBrowserClient:
         detail = f": {last_error}" if last_error else ""
         raise TimeoutError(f"{message}{detail}")
 
+    def _safe_click(
+        self,
+        target: Any | Callable[[], Any],
+        message: str,
+        *,
+        attempts: int = 5,
+    ) -> Any:
+        """Click a PIMBO control even when its sticky toolbar overlaps it.
+
+        PIMBO can replace controls while React refreshes the product list, and
+        its fixed header sometimes covers the native WebDriver click point.
+        Re-resolve callable targets on every attempt and use a DOM click when
+        the native pointer click is intercepted.
+        """
+
+        resolve = target if callable(target) else lambda: target
+        last_error: BaseException | None = None
+        for _attempt in range(max(1, attempts)):
+            self._check_cancelled()
+            try:
+                element = resolve()
+                if element is None:
+                    raise RuntimeError("control is not available")
+                try:
+                    self.driver.execute_script(
+                        "arguments[0].scrollIntoView({block:'center', inline:'nearest'});",
+                        element,
+                    )
+                except Exception:
+                    # Some lightweight test drivers do not implement scrolling.
+                    pass
+                try:
+                    element.click()
+                except Exception:
+                    self.driver.execute_script("arguments[0].click();", element)
+                return element
+            except RunCancelled:
+                raise
+            except Exception as error:
+                last_error = error
+                time.sleep(0.15)
+        detail = f": {last_error}" if last_error else ""
+        raise RuntimeError(f"{message}{detail}")
+
     def _on_products_page(self) -> bool:
         return "/dashboard/products" in self.driver.current_url and not re.search(
             r"/dashboard/products/[^/?#]+", self.driver.current_url
@@ -116,7 +171,7 @@ class PimboBrowserClient:
                 if PimboProductEditor(self.driver).is_dirty():
                     raise RuntimeError(
                         "The open PIMBO product has unsaved changes; the read-only "
-                        "Orbea tool will not discard them."
+                        f"{self.run_name} tool will not discard them."
                     )
             self.driver.get(PIMBO_PRODUCTS_URL)
         try:
@@ -158,14 +213,20 @@ class PimboBrowserClient:
         dialog = self._filter_dialog()
         if dialog is not None:
             return dialog
-        self._filter_button().click()
+        self._safe_click(
+            self._filter_button,
+            "The Pimbo Filter button remained covered",
+        )
         return self._wait_until(
             self._filter_dialog, 5.0, "The Pimbo filter dialog did not open"
         )
 
     def _close_filter_dialog(self) -> None:
         if self._filter_dialog() is not None:
-            self._filter_button().click()
+            self._safe_click(
+                self._filter_button,
+                "The Pimbo Filter button remained covered",
+            )
             self._wait_until(
                 lambda: self._filter_dialog() is None,
                 5.0,
@@ -210,7 +271,10 @@ class PimboBrowserClient:
         button = self._button(label)
         if self._button_is_active(button) == active:
             return
-        button.click()
+        self._safe_click(
+            lambda: self._button(label),
+            f"The Pimbo filter {label!r} remained covered",
+        )
         self._wait_until(
             lambda: self._button_is_active(self._button(label)) == active,
             5.0,
@@ -361,15 +425,37 @@ class PimboBrowserClient:
             10.0,
             "The Pimbo search field did not appear",
         )
-        if _clean(search.get_attribute("value")).casefold() != "orbea":
-            search.click()
+        desired = self.search_term
+        if _clean(search.get_attribute("value")).casefold() != desired.casefold():
+            first_search = [search]
+
+            def current_search() -> Any:
+                if first_search:
+                    return first_search.pop()
+                return next(
+                    iter(
+                        self.driver.find_elements(
+                            By.CSS_SELECTOR, "input[placeholder='Search...']"
+                        )
+                    ),
+                    None,
+                )
+
+            search = self._safe_click(
+                current_search,
+                "The Pimbo search field remained covered",
+            )
             search.send_keys(Keys.CONTROL, "a")
-            search.send_keys("orbea")
+            search.send_keys(desired)
             search.send_keys(Keys.ENTER)
             self._wait_until(
-                lambda: _clean(search.get_attribute("value")).casefold() == "orbea",
+                lambda: _clean(
+                    self.driver.find_element(
+                        By.CSS_SELECTOR, "input[placeholder='Search...']"
+                    ).get_attribute("value")
+                ).casefold() == desired.casefold(),
                 5.0,
-                "The fixed Orbea search was not applied",
+                f"The fixed {self.run_name} search was not applied",
             )
 
     def apply_filters(self, spec: PimboFilterSpec) -> None:
@@ -384,8 +470,8 @@ class PimboBrowserClient:
             for label in STATUS_LABELS:
                 self._set_button(label, label in desired_statuses)
 
-            # Brand is deliberately hidden in the Orbea tab. Reset it so the
-            # fixed search is the sole brand restriction.
+            # Brand is deliberately hidden in supplier tabs. Reset it so the
+            # fixed supplier search is the sole brand restriction.
             self._set_select_value("Brand", "")
             self._set_select_value("Family", spec.family_id)
             self._set_select_value("Category", spec.category_id)
@@ -419,7 +505,7 @@ class PimboBrowserClient:
         search = self.driver.find_element(
             By.CSS_SELECTOR, "input[placeholder='Search...']"
         )
-        if _clean(search.get_attribute("value")).casefold() != "orbea":
+        if _clean(search.get_attribute("value")).casefold() != self.search_term.casefold():
             raise RuntimeError("Pimbo search verification failed")
 
         self._open_filter_dialog()
@@ -464,8 +550,8 @@ class PimboBrowserClient:
             brand = _clean(cells[2].text).casefold() if len(cells) > 2 else ""
             status = _clean(cells[6].text) if len(cells) > 6 else ""
             stock = parse_number(cells[5].text) if len(cells) > 5 else None
-            if brand != "orbea":
-                raise RuntimeError("Pimbo returned a non-Orbea row")
+            if self.expected_brand and brand != self.expected_brand:
+                raise RuntimeError(f"Pimbo returned a non-{self.run_name} row")
             if spec.statuses and status not in spec.statuses:
                 raise RuntimeError("Pimbo returned a row outside the selected status filters")
             if spec.stock == "In stock" and (stock or 0) <= 0:
@@ -516,7 +602,10 @@ class PimboBrowserClient:
         current = int(page_input.get_attribute("value") or "1")
         if current == page_number:
             return
-        page_input.click()
+        page_input = self._safe_click(
+            self._page_input,
+            "The Pimbo page field remained covered",
+        )
         page_input.send_keys(Keys.CONTROL, "a")
         page_input.send_keys(str(page_number))
         page_input.send_keys(Keys.ENTER)
@@ -603,7 +692,10 @@ class PimboBrowserClient:
 
         tab = self._wait_until(variants_button, 12.0, "The Variants tab did not appear")
         if tab.get_attribute("aria-selected") != "true":
-            tab.click()
+            tab = self._safe_click(
+                variants_button,
+                "The Pimbo Variants tab remained covered",
+            )
         self._wait_until(
             lambda: tab.get_attribute("aria-selected") == "true"
             and self.driver.find_elements(By.CSS_SELECTOR, "div[role='tabpanel']"),
@@ -660,7 +752,7 @@ class PimboBrowserClient:
             ).get_attribute("value")
         except Exception:
             search = ""
-        if _clean(search).casefold() != "orbea":
+        if _clean(search).casefold() != self.search_term.casefold():
             self.apply_filters(filters)
         self.go_to_page(page)
 
