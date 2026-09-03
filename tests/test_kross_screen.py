@@ -4,18 +4,22 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QWidget
 
 from GUI_Qt.kross.workers import (
     KrossDiscoveryWorker, KrossSkuCollectionWorker, KrossUploadWorker,
 )
 from GUI_Qt.screens.KrossScreen import KrossScreen
+from Managers.PimboProductEditor import PimPreparationResult, PimPreparationStatus
 from tools.kross_automation import (
-    KrossCollectionOptions, KrossDiscoveryResult, KrossMatch, KrossWorkflowOptions,
+    KrossAutomationService, KrossCollectionOptions, KrossDiscoveryResult,
+    KrossMatch, KrossUploadResult, KrossWorkflowOptions,
 )
 
 
@@ -88,6 +92,62 @@ class KrossScreenTests(unittest.TestCase):
             self.screen._manual_skus(),
         )
         self.assertTrue(self.screen._collect_skus_button.isEnabled())
+        self.assertTrue(self.screen._load_pasted_local_button.isEnabled())
+
+    def test_pasted_sku_can_load_an_existing_local_package_without_collection(self):
+        local_match = KrossMatch(
+            "KRIX3Z29X18W009542",
+            "local_ready",
+            kross_url="https://kross.pl/influx-hybrid-3-0",
+            variant_skus=(
+                "KRIX3Z29X18W009542",
+                "KRIX3Z29X19W009543",
+            ),
+            local_folder=str(Path(self.temp.name) / "KRIX3Z29X18W009542"),
+        )
+        self.screen._manual_skus_input.setPlainText(
+            "KRIX3Z29X19W009543\nMISSING-SKU"
+        )
+
+        with patch.object(
+            KrossAutomationService,
+            "load_local_packages",
+            return_value=KrossDiscoveryResult((local_match,)),
+        ):
+            self.screen._load_pasted_local_packages()
+
+        self.assertEqual(1, self.screen._table.rowCount())
+        self.assertEqual(
+            "KRIX3Z29X18W009542",
+            self.screen._table.item(0, 3).text(),
+        )
+        self.assertIn("kross.manual.loaded_local", self.screen._log.toPlainText())
+        self.assertIn("kross.manual.local_missing", self.screen._log.toPlainText())
+
+    def test_successful_upload_row_is_unchecked_for_resume(self):
+        match = KrossMatch(
+            "SKU-1",
+            "local_ready",
+            pimbo_product_id="p-1",
+            local_folder=self.temp.name,
+        )
+        self.screen._populate_table((match,))
+        self.screen._active_upload_total = 1
+        result = KrossUploadResult(
+            match,
+            PimPreparationResult(
+                product_code=match.sku,
+                product_id=match.pimbo_product_id,
+                status=PimPreparationStatus.SAVED_AUTOMATICALLY,
+            ),
+        )
+
+        self.screen._on_upload_result(result)
+
+        self.assertEqual(
+            Qt.CheckState.Unchecked,
+            self.screen._table.item(0, 0).checkState(),
+        )
 
     def test_only_complete_matches_are_selected_for_save(self):
         matches = (
@@ -260,6 +320,116 @@ class KrossScreenTests(unittest.TestCase):
             failures,
         )
         self.assertEqual([True], completions)
+
+    def test_upload_worker_recovers_one_failed_product_and_continues(self):
+        matches = tuple(
+            KrossMatch(
+                f"SKU-{index}",
+                "found",
+                pimbo_product_id=f"p-{index}",
+                pimbo_product_url=(
+                    f"https://pim.bo.ultrabike.lt/dashboard/products/p-{index}"
+                ),
+            )
+            for index in (1, 2)
+        )
+
+        class _Service:
+            def __init__(self):
+                self.uploaded = []
+                self.recovered = []
+
+            def upload_and_save(self, match, _output, *, options, progress):
+                self.uploaded.append(match.sku)
+                status = (
+                    PimPreparationStatus.FAILED
+                    if match.sku == "SKU-1"
+                    else PimPreparationStatus.SAVED_AUTOMATICALLY
+                )
+                return KrossUploadResult(
+                    match,
+                    PimPreparationResult(
+                        product_code=match.sku,
+                        product_id=match.pimbo_product_id,
+                        status=status,
+                        error="first product failed" if status == PimPreparationStatus.FAILED else "",
+                    ),
+                )
+
+            def recover_after_failed_upload(self, match, *, progress):
+                self.recovered.append(match.sku)
+                progress("recovered")
+                return True
+
+        service = _Service()
+        worker = KrossUploadWorker(
+            lambda: service,
+            matches,
+            Path(self.temp.name),
+            KrossWorkflowOptions(),
+        )
+        results = []
+        failures = []
+        logs = []
+        worker.item_finished.connect(results.append)
+        worker.failed.connect(failures.append)
+        worker.progress_changed.connect(logs.append)
+
+        worker.run()
+
+        self.assertEqual(["SKU-1", "SKU-2"], service.uploaded)
+        self.assertEqual(["SKU-1"], service.recovered)
+        self.assertEqual(2, len(results))
+        self.assertEqual([], failures)
+        self.assertIn("recovered", logs)
+
+    def test_upload_worker_stops_before_cascading_when_recovery_is_unsafe(self):
+        matches = tuple(
+            KrossMatch(
+                f"SKU-{index}",
+                "found",
+                pimbo_product_id=f"p-{index}",
+                pimbo_product_url=(
+                    f"https://pim.bo.ultrabike.lt/dashboard/products/p-{index}"
+                ),
+            )
+            for index in (1, 2)
+        )
+
+        class _Service:
+            def __init__(self):
+                self.uploaded = []
+
+            def upload_and_save(self, match, _output, *, options, progress):
+                self.uploaded.append(match.sku)
+                return KrossUploadResult(
+                    match,
+                    PimPreparationResult(
+                        product_code=match.sku,
+                        product_id=match.pimbo_product_id,
+                        status=PimPreparationStatus.FAILED,
+                        error="first product failed",
+                    ),
+                )
+
+            def recover_after_failed_upload(self, _match, *, progress):
+                return False
+
+        service = _Service()
+        worker = KrossUploadWorker(
+            lambda: service,
+            matches,
+            Path(self.temp.name),
+            KrossWorkflowOptions(),
+        )
+        failures = []
+        worker.failed.connect(failures.append)
+
+        worker.run()
+
+        self.assertEqual(["SKU-1"], service.uploaded)
+        self.assertEqual(1, len(failures))
+        self.assertIn("Batch stopped after SKU-1", failures[0])
 
 
 if __name__ == "__main__":

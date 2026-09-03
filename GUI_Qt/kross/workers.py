@@ -215,6 +215,31 @@ class KrossUploadWorker(QThread):
                     )
                     result = KrossUploadResult(match, preparation)
                 self.item_finished.emit(result)
+                if (
+                    not result.succeeded
+                    and index < len(self.matches)
+                    and not self._stop_requested
+                ):
+                    self.progress_changed.emit(
+                        f"{result.match.sku} failed; resetting PIMBO before the next product"
+                    )
+                    try:
+                        recovered = service.recover_after_failed_upload(
+                            result.match,
+                            progress=self.progress_changed.emit,
+                        )
+                    except Exception as recovery_error:
+                        recovered = False
+                        self.progress_changed.emit(
+                            f"Recovery after {result.match.sku} failed: {recovery_error}"
+                        )
+                    if not recovered:
+                        self.failed.emit(
+                            f"Batch stopped after {result.match.sku} so its browser state "
+                            "cannot cause false failures for the remaining products. "
+                            "The unprocessed rows can be run again after checking this product."
+                        )
+                        break
         except Exception as error:
             if not self._stop_requested:
                 self.failed.emit(str(error))

@@ -28,6 +28,11 @@ from Managers.PimboProductEditor import (
     PimPreparationStatus,
     PimboProductEditor,
 )
+from Utilities.TranslationHandler import TranslationHandler
+from .specifications import (
+    KrossSpecificationPlan,
+    build_kross_specification_plan,
+)
 from tools.orbea_automation.models import PimboFilterOptions, PimboFilterSpec
 from tools.orbea_automation.pimbo import PimboBrowserClient
 
@@ -218,6 +223,7 @@ class KrossWorkflowOptions:
         "category_magic_ai",
         "translations",
         "save",
+        "specifications_prefill",
         "specifications_magic_ai",
     )
 
@@ -229,6 +235,7 @@ class KrossWorkflowOptions:
     description_source: bool = True
     description_magic_ai: bool = True
     category_magic_ai: bool = True
+    specifications_prefill: bool = True
     specifications_magic_ai: bool = True
     translations: bool = True
     save: bool = True
@@ -244,6 +251,7 @@ class KrossWorkflowOptions:
             self.size_tables,
             self.geometry,
             self.description_source,
+            self.specifications_prefill,
             self.specifications_magic_ai,
         ))
 
@@ -1210,7 +1218,6 @@ class KrossPimboClient:
 
         try:
             values: set[str] = set()
-            expected = normalize_sku(expected_sku)
             rows = self.driver.find_elements(
                 By.CSS_SELECTOR,
                 "div[role='tabpanel'] table tbody tr[data-slot='table-row']",
@@ -1225,9 +1232,6 @@ class KrossPimboClient:
                     By.CSS_SELECTOR, "a[href*='/dashboard/variants/']"
                 )
                 raw = str(links[0].text if links else cells[0].text).replace("\xa0", " ")
-                normalized = normalize_sku(raw)
-                if expected and expected in normalized:
-                    values.add(expected)
                 for line in raw.splitlines():
                     value = normalize_sku(line)
                     if value:
@@ -1237,9 +1241,6 @@ class KrossPimboClient:
             ):
                 if item.is_displayed():
                     raw = str(item.text or "").replace("\xa0", " ")
-                    normalized = normalize_sku(raw)
-                    if expected and expected in normalized:
-                        values.add(expected)
                     for line in raw.splitlines():
                         value = normalize_sku(line)
                         if value:
@@ -1356,6 +1357,8 @@ class KrossAutomationService:
         pimbo_client_factory: Callable[[Any], KrossPimboClient] = KrossPimboClient,
         pimbo_scanner_factory: Callable[[Any], KrossPimboScanner] = KrossPimboScanner,
         editor_factory: Callable[[Any], PimboProductEditor] = PimboProductEditor,
+        translation_handler: Any = None,
+        db_manager: Any = None,
     ) -> None:
         self.pimbo_driver = pimbo_driver
         self.public_catalog = public_catalog or KrossPublicCatalog(
@@ -1364,6 +1367,9 @@ class KrossAutomationService:
         self.pimbo_client_factory = pimbo_client_factory
         self.pimbo_scanner_factory = pimbo_scanner_factory
         self.editor_factory = editor_factory
+        self.translation_handler = translation_handler
+        if self.translation_handler is None and db_manager is not None:
+            self.translation_handler = TranslationHandler(db_manager)
 
     def discover_filter_options(self) -> PimboFilterOptions:
         return self.pimbo_scanner_factory(self.pimbo_driver).discover_filter_options()
@@ -1837,6 +1843,55 @@ class KrossAutomationService:
         match = re.search(r"/dashboard/products/([^/?#]+)", str(url or ""))
         return match.group(1) if match else ""
 
+    def recover_after_failed_upload(
+        self,
+        match: KrossMatch,
+        *,
+        progress: Callable[[str], None] | None = None,
+    ) -> bool:
+        """Reset a failed batch item without discarding another product's edits.
+
+        A failed MagicAI or upload step can leave PIMBO's Save button dirty. If
+        the batch immediately searches for the next SKU, the normal navigation
+        guard correctly refuses to leave that editor and every remaining item
+        appears to fail. Only reload when the open product id is the id carried
+        by the failed result; otherwise stop and let the operator inspect it.
+        """
+
+        current_url = str(getattr(self.pimbo_driver, "current_url", "") or "")
+        current_id = self._pimbo_product_id(current_url)
+        target_id = match.pimbo_product_id or self._pimbo_product_id(
+            match.pimbo_product_url
+        )
+
+        if current_id:
+            if not target_id or current_id != target_id:
+                if progress:
+                    progress(
+                        f"Could not safely reset {match.sku}: the open PIMBO "
+                        "product is not the verified failed product"
+                    )
+                return False
+
+            editor = self.editor_factory(self.pimbo_driver)
+            if editor.is_dirty():
+                if progress:
+                    progress(
+                        f"Discarding unsaved automation changes for failed {match.sku}"
+                    )
+                self.pimbo_driver.get(current_url)
+                editor = self.editor_factory(self.pimbo_driver)
+                editor.wait_ready()
+                if editor.is_dirty():
+                    raise PimAutomationError(
+                        f"PIMBO still reports unsaved changes for {match.sku} after reload"
+                    )
+
+        self.pimbo_driver.get(PIMBO_PRODUCTS_URL)
+        if progress:
+            progress(f"Browser reset after failed {match.sku}; continuing the batch")
+        return True
+
     def _open_editor(self, match: KrossMatch) -> PimboProductEditor:
         """Open the target without reloading an already-open partial run."""
 
@@ -1907,7 +1962,18 @@ class KrossAutomationService:
                     f"{resolved_match.pimbo_product_name or resolved_match.pimbo_product_id}"
                 )
             try:
-                _saved_match, product = self._read_package(image_root)
+                saved_match, product = self._read_package(image_root)
+                if saved_match is not None:
+                    product_variant_skus = product.variant_skus if product else ()
+                    package_skus = unique_skus((
+                        saved_match.sku,
+                        *saved_match.variant_skus,
+                        *product_variant_skus,
+                    ))
+                    if package_skus and normalize_sku(match.sku) not in package_skus:
+                        raise PimAutomationError(
+                            f"Local package belongs to {saved_match.sku}, not {match.sku}"
+                        )
             except Exception as error:
                 raise PimAutomationError(f"Could not read local KROSS package: {error}") from error
         elif selected.needs_catalogue:
@@ -1966,6 +2032,41 @@ class KrossAutomationService:
                     size_chart_image = size_candidate if size_candidate.is_file() else None
                 if progress:
                     progress(f"Loading selected local KROSS table images for {match.sku}")
+
+                missing_selected_table = (
+                    (selected.geometry and dimensions_image is None)
+                    or (selected.size_tables and size_chart_image is None)
+                )
+                source_url = (product.url if product else "") or match.kross_url
+                if missing_selected_table and source_url:
+                    if progress:
+                        progress(
+                            f"Local KROSS table image is missing; recapturing it for {match.sku}"
+                        )
+                    source_product = product or KrossProductData(
+                        source_url,
+                        match.kross_product_name,
+                        "",
+                        "",
+                        (),
+                    )
+                    if source_product.url != source_url:
+                        source_product = replace(source_product, url=source_url)
+                    try:
+                        captured_dimensions = self.public_catalog.capture_dimensions(
+                            source_product,
+                            image_root / "dimensions-table.png",
+                            log=progress,
+                        )
+                        if selected.geometry:
+                            dimensions_image = captured_dimensions
+                        if selected.size_tables:
+                            size_candidate = image_root / "size-height-table.png"
+                            size_chart_image = (
+                                size_candidate if size_candidate.is_file() else None
+                            )
+                    except Exception as error:
+                        add_warning("KROSS tables", f"Could not recapture missing table: {error}")
             else:
                 if progress:
                     progress(f"Capturing the full KROSS dimensions table for {match.sku}")
@@ -2020,15 +2121,92 @@ class KrossAutomationService:
         family_ready: bool | None = None
         description_ready: bool | None = None
         unsafe_phase_one = False
-        specification_source = (
+        raw_specification_source = (
             product.specification_text
-            if selected.specifications_magic_ai and product
+            if (
+                selected.specifications_prefill
+                or selected.specifications_magic_ai
+            ) and product
             else ""
+        )
+        specification_plan: KrossSpecificationPlan | None = None
+        specification_prefill_ready = True
+        if selected.specifications_prefill:
+            variant_sizes: tuple[str, ...] = ()
+            try:
+                if progress:
+                    progress("Reading PIMBO variant frame sizes for KROSS pre-fill")
+                variant_sizes = tuple(editor.collect_variant_sizes())
+                if variant_sizes:
+                    if progress:
+                        progress(
+                            "Variant frame sizes read — "
+                            f"{', '.join(variant_sizes)}"
+                        )
+                else:
+                    specification_prefill_ready = False
+                    if selected.save:
+                        unsafe_phase_one = True
+                    add_warning(
+                        "KROSS specification pre-fill",
+                        "No frame sizes were found in PIMBO Variants; "
+                        "the product was not pre-filled or saved",
+                    )
+            except Exception as error:
+                specification_prefill_ready = False
+                if selected.save:
+                    unsafe_phase_one = True
+                add_warning("KROSS specification pre-fill", f"Variant sizes: {error}")
+            source_name = (
+                resolved_match.pimbo_product_name
+                or str((base.initial_fields or {}).get("product_name_lt") or "")
+                or editor.product_name()
+            )
+            specification_plan = build_kross_specification_plan(
+                source_name,
+                variant_sizes,
+                raw_specification_source,
+                translator=self.translation_handler,
+            )
+            planned_values = dict(specification_plan.values)
+            required_name_fields = (
+                "Modelis",
+                "Spalva",
+                "Lako užbaigimas",
+                "Ratų dydis",
+            )
+            missing_name_fields = tuple(
+                name for name in required_name_fields
+                if not _clean(planned_values.get(name, ""))
+            )
+            if missing_name_fields:
+                specification_prefill_ready = False
+                if selected.save:
+                    unsafe_phase_one = True
+                add_warning(
+                    "KROSS specification pre-fill",
+                    "Could not extract required product-name fields: "
+                    f"{', '.join(missing_name_fields)}; the product was not "
+                    "pre-filled or saved",
+                )
+            elif specification_prefill_ready and progress:
+                progress(
+                    "Verified KROSS pre-fill data — "
+                    f"{planned_values['Modelis']}; "
+                    f"{planned_values['Spalva']}; "
+                    f"{planned_values['Lako užbaigimas']}; "
+                    f"{planned_values['Ratų dydis']}; "
+                    f"{planned_values.get('Galimi rėmo dydžiai', '')}"
+                )
+        specification_source = (
+            specification_plan.magic_ai_source
+            if specification_plan is not None
+            else raw_specification_source
         )
         if selected.specifications_magic_ai and not specification_source:
             add_warning(
                 "Specifications MagicAI",
-                f"{KROSS_METADATA_NAME} has no saved KROSS specifications",
+                f"{KROSS_METADATA_NAME} has no saved KROSS specifications usable by MagicAI",
             )
 
         def ordered_completed_stages() -> tuple[str, ...]:
@@ -2061,6 +2239,47 @@ class KrossAutomationService:
                 options=selected,
                 completed_stages=ordered_completed_stages(),
             )
+
+        def apply_specification_prefill(target_changes: list[str]) -> None:
+            if specification_plan is None:
+                return
+            available = 0
+            changed = 0
+            results = editor.set_specifications(
+                specification_plan.values,
+                overwrite=True,
+                move_if_empty=(("Svoris", "Dviračio svoris (kg)"),),
+            )
+            changed_names: list[str] = []
+
+            def remember_changed(name: str) -> None:
+                if name not in changed_names:
+                    changed_names.append(name)
+
+            for name, _value in specification_plan.values:
+                result = results.get(name)
+                if result is None:
+                    continue
+                available += 1
+                if result:
+                    remember_changed(name)
+            for name in ("Svoris", "Dviračio svoris (kg)"):
+                if results.get(name):
+                    remember_changed(name)
+            for name in changed_names:
+                target_changes.append(f"specification:{name}")
+            changed = len(changed_names)
+            if available == 0:
+                raise PimAutomationError(
+                    "The current PIMBO family has none of the KROSS pre-fill fields"
+                )
+            if "specifications_prefill" not in completed_stages:
+                completed_stages.append("specifications_prefill")
+            if progress:
+                progress(
+                    f"KROSS specification pre-fill replaced {changed} of "
+                    f"{available} available field(s)"
+                )
 
         # Phase 1 follows the operator workflow exactly: ordinary photos,
         # Size tables, Geometry, description, family, brand, category, Save.
@@ -2223,12 +2442,15 @@ class KrossAutomationService:
                 unsafe_phase_one = True
                 add_warning("Translations", error)
 
-        # Specifications can be run independently only when the product already
-        # has the Dviračiai family. In a full run, the family selected above is
-        # persisted by the first Save before the Specifications panel is opened.
+        # Specification stages can run independently only when the product
+        # already has the Dviračiai family. In a full run, the family selected
+        # above is persisted by the first Save before Specifications is opened.
+        specification_stage_requested = (
+            selected.specifications_prefill
+            or bool(selected.specifications_magic_ai and specification_source)
+        )
         if (
-            selected.specifications_magic_ai
-            and specification_source
+            specification_stage_requested
             and family_ready is None
         ):
             try:
@@ -2236,38 +2458,50 @@ class KrossAutomationService:
                 family_ready = current_family.casefold() == "dviračiai".casefold()
                 if not family_ready:
                     add_warning(
-                        "Specifications MagicAI",
+                        "KROSS specifications",
                         f"Product family is {current_family or 'empty'}, expected Dviračiai",
                     )
                     if selected.save:
                         unsafe_phase_one = True
             except Exception as error:
                 family_ready = False
-                add_warning("Specifications MagicAI family check", error)
+                add_warning("KROSS specifications family check", error)
                 if selected.save:
                     unsafe_phase_one = True
 
         # A specifications-only partial run may intentionally remain unsaved.
-        # In a full run, specifications are deferred until after the first Save
-        # so the Dviračiai family schema is present.
+        # The deterministic pre-fill always runs before MagicAI so its
+        # authoritative values cannot be replaced by the fill-empty-only step.
         if (
-            selected.specifications_magic_ai
-            and specification_source
+            specification_stage_requested
             and family_ready is not False
             and not selected.save
         ):
-            try:
-                if progress:
-                    progress("Opening Specifications and running MagicAI")
-                specification_step = editor.fill_empty_specifications_with_ai(
-                    specification_source
-                )
-                ai_steps.append(specification_step)
-                if specification_step.changed:
-                    changed_fields.append("specifications")
-                completed_stages.append("specifications_magic_ai")
-            except Exception as error:
-                add_warning("Specifications MagicAI", error)
+            if selected.specifications_prefill and specification_prefill_ready:
+                try:
+                    if progress:
+                        progress("Replacing KROSS name, variant, and translated specification values")
+                    apply_specification_prefill(changed_fields)
+                except Exception as error:
+                    specification_prefill_ready = False
+                    add_warning("KROSS specification pre-fill", error)
+            if (
+                selected.specifications_magic_ai
+                and specification_source
+                and specification_prefill_ready
+            ):
+                try:
+                    if progress:
+                        progress("Running MagicAI for remaining empty Specifications")
+                    specification_step = editor.fill_empty_specifications_with_ai(
+                        specification_source
+                    )
+                    ai_steps.append(specification_step)
+                    if specification_step.changed:
+                        changed_fields.append("specifications")
+                    completed_stages.append("specifications_magic_ai")
+                except Exception as error:
+                    add_warning("Specifications MagicAI", error)
 
         if any(stage in completed_stages for stage in (
             "description_source",
@@ -2294,14 +2528,14 @@ class KrossAutomationService:
                 status=PimPreparationStatus.FAILED,
                 warnings=tuple(warnings),
                 error=(
-                    "Automatic Save was blocked because a MagicAI stage failed; "
+                    "Automatic Save was blocked because a required stage failed; "
                     "the product was left unsaved"
                 ),
             )
             return make_result(prepared)
         if prepared.status == PimPreparationStatus.READY_FOR_REVIEW:
             if progress:
-                progress("Saving photos, tables, description, family, brand, and category")
+                progress("Saving completed first-phase KROSS changes")
             try:
                 prepared = normalize_preparation(editor.save_and_verify(prepared))
             except Exception as error:
@@ -2321,8 +2555,9 @@ class KrossAutomationService:
             return make_result(prepared)
 
         # Phase 2: after the first Save, wait for PIMBO to rebuild the family
-        # schema, then open Specifications, run MagicAI, and Save again.
-        if selected.specifications_magic_ai and specification_source:
+        # schema, then overwrite deterministic KROSS fields, fill only the
+        # remaining empty fields with MagicAI, and Save again.
+        if specification_stage_requested:
             if prepared.status == PimPreparationStatus.SAVED_AUTOMATICALLY:
                 if progress:
                     progress("Waiting 1 second for the Dviračiai specification schema")
@@ -2336,19 +2571,36 @@ class KrossAutomationService:
                 return make_result(specifications_base)
             specification_ai_steps: list[PimAiStepResult] = []
             specification_changes: list[str] = []
-            try:
-                if progress:
-                    progress("Running MagicAI for Specifications")
-                specification_step = editor.fill_empty_specifications_with_ai(
-                    specification_source
-                )
-                specification_ai_steps.append(specification_step)
-                if specification_step.changed:
-                    specification_changes.append("specifications")
-                completed_stages.append("specifications_magic_ai")
-            except Exception as error:
-                add_warning("Specifications MagicAI", error)
-                return make_result(replace(prepared, warnings=tuple(warnings)))
+            if selected.specifications_prefill and specification_prefill_ready:
+                try:
+                    if progress:
+                        progress(
+                            "Replacing KROSS name, variant, and translated "
+                            "specification values"
+                        )
+                    apply_specification_prefill(specification_changes)
+                except Exception as error:
+                    specification_prefill_ready = False
+                    add_warning("KROSS specification pre-fill", error)
+
+            if (
+                selected.specifications_magic_ai
+                and specification_source
+                and specification_prefill_ready
+            ):
+                try:
+                    if progress:
+                        progress("Running MagicAI for remaining empty Specifications")
+                    specification_step = editor.fill_empty_specifications_with_ai(
+                        specification_source
+                    )
+                    specification_ai_steps.append(specification_step)
+                    if specification_step.changed:
+                        specification_changes.append("specifications")
+                    completed_stages.append("specifications_magic_ai")
+                except Exception as error:
+                    add_warning("Specifications MagicAI", error)
+                    specification_prefill_ready = False
 
             specifications_prepared = normalize_preparation(editor.finish(
                 specifications_base,
@@ -2356,9 +2608,19 @@ class KrossAutomationService:
                 ai_steps=specification_ai_steps,
                 warnings=warnings,
             ))
+            if not specification_prefill_ready:
+                specifications_prepared = replace(
+                    specifications_prepared,
+                    status=PimPreparationStatus.FAILED,
+                    warnings=tuple(warnings),
+                    error=(
+                        "Specification enrichment failed; the product was left "
+                        "with unsaved specification changes"
+                    ),
+                )
             if specifications_prepared.status == PimPreparationStatus.READY_FOR_REVIEW:
                 if progress:
-                    progress("Saving MagicAI specifications")
+                    progress("Saving KROSS specification changes")
                 try:
                     specifications_prepared = normalize_preparation(
                         editor.save_and_verify(specifications_prepared)

@@ -978,30 +978,276 @@ class PimboProductEditor:
         )
         return filled, overwritten
 
-    def set_specification(self, name: str, value: str, *, overwrite: bool = True) -> bool | None:
+    def _set_specification_in_open_section(
+        self,
+        name: str,
+        value: str,
+        *,
+        overwrite: bool,
+    ) -> bool | None:
+        desired = _clean(value)
+        changed = False
+        last_error: Exception | None = None
+        for _attempt in range(2):
+            field = self._field_after_label(name, placeholder="Enter value...")
+            if field is None:
+                return None
+            before = _clean(field.get_attribute("value"))
+            if before == desired:
+                return changed
+            if before and not overwrite:
+                return False
+            self._set_input_value(field, value)
+            changed = True
+            try:
+                self._wait_for_stable_specification_value(name, desired)
+                return True
+            except Exception as error:
+                last_error = error
+        raise PimAutomationError(
+            f"Specification {name!r} did not retain {desired!r}: {last_error}"
+        )
+
+    def _wait_for_stable_specification_value(
+        self,
+        name: str,
+        expected: str,
+        *,
+        timeout: float = 1.5,
+        stable_for: float = 0.12,
+    ) -> None:
+        """Wait through React rerenders until a specification value is stable."""
+
+        deadline = time.monotonic() + timeout
+        stable_since: float | None = None
+        last_value = ""
+        while time.monotonic() < deadline:
+            field = self._field_after_label(name, placeholder="Enter value...")
+            if field is not None:
+                try:
+                    last_value = _clean(field.get_attribute("value"))
+                except Exception:
+                    last_value = ""
+                if last_value == expected:
+                    stable_since = stable_since or time.monotonic()
+                    if time.monotonic() - stable_since >= stable_for:
+                        return
+                else:
+                    stable_since = None
+            time.sleep(0.04)
+        raise PimAutomationError(
+            f"Specification {name!r} remained {last_value!r}, expected {expected!r}"
+        )
+
+    def set_specification(
+        self,
+        name: str,
+        value: str,
+        *,
+        overwrite: bool = True,
+    ) -> bool | None:
         self.open_section("specifications")
-        field = self._field_after_label(name, placeholder="Enter value...")
-        if field is None:
-            return None
-        before = _clean(field.get_attribute("value"))
-        if before == _clean(value):
-            return False
-        if before and not overwrite:
-            return False
-        self._set_input_value(field, value)
-        return True
+        return self._set_specification_in_open_section(
+            name,
+            value,
+            overwrite=overwrite,
+        )
+
+    def set_specifications(
+        self,
+        values: Mapping[str, str] | Iterable[tuple[str, str]],
+        *,
+        overwrite: bool = True,
+        move_if_empty: Iterable[tuple[str, str]] = (),
+    ) -> dict[str, bool | None]:
+        """Set and migrate specification values after opening the tab once.
+
+        Each ``move_if_empty`` pair is ``(legacy_name, target_name)``. The
+        legacy value takes precedence over the planned target value when the
+        target is empty. A populated target is preserved. The legacy value is
+        cleared only after the target field has been found.
+        """
+
+        items = tuple(values.items() if isinstance(values, Mapping) else values)
+        planned = dict(items)
+        migrations = tuple(move_if_empty)
+        migration_targets = {target for _source, target in migrations}
+        self.open_section("specifications")
+
+        results: dict[str, bool | None] = {}
+        for source_name, target_name in migrations:
+            source_field = self._field_after_label(
+                source_name,
+                placeholder="Enter value...",
+            )
+            target_field = self._field_after_label(
+                target_name,
+                placeholder="Enter value...",
+            )
+            source_value = _clean(
+                source_field.get_attribute("value") if source_field is not None else ""
+            )
+            target_value = _clean(
+                target_field.get_attribute("value") if target_field is not None else ""
+            )
+            fallback_value = _clean(planned.get(target_name, ""))
+
+            if target_field is None and (source_value or fallback_value):
+                raise PimAutomationError(
+                    f"Target specification {target_name!r} was not found; "
+                    f"legacy {source_name!r} was not cleared"
+                )
+            if target_field is None:
+                results[target_name] = None
+            elif target_value:
+                results[target_name] = False
+            elif source_value or fallback_value:
+                results[target_name] = self._set_specification_in_open_section(
+                    target_name,
+                    source_value or fallback_value,
+                    overwrite=True,
+                )
+            else:
+                results[target_name] = False
+
+            # Re-resolve after the target input event in case React rerendered
+            # this specification group, then clear only the legacy value.
+            source_field = self._field_after_label(
+                source_name,
+                placeholder="Enter value...",
+            )
+            if source_field is None:
+                results[source_name] = None
+            elif _clean(source_field.get_attribute("value")):
+                results[source_name] = self._set_specification_in_open_section(
+                    source_name,
+                    "",
+                    overwrite=True,
+                )
+            else:
+                results[source_name] = False
+
+        for name, value in items:
+            if name in migration_targets:
+                continue
+            results[name] = self._set_specification_in_open_section(
+                name,
+                value,
+                overwrite=overwrite,
+            )
+        return results
+
+    @staticmethod
+    def _variant_sizes_from_axis_text(value: str) -> list[str]:
+        """Extract frame-size values from one labelled Variants axis block."""
+
+        text = str(value or "").replace("\xa0", " ")
+        label = re.search(
+            r"(?im)(?:^|[\n;|])\s*"
+            r"(?:frame\s+size|rėmo\s+dydis|remo\s+dydis|"
+            r"rozmiar(?:\s+ramy)?|dydis|size)\s*(?::|[-–])?\s*",
+            text,
+        )
+        if label is None:
+            return []
+        payload = text[label.end():]
+        symbolic_pattern = (
+            r"(?<![A-Z0-9])(?:XXXS|3XS|XXS|2XS|XS|XXXL|3XL|XXL|2XL|"
+            r"XL|4XL|5XL|S|M|L)(?![A-Z0-9])"
+        )
+        values = re.findall(symbolic_pattern, payload.upper())
+        values.extend(
+            match.group(0).strip()
+            for match in re.finditer(
+                r"(?i)(?<![\d.,])\d{2}(?:[.,]\d+)?\s*(?:CM|[\"″])?(?![\d.,A-Z])",
+                payload,
+            )
+        )
+        return list(dict.fromkeys(_clean(item) for item in values if _clean(item)))
+
+    @staticmethod
+    def _standalone_variant_size(value: str) -> str:
+        candidate = _clean(value)
+        if re.fullmatch(
+            r"(?i)(?:XXXS|3XS|XXS|2XS|XS|S|M|L|XL|XXL|2XL|XXXL|3XL|4XL|5XL|"
+            r"\d{2}(?:[.,]\d+)?\s*(?:CM|[\"″])?)",
+            candidate,
+        ):
+            return candidate
+        return ""
 
     def collect_variant_sizes(self) -> list[str]:
+        """Read frame sizes without opening or modifying any variant."""
+
         self.open_section("variants")
+        panel = self._active_panel()
+        if panel is None:
+            return []
         values: list[str] = []
-        buttons = self.driver.find_elements(By.CSS_SELECTOR, "main button[title='Edit axis values']")
+
+        def extend(items: Iterable[str]) -> None:
+            for item in items:
+                cleaned = _clean(item)
+                if cleaned and cleaned.casefold() not in {
+                    existing.casefold() for existing in values
+                }:
+                    values.append(cleaned)
+
+        buttons = panel.find_elements(
+            By.CSS_SELECTOR, "button[title='Edit axis values']"
+        )
         for button in buttons:
-            for line in (button.text or "").splitlines():
-                if ":" in line:
-                    _, value = line.split(":", 1)
-                    value = _clean(value)
-                    if value and value not in values:
-                        values.append(value)
+            candidate_texts = [
+                button.text or "",
+                button.get_attribute("aria-label") or "",
+            ]
+            try:
+                candidate_texts.extend(self.driver.execute_script(
+                    """
+                    const values = [];
+                    let node = arguments[0];
+                    for (let depth = 0; depth < 5 && node; depth += 1) {
+                      node = node.parentElement;
+                      if (node) values.push(node.innerText || '');
+                    }
+                    return values;
+                    """,
+                    button,
+                ) or [])
+            except Exception:
+                pass
+            for candidate in candidate_texts:
+                parsed = self._variant_sizes_from_axis_text(candidate)
+                if parsed:
+                    extend(parsed)
+                    break
+
+        tables = panel.find_elements(By.CSS_SELECTOR, "table")
+        for table in tables:
+            # Some PIMBO layouts render "Size: M" in an axis-values cell.
+            for cell in table.find_elements(By.CSS_SELECTOR, "tbody td"):
+                extend(self._variant_sizes_from_axis_text(cell.text or ""))
+
+            # Other layouts dedicate a table column to Size/Dydis/Rozmiar.
+            headers = table.find_elements(By.CSS_SELECTOR, "thead th")
+            size_columns = [
+                index
+                for index, header in enumerate(headers)
+                if _clean(header.text).casefold() in {
+                    "size",
+                    "frame size",
+                    "dydis",
+                    "rėmo dydis",
+                    "remo dydis",
+                    "rozmiar",
+                    "rozmiar ramy",
+                }
+            ]
+            for row in table.find_elements(By.CSS_SELECTOR, "tbody tr"):
+                cells = row.find_elements(By.CSS_SELECTOR, "td")
+                for index in size_columns:
+                    if index < len(cells):
+                        extend((self._standalone_variant_size(cells[index].text),))
         return values
 
     def _magic_panel(self, heading: str) -> Any | None:

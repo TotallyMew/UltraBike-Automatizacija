@@ -663,6 +663,128 @@ class PimboWorkflowTests(unittest.TestCase):
         )
         self.assertEqual((0,), overwritten)
 
+    def test_specification_batch_opens_the_tab_only_once(self):
+        class _Field:
+            def __init__(self, value):
+                self.value = value
+
+            def get_attribute(self, name):
+                return self.value if name == "value" else ""
+
+        editor = PimboProductEditor(_Driver())
+        model = _Field("Old model")
+        color = _Field("Blue")
+        fields = {"Modelis": model, "Spalva": color}
+
+        def set_value(field, value):
+            field.value = value
+
+        with (
+            patch.object(editor, "open_section") as open_section,
+            patch.object(
+                editor,
+                "_field_after_label",
+                side_effect=lambda name, **_kwargs: fields.get(name),
+            ),
+            patch.object(
+                editor,
+                "_set_input_value",
+                side_effect=set_value,
+            ) as set_input,
+        ):
+            results = editor.set_specifications(
+                (
+                    ("Modelis", "KROSS Level 7.0"),
+                    ("Spalva", "Blue"),
+                    ("Missing", "value"),
+                ),
+                overwrite=True,
+        )
+
+        open_section.assert_called_once_with("specifications")
+        set_input.assert_called_once_with(model, "KROSS Level 7.0")
+        self.assertEqual(
+            {"Modelis": True, "Spalva": False, "Missing": None},
+            results,
+        )
+
+    def test_specification_write_retries_after_react_drops_first_value(self):
+        class _Field:
+            def get_attribute(self, name):
+                return "Old" if name == "value" else ""
+
+        editor = PimboProductEditor(_Driver())
+        field = _Field()
+        with (
+            patch.object(editor, "_field_after_label", return_value=field),
+            patch.object(editor, "_set_input_value") as set_value,
+            patch.object(
+                editor,
+                "_wait_for_stable_specification_value",
+                side_effect=(PimAutomationError("dropped"), None),
+            ) as wait_for_value,
+        ):
+            changed = editor._set_specification_in_open_section(
+                "Modelis",
+                "KROSS Level 7.0",
+                overwrite=True,
+            )
+
+        self.assertTrue(changed)
+        self.assertEqual(2, set_value.call_count)
+        self.assertEqual(2, wait_for_value.call_count)
+
+    def test_weight_migration_preserves_populated_target_and_clears_legacy(self):
+        class _Field:
+            def __init__(self, value):
+                self.value = value
+
+            def get_attribute(self, name):
+                return self.value if name == "value" else ""
+
+        cases = (
+            ("", "10.700 KG", "10.700 KG", True),
+            ("12.300 KG", "10.700 KG", "12.300 KG", True),
+            ("", "", "11.500 KG", False),
+        )
+        for target_before, source_before, target_after, source_changed in cases:
+            with self.subTest(target_before=target_before):
+                editor = PimboProductEditor(_Driver())
+                source = _Field(source_before)
+                target = _Field(target_before)
+                fields = {
+                    "Svoris": source,
+                    "Dviračio svoris (kg)": target,
+                }
+
+                def set_value(field, value):
+                    field.value = value
+
+                with (
+                    patch.object(editor, "open_section") as open_section,
+                    patch.object(
+                        editor,
+                        "_field_after_label",
+                        side_effect=lambda name, **_kwargs: fields.get(name),
+                    ),
+                    patch.object(
+                        editor,
+                        "_set_input_value",
+                        side_effect=set_value,
+                    ),
+                ):
+                    results = editor.set_specifications(
+                        {"Dviračio svoris (kg)": "11.500 KG"},
+                        overwrite=True,
+                        move_if_empty=(("Svoris", "Dviračio svoris (kg)"),),
+                    )
+
+                open_section.assert_called_once_with("specifications")
+                self.assertEqual(target_after, target.value)
+                self.assertEqual("", source.value)
+                self.assertEqual(source_changed, results["Svoris"])
+                self.assertEqual(not bool(target_before), results["Dviračio svoris (kg)"])
+
     def test_translation_validation_never_requires_or_reads_seo(self):
         before = {
             code: {"name": "old", "description": "<p>old</p>", "seo": {"title": "old"}}

@@ -276,11 +276,16 @@ class KrossScreen(ResponsiveWidget):
         self._collect_button.clicked.connect(self._start_collection)
         self._collect_skus_button = PushButton(FluentIcon.DOWNLOAD, "")
         self._collect_skus_button.clicked.connect(self._start_sku_collection)
+        self._load_pasted_local_button = PushButton(FluentIcon.FOLDER, "")
+        self._load_pasted_local_button.clicked.connect(
+            self._load_pasted_local_packages
+        )
         self._stop_button = PushButton(FluentIcon.CLOSE, "")
         self._stop_button.clicked.connect(self._request_stop)
         self._stop_button.setVisible(False)
         actions.addWidget(self._collect_button)
         actions.addWidget(self._collect_skus_button)
+        actions.addWidget(self._load_pasted_local_button)
         actions.addWidget(self._stop_button)
         actions.addStretch(1)
         layout.addLayout(actions)
@@ -578,7 +583,14 @@ class KrossScreen(ResponsiveWidget):
     def _service(self) -> KrossAutomationService:
         if self.main.driver is None:
             raise RuntimeError(self.tr("kross.browser.unavailable"))
-        return KrossAutomationService(self.main.driver) if self.service_factory is None else self.service_factory(self.main.driver)
+        return (
+            KrossAutomationService(
+                self.main.driver,
+                db_manager=getattr(self.main, "db", None),
+            )
+            if self.service_factory is None
+            else self.service_factory(self.main.driver)
+        )
 
     def _acquire_browser(self) -> bool:
         acquire = getattr(self.main, "try_acquire_browser_lease", None)
@@ -753,6 +765,60 @@ class KrossScreen(ResponsiveWidget):
         self._populate_table(result.matches)
         self._log_message(self.tr("kross.local.loaded", count=len(result.matches)))
 
+    def _load_pasted_local_packages(self) -> None:
+        """Load only pasted SKUs/URLs from already downloaded packages."""
+
+        output = self._output_input.text().strip()
+        if not output:
+            self._show_error(self.tr("kross.output.required"))
+            return
+        targets = self._manual_targets()
+        if not targets:
+            self._show_error(self.tr("kross.skus.required"))
+            return
+
+        available = KrossAutomationService.load_local_packages(Path(output)).matches
+        sku_matches: dict[str, KrossMatch] = {}
+        url_matches: dict[str, KrossMatch] = {}
+        for match in available:
+            for sku in (match.sku, *match.variant_skus):
+                normalized = str(sku or "").strip().upper()
+                if normalized:
+                    sku_matches.setdefault(normalized, match)
+            if match.kross_url:
+                url_matches.setdefault(match.kross_url.rstrip("/").casefold(), match)
+
+        selected: list[KrossMatch] = []
+        selected_skus: set[str] = set()
+        missing: list[str] = []
+        for target in targets:
+            match = None
+            if target.sku:
+                match = sku_matches.get(target.sku)
+            if match is None and target.url:
+                match = url_matches.get(target.url.rstrip("/").casefold())
+            if match is None:
+                missing.append(target.label)
+            elif match.sku not in selected_skus:
+                selected_skus.add(match.sku)
+                selected.append(match)
+
+        if not selected:
+            self._show_error(self.tr("kross.manual.local_none"))
+            return
+        self._populate_table(tuple(selected))
+        self._log_message(
+            self.tr(
+                "kross.manual.loaded_local",
+                count=len(selected),
+                missing=len(missing),
+            )
+        )
+        for value in missing:
+            self._log_message(
+                self.tr("kross.manual.local_missing", value=value)
+            )
+
     # ---------------------------------------------------------------- Upload
 
     def _selected_ready_matches(self) -> tuple[KrossMatch, ...]:
@@ -831,6 +897,10 @@ class KrossScreen(ResponsiveWidget):
             self._upload_warning_count += len(result.preparation.warnings)
             status = f"{status} ({len(result.preparation.warnings)} warning(s))"
         self._table.setItem(row, 6, QTableWidgetItem(status))
+        if result.succeeded:
+            selection = self._table.item(row, 0)
+            if selection is not None:
+                selection.setCheckState(Qt.CheckState.Unchecked)
         self._log_message(f"{result.match.sku}: {status}")
         if result.completed_stages:
             self._log_message(
@@ -927,6 +997,9 @@ class KrossScreen(ResponsiveWidget):
         has_output = bool(self._output_input.text().strip())
         self._collect_button.setEnabled(not busy and has_output)
         self._collect_skus_button.setEnabled(not busy and has_output and bool(self._manual_targets()))
+        self._load_pasted_local_button.setEnabled(
+            not busy and has_output and bool(self._manual_targets())
+        )
         self._load_local_button.setEnabled(not busy and has_output)
         self._output_input.setEnabled(not busy)
         self._browse_output_button.setEnabled(not busy)
@@ -1014,6 +1087,9 @@ class KrossScreen(ResponsiveWidget):
             checkbox.setText(self.tr(f"kross.collect.{stage}"))
         self._collect_button.setText(self.tr("kross.collection.start"))
         self._collect_skus_button.setText(self.tr("kross.manual.start"))
+        self._load_pasted_local_button.setText(
+            self.tr("kross.manual.load_local")
+        )
         self._stop_button.setText(self.tr("kross.stop"))
         self._results_title.setText(self.tr("kross.results.title"))
         self._results_hint.setText(self.tr("kross.results.hint"))

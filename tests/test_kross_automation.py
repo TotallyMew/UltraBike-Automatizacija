@@ -9,8 +9,10 @@ from unittest.mock import call, patch
 from Managers.PimboProductEditor import (
     PIMBO_PRODUCTS_URL,
     PimAiStepResult,
+    PimAutomationError,
     PimPreparationResult,
     PimPreparationStatus,
+    PimboProductEditor,
 )
 from tools.kross_automation import (
     KrossAutomationService,
@@ -19,10 +21,14 @@ from tools.kross_automation import (
     KrossPimboProduct,
     KrossProductData,
     KrossWorkflowOptions,
+    build_kross_specification_plan,
     capture_kross_dimensions_table,
     normalize_label,
     normalize_sku,
     parse_collection_targets,
+    parse_kross_product_name,
+    sort_kross_frame_sizes,
+    translate_kross_specification_value,
     unique_skus,
 )
 from tools.kross_automation.dimensions import _validate_capture_metrics
@@ -141,6 +147,33 @@ class _Editor:
         self.calls.append(f"specs:{source}")
         return PimAiStepResult("specifications", True, True)
 
+    def collect_variant_sizes(self):
+        self.calls.append("variant_sizes")
+        return ["XL", "S", "XXS"]
+
+    def set_specification(self, name, value, *, overwrite):
+        self.calls.append(f"spec:{name}={value}:{overwrite}")
+        return True
+
+    def set_specifications(self, values, *, overwrite, move_if_empty=()):
+        entries = tuple(values)
+        self.calls.append(f"specifications_batch:{len(entries)}")
+        results = {}
+        for source, target in move_if_empty:
+            results.setdefault(source, False)
+            results.setdefault(target, False)
+        for name, value in entries:
+            results[name] = self.set_specification(
+                name,
+                value,
+                overwrite=overwrite,
+            )
+        return results
+
+    def product_name(self):
+        self.calls.append("product_name")
+        return 'KROSS Level 7.0 MY23 / Blue/Red Glossy / MTB bicycle (29")'
+
     def ensure_lithuanian_name_from_english(self):
         self.calls.append("name_lt_from_en")
         return True
@@ -168,6 +201,84 @@ class _Editor:
 
 
 class KrossAutomationTests(unittest.TestCase):
+    def test_kross_name_extracts_general_information(self):
+        parsed = parse_kross_product_name(
+            'KROSS Level 7.0 MY23 / Blue/Red Glossy / kalnų (MTB) dviratis (29")'
+        )
+
+        self.assertEqual("KROSS Level 7.0", parsed.model)
+        self.assertEqual("Blue/Red", parsed.color)
+        self.assertEqual("Glossy", parsed.finish)
+        self.assertEqual('29"', parsed.wheel_size)
+
+    def test_kross_frame_sizes_are_deduplicated_and_sorted(self):
+        self.assertEqual(
+            ("XXXS", "XXS", "XS", "S", "M", "L", "XL", "XXL", "XXXL"),
+            sort_kross_frame_sizes(
+                ["XL", "XXXL", "S", "XXS", "M", "XXXS", "L", "XS", "XXL", "s"]
+            ),
+        )
+
+    def test_pimbo_variant_axis_text_supports_multiline_and_numeric_sizes(self):
+        self.assertEqual(
+            ["XL", "S", "M"],
+            PimboProductEditor._variant_sizes_from_axis_text(
+                "Axis\nSize\nXL\nS\nM\nEdit axis values"
+            ),
+        )
+        self.assertEqual(
+            ['17"', '19"', '21"'],
+            PimboProductEditor._variant_sizes_from_axis_text(
+                'Rozmiar ramy: 17" / 19" / 21"'
+            ),
+        )
+
+    def test_kross_polish_values_are_translated_to_english(self):
+        self.assertEqual("STEEL", translate_kross_specification_value("STAL"))
+        self.assertEqual("MATTE", translate_kross_specification_value("MATOWY"))
+        self.assertEqual(
+            "DARK GREY / GREEN",
+            translate_kross_specification_value("CIEMNY SZARY / ZIELONY"),
+        )
+
+    def test_kross_specification_plan_clears_bad_pedals_and_uses_english_values(self):
+        plan = build_kross_specification_plan(
+            'KROSS Level 7.0 MY23 / Blue/Red Matte / kalnų dviratis (29")',
+            ["XL", "S", "XXS"],
+            "\n".join((
+                "Rama: CARBON",
+                "Waga: ok. 13,5 kg",
+                "Pedały: brak pedałów w zestawie",
+                "Hamulec przód: TARCZOWY MECHANICZNY",
+            )),
+        )
+        values = dict(plan.values)
+
+        self.assertEqual("KROSS Level 7.0", values["Modelis"])
+        self.assertEqual("Blue/Red", values["Spalva"])
+        self.assertEqual("Matte", values["Lako užbaigimas"])
+        self.assertEqual('29"', values["Ratų dydis"])
+        self.assertEqual("XXS, S, XL", values["Galimi rėmo dydžiai"])
+        self.assertEqual("CARBON", values["Rėmo medžiaga"])
+        self.assertEqual("approx. 13,5 kg", values["Dviračio svoris (kg)"])
+        self.assertEqual("MECHANICAL DISC", values["Priekiniai stabdžiai"])
+        self.assertEqual("", values["Pedalai"])
+        self.assertNotIn("Pedały", plan.magic_ai_source)
+        self.assertIn("Waga: approx. 13,5 kg", plan.magic_ai_source)
+        self.assertIn(
+            "Hamulec przód: MECHANICAL DISC",
+            plan.magic_ai_source,
+        )
+
+    def test_missing_variant_sizes_do_not_erase_existing_frame_sizes(self):
+        plan = build_kross_specification_plan(
+            'KROSS Level 7.0 MY23 / Blue/Red Matte / MTB bicycle (29")',
+            [],
+            "Rama: CARBON",
+        )
+
+        self.assertNotIn("Galimi rėmo dydžiai", dict(plan.values))
+
     def test_filtered_scanner_never_reads_past_confirmed_product_total(self):
         class _Scanner(KrossPimboScanner):
             def __init__(self):
@@ -266,10 +377,15 @@ class KrossAutomationTests(unittest.TestCase):
 
         class _Element:
             def is_displayed(self):
-                return True
+                # This reproduces the real Sentio page before PREPARE_TABLE_JS:
+                # Chrome lays out the full table, but Selenium reports it hidden.
+                return False
 
             def find_element(self, _by, _selector):
                 return self
+
+            def find_elements(self, _by, selector):
+                return [self] if "table tbody tr" in selector else []
 
             def screenshot(self, path):
                 Image.new("RGB", (1236, 500), "white").save(path, "PNG")
@@ -327,6 +443,72 @@ class KrossAutomationTests(unittest.TestCase):
                 self.assertEqual((1236, 96), image.size)
             self.assertIn("scrollWidth", driver.scripts[0][0])
             self.assertEqual([], driver.visited)
+
+    def test_dimensions_capture_reloads_an_incomplete_page_at_the_same_url(self):
+        from PIL import Image
+
+        class _Element:
+            def is_displayed(self):
+                return True
+
+            def find_element(self, _by, _selector):
+                return self
+
+            def find_elements(self, _by, selector):
+                return [self] if "table tbody tr" in selector else []
+
+            def screenshot(self, path):
+                Image.new("RGB", (900, 400), "white").save(path, "PNG")
+                return True
+
+        class _IncompleteDriver:
+            def __init__(self):
+                self.current_url = "https://kross.pl/sentio-hybrid-4-0"
+                self.element = _Element()
+                self.ready = False
+                self.visited = []
+
+            def set_page_load_timeout(self, timeout):
+                self.timeout = timeout
+
+            def get(self, url):
+                self.visited.append(url)
+                self.ready = True
+
+            def find_elements(self, _by, selector):
+                if "dimensions-table" in selector and self.ready:
+                    return [self.element]
+                return []
+
+            def execute_script(self, script, *args):
+                if "const tableWidth" in script:
+                    return {
+                        "ok": True,
+                        "rows": 20,
+                        "columns": 4,
+                        "tableWidth": 900,
+                        "captureWidth": 900,
+                        "sizeChartHeight": 80,
+                    }
+                return None
+
+            def execute_async_script(self, _script):
+                return None
+
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "dimensions-table.png"
+            driver = _IncompleteDriver()
+
+            capture_kross_dimensions_table(
+                driver,
+                driver.current_url,
+                destination,
+                timeout=0.2,
+            )
+
+            self.assertEqual([driver.current_url], driver.visited)
+            self.assertTrue(destination.is_file())
+            self.assertTrue(destination.with_name("size-height-table.png").is_file())
 
     def test_pimbo_search_requeries_the_field_after_dom_refresh(self):
         class _Field:
@@ -978,6 +1160,137 @@ class KrossAutomationTests(unittest.TestCase):
         self.assertEqual("p-9", result.match.pimbo_product_id)
         self.assertEqual(["begin", "product_images:1", "finish"], editor.calls)
 
+    def test_upload_rejects_a_local_package_from_another_bicycle(self):
+        class _PimboLookup:
+            def find_by_variant_sku(self, sku):
+                return KrossMatch(
+                    sku,
+                    "pimbo_found",
+                    pimbo_product_id="p-current",
+                    pimbo_product_url=(
+                        "https://pim.bo.ultrabike.lt/dashboard/products/p-current"
+                    ),
+                )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            folder = Path(temporary) / "CURRENT-SKU"
+            folder.mkdir()
+            KrossAutomationService._write_package(
+                folder,
+                KrossMatch(
+                    "PREVIOUS-SKU",
+                    "collected",
+                    variant_skus=("PREVIOUS-SKU",),
+                ),
+                KrossProductData(
+                    "https://kross.pl/previous",
+                    "Previous bicycle",
+                    "",
+                    "Rama: CARBON",
+                    (),
+                    ("PREVIOUS-SKU",),
+                ),
+                KrossCollectionOptions.only("specifications_source"),
+                (),
+            )
+            service = KrossAutomationService(
+                _Driver(),
+                pimbo_client_factory=lambda _driver: _PimboLookup(),
+            )
+            match = KrossMatch(
+                "CURRENT-SKU",
+                "local_ready",
+                local_folder=str(folder),
+                variant_skus=("CURRENT-SKU",),
+            )
+
+            with self.assertRaisesRegex(
+                PimAutomationError,
+                "Local package belongs to PREVIOUS-SKU",
+            ):
+                service.upload_and_save(
+                    match,
+                    Path(temporary),
+                    options=KrossWorkflowOptions.only("specifications_prefill"),
+                )
+
+    def test_failed_upload_recovery_reloads_only_the_verified_target(self):
+        class _RecoveryDriver:
+            def __init__(self):
+                self.current_url = (
+                    "https://pim.bo.ultrabike.lt/dashboard/products/p-9?section=general"
+                )
+                self.visited = []
+                self.dirty = True
+
+            def get(self, url):
+                self.visited.append(url)
+                self.current_url = url
+                if "/dashboard/products/p-9" in url:
+                    self.dirty = False
+
+        waits = []
+
+        class _RecoveryEditor:
+            def __init__(self, driver):
+                self.driver = driver
+
+            def is_dirty(self):
+                return self.driver.dirty
+
+            def wait_ready(self):
+                waits.append(self.driver.current_url)
+
+        driver = _RecoveryDriver()
+        service = KrossAutomationService(
+            driver,
+            editor_factory=lambda current_driver: _RecoveryEditor(current_driver),
+        )
+        match = KrossMatch(
+            "KRIX3Z29X18W009542",
+            "local_ready",
+            pimbo_product_id="p-9",
+            pimbo_product_url="https://pim.bo.ultrabike.lt/dashboard/products/p-9",
+        )
+        progress = []
+
+        recovered = service.recover_after_failed_upload(
+            match,
+            progress=progress.append,
+        )
+
+        self.assertTrue(recovered)
+        self.assertEqual(
+            [
+                "https://pim.bo.ultrabike.lt/dashboard/products/p-9?section=general",
+                PIMBO_PRODUCTS_URL,
+            ],
+            driver.visited,
+        )
+        self.assertEqual([driver.visited[0]], waits)
+        self.assertTrue(any("Discarding unsaved" in message for message in progress))
+        self.assertTrue(any("continuing the batch" in message for message in progress))
+
+    def test_failed_upload_recovery_refuses_to_discard_a_different_product(self):
+        driver = _Driver()
+        driver.current_url = "https://pim.bo.ultrabike.lt/dashboard/products/p-other"
+        service = KrossAutomationService(driver)
+        progress = []
+
+        recovered = service.recover_after_failed_upload(
+            KrossMatch(
+                "KRIX3Z29X18W009542",
+                "local_ready",
+                pimbo_product_id="p-9",
+                pimbo_product_url="https://pim.bo.ultrabike.lt/dashboard/products/p-9",
+            ),
+            progress=progress.append,
+        )
+
+        self.assertFalse(recovered)
+        self.assertEqual([], driver.visited)
+        self.assertTrue(any("Could not safely reset" in message for message in progress))
+
     def test_missing_local_assets_warn_and_other_selected_stages_still_run(self):
         class _PimboLookup:
             def find_by_variant_sku(self, sku):
@@ -1075,6 +1388,102 @@ class KrossAutomationTests(unittest.TestCase):
         self.assertEqual(["begin", "brand:KROSS", "finish"], editor.calls)
         self.assertEqual([self._match().pimbo_product_url], driver.visited)
 
+    def test_specification_prefill_alone_overwrites_managed_values_without_magicai(self):
+        product = KrossProductData(
+            url="https://kross.pl/rowery/example-bike",
+            name="Example",
+            description_html="",
+            specification_text=(
+                "Rama: CARBON\n"
+                "Pedały: brak pedałów w zestawie"
+            ),
+            image_urls=(),
+        )
+        editor = _Editor()
+        service = KrossAutomationService(
+            _Driver(),
+            public_catalog=_Catalog(product, Path("unused.jpg")),
+            editor_factory=lambda _driver: editor,
+        )
+        match = replace(
+            self._match(),
+            pimbo_product_name=(
+                'KROSS Level 7.0 MY23 / Blue/Red Gloss / MTB bicycle (29")'
+            ),
+        )
+
+        result = service.upload_and_save(
+            match,
+            None,
+            options=KrossWorkflowOptions.only("specifications_prefill"),
+        )
+
+        self.assertTrue(result.succeeded)
+        self.assertEqual(("specifications_prefill",), result.completed_stages)
+        self.assertEqual(
+            [
+                "begin",
+                "variant_sizes",
+                "read_family",
+                "specifications_batch:7",
+                "spec:Rėmo medžiaga=CARBON:True",
+                "spec:Pedalai=:True",
+                "spec:Modelis=KROSS Level 7.0:True",
+                "spec:Spalva=Blue/Red:True",
+                "spec:Lako užbaigimas=Gloss:True",
+                'spec:Ratų dydis=29":True',
+                "spec:Galimi rėmo dydžiai=XXS, S, XL:True",
+                "finish",
+            ],
+            editor.calls,
+        )
+        self.assertFalse(any(value.startswith("specs:") for value in editor.calls))
+        self.assertNotIn("save", editor.calls)
+
+    def test_missing_variant_sizes_blocks_prefill_batch_save(self):
+        class _NoSizesEditor(_Editor):
+            def collect_variant_sizes(self):
+                self.calls.append("variant_sizes")
+                return []
+
+        product = KrossProductData(
+            "https://kross.pl/rowery/example-bike",
+            "Example",
+            "",
+            "Rama: CARBON",
+            (),
+        )
+        editor = _NoSizesEditor()
+        service = KrossAutomationService(
+            _Driver(),
+            public_catalog=_Catalog(product, Path("unused.jpg")),
+            editor_factory=lambda _driver: editor,
+        )
+        match = replace(
+            self._match(),
+            pimbo_product_name=(
+                'KROSS Level 7.0 MY23 / Blue/Red Gloss / MTB bicycle (29")'
+            ),
+        )
+
+        result = service.upload_and_save(
+            match,
+            None,
+            options=KrossWorkflowOptions.only("specifications_prefill", "save"),
+        )
+
+        self.assertFalse(result.succeeded)
+        self.assertIn("required stage failed", result.preparation.error)
+        self.assertTrue(any(
+            "No frame sizes were found" in warning
+            for warning in result.preparation.warnings
+        ))
+        self.assertFalse(any(
+            value.startswith("specifications_batch:")
+            for value in editor.calls
+        ))
+        self.assertNotIn("save", editor.calls)
+
     def test_size_tables_and_geometry_can_be_uploaded_independently(self):
         product = KrossProductData(
             url="https://kross.pl/rowery/example-bike",
@@ -1114,6 +1523,68 @@ class KrossAutomationTests(unittest.TestCase):
                 )
                 self.assertNotIn(other_call, editor.calls)
                 self.assertEqual((completed_stage,), result.completed_stages)
+
+    def test_missing_local_size_table_is_recaptured_from_saved_kross_url(self):
+        class _PimboLookup:
+            def find_by_variant_sku(self, sku):
+                return KrossMatch(
+                    sku,
+                    "pimbo_found",
+                    pimbo_product_id="p-9",
+                    pimbo_product_url="https://pim.bo.ultrabike.lt/dashboard/products/p-9",
+                )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            folder = Path(temporary) / "FOUND-2"
+            folder.mkdir()
+            product = KrossProductData(
+                "https://kross.pl/sentio-hybrid-4-0",
+                "Sentio Hybrid 4.0",
+                "",
+                "",
+                (),
+            )
+            saved_match = KrossMatch(
+                "FOUND-2",
+                "collected_with_warnings",
+                kross_url=product.url,
+                local_folder=str(folder),
+                note="KROSS product has no dimensions table",
+            )
+            KrossAutomationService._write_package(
+                folder,
+                saved_match,
+                product,
+                KrossCollectionOptions.only("dimensions"),
+                ("KROSS product has no dimensions table",),
+            )
+            catalog = _Catalog(product, folder / "unused.jpg")
+            editor = _Editor()
+            progress = []
+            service = KrossAutomationService(
+                _Driver(),
+                public_catalog=catalog,
+                pimbo_client_factory=lambda _driver: _PimboLookup(),
+                editor_factory=lambda _driver: editor,
+            )
+
+            result = service.upload_and_save(
+                replace(saved_match, status="local_ready"),
+                Path(temporary),
+                options=KrossWorkflowOptions.only("size_tables"),
+                progress=progress.append,
+            )
+
+            self.assertTrue(result.succeeded)
+            self.assertEqual(("size_tables",), result.completed_stages)
+            self.assertIn("size_table_images:1", editor.calls)
+            self.assertTrue((folder / "dimensions-table.png").is_file())
+            self.assertTrue((folder / "size-height-table.png").is_file())
+            self.assertTrue(any("recapturing" in message for message in progress))
+            self.assertEqual(
+                [("dimensions", folder / "dimensions-table.png")],
+                catalog.calls,
+            )
 
     def test_many_product_photos_are_uploaded_in_re_resolved_batches(self):
         class _ManyPhotoCatalog(_Catalog):
@@ -1236,7 +1707,12 @@ class KrossAutomationTests(unittest.TestCase):
                 public_catalog=catalog,
                 editor_factory=lambda _driver: editor,
             )
-            match = self._match(product.url)
+            match = replace(
+                self._match(product.url),
+                pimbo_product_name=(
+                    'KROSS Level 7.0 MY23 / Blue/Red Glossy / MTB bicycle (29")'
+                ),
+            )
 
             with patch("tools.kross_automation.service.time.sleep") as wait_after_save:
                 result = service.upload_and_save(match, Path(temporary) / "downloads")
@@ -1249,11 +1725,18 @@ class KrossAutomationTests(unittest.TestCase):
         self.assertEqual([match.pimbo_product_url], driver.visited)
         self.assertEqual(
             [
-                "begin", "product_images:1", "size_table_images:1",
+                "begin", "variant_sizes", "product_images:1", "size_table_images:1",
                 "geometry_images:1", "description:True", "description_magic",
                 "family:Dviračiai", "brand:KROSS", "category:Dviračiai",
                 "name_lt_from_en", "translate:True", "locale:lt", "finish", "save", "begin",
-                "specs:Frame: Carbon", "finish", "save",
+                "specifications_batch:6",
+                "spec:Rėmo medžiaga=CARBON:True",
+                "spec:Modelis=KROSS Level 7.0:True",
+                "spec:Spalva=Blue/Red:True",
+                "spec:Lako užbaigimas=Glossy:True",
+                'spec:Ratų dydis=29":True',
+                "spec:Galimi rėmo dydžiai=XXS, S, XL:True",
+                "specs:Frame: CARBON", "finish", "save",
             ],
             editor.calls,
         )

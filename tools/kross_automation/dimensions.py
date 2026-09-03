@@ -171,6 +171,7 @@ return {
 
 
 def _visible_elements(driver: Any, selector: str) -> list[Any]:
+    from selenium.common.exceptions import StaleElementReferenceException
     from selenium.webdriver.common.by import By
 
     result: list[Any] = []
@@ -178,7 +179,30 @@ def _visible_elements(driver: Any, selector: str) -> list[Any]:
         try:
             if element.is_displayed():
                 result.append(element)
-        except Exception:
+        except StaleElementReferenceException:
+            continue
+    return result
+
+
+def _ready_table_containers(driver: Any, selector: str) -> list[Any]:
+    """Return populated table containers without trusting ``is_displayed``.
+
+    On some KROSS pages Chrome reports the dimensions element as not displayed
+    while it is far below a body whose own bounding box is only viewport-high.
+    The element still has full layout dimensions and becomes screenshotable as
+    soon as ``PREPARE_TABLE_JS`` expands the page.  Requiring ``is_displayed``
+    before running that preparation therefore creates a circular false negative.
+    """
+
+    from selenium.common.exceptions import StaleElementReferenceException
+    from selenium.webdriver.common.by import By
+
+    result: list[Any] = []
+    for element in driver.find_elements(By.CSS_SELECTOR, selector):
+        try:
+            if element.find_elements(By.CSS_SELECTOR, "table tbody tr"):
+                result.append(element)
+        except StaleElementReferenceException:
             continue
     return result
 
@@ -213,19 +237,41 @@ def _dismiss_cookie_consent(driver: Any) -> None:
 
 
 def _wait_for_container(driver: Any, timeout: float) -> Any:
+    from selenium.common.exceptions import TimeoutException
     from selenium.webdriver.support.ui import WebDriverWait
 
     try:
         return WebDriverWait(driver, timeout, poll_frequency=0.15).until(
             lambda current: next(
-                iter(_visible_elements(current, DIMENSIONS_CONTAINER_SELECTOR)),
+                iter(_ready_table_containers(current, DIMENSIONS_CONTAINER_SELECTOR)),
                 None,
             )
         )
-    except Exception as error:
+    except TimeoutException as error:
         raise KrossDimensionsNotAvailable(
             "KROSS dimensions table was not found on this product page"
         ) from error
+
+
+def _activate_dimensions_section(driver: Any) -> None:
+    """Open KROSS' sizing tab when the responsive layout keeps it collapsed."""
+
+    from selenium.common.exceptions import StaleElementReferenceException
+    from selenium.webdriver.common.by import By
+
+    selectors = (
+        "a[href='#choose_size']",
+        "[data-target='#choose_size']",
+        "[aria-controls='choose_size']",
+    )
+    for selector in selectors:
+        for element in driver.find_elements(By.CSS_SELECTOR, selector):
+            try:
+                if element.is_displayed():
+                    driver.execute_script("arguments[0].click();", element)
+                    return
+            except StaleElementReferenceException:
+                continue
 
 
 def _wait_for_fonts(driver: Any) -> None:
@@ -318,12 +364,37 @@ def capture_kross_dimensions_table(
     should surface those errors instead of silently uploading a partial image.
     """
 
+    from selenium.common.exceptions import TimeoutException
+
     driver.set_page_load_timeout(timeout)
     current_url = str(getattr(driver, "current_url", "") or "").rstrip("/")
-    if current_url != str(page_url).rstrip("/"):
-        driver.get(page_url)
+    target_url = str(page_url).rstrip("/")
+
+    # Product discovery can stop loading a heavy KROSS page after its shorter
+    # lookup timeout once the SKU is visible.  If that partial page is already
+    # at the target URL, the old implementation skipped navigation and later
+    # misreported the not-yet-rendered table as genuinely absent.  Reuse only a
+    # page on which the dimensions container is already visible; otherwise
+    # reload it with the full capture timeout.
+    if current_url == target_url:
+        _dismiss_cookie_consent(driver)
+        _activate_dimensions_section(driver)
+        container = next(
+            iter(_ready_table_containers(driver, DIMENSIONS_CONTAINER_SELECTOR)),
+            None,
+        )
+    else:
+        container = None
+    if container is None:
+        try:
+            driver.get(page_url)
+        except TimeoutException:
+            # A KROSS page may finish enough of its DOM to expose the table even
+            # when late media keeps the load event beyond the timeout.
+            pass
     _dismiss_cookie_consent(driver)
-    container = _wait_for_container(driver, timeout)
+    _activate_dimensions_section(driver)
+    container = container or _wait_for_container(driver, timeout)
 
     translations = {normalize_label(key): value for key, value in LABEL_TRANSLATIONS.items()}
     metrics = _validate_capture_metrics(
