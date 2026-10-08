@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import os
 from datetime import timezone
+from types import SimpleNamespace
 
 import pytest
 
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QItemSelectionModel, Qt
+from PySide6.QtCore import QCoreApplication, QEvent, QItemSelectionModel, Qt
 from PySide6.QtWidgets import QAbstractItemView, QApplication, QCheckBox, QWidget
 from qfluentwidgets import DoubleSpinBox, PrimaryPushButton, RoundMenu, SpinBox
 
@@ -21,6 +22,7 @@ from GUI_Qt.screens.EarningsScreen import (
     EarningsScreen,
     EarningsSettingsDialog,
 )
+from GUI_Qt.i18n import translate
 from GUI_Qt.styles.theme_config import SIZES
 from Managers.EarningsManager import EarningsManager
 
@@ -258,3 +260,40 @@ def test_export_uses_fluent_menu_and_keeps_both_export_routes(earnings_context):
     screen.deleteLater()
     main.deleteLater()
     app.processEvents()
+
+
+def test_records_source_filter_keeps_legacy_earnings_accessible(earnings_context):
+    app, db, settings, manager = earnings_context
+    manager.create_entry("MANUAL", "bicycle")
+    manager.create_entry("OLD-SINGLE", "bicycle", source="regular_upload")
+    manager.create_entry("OLD-BATCH", "bicycle", source="batch_upload")
+    main = _Main(db, settings, manager)
+    main.i18n = SimpleNamespace(tr=lambda key, **values: translate("en", key, **values))
+    screen = EarningsScreen(main)
+    try:
+        assert screen.filter_source.count() == 2
+        assert screen.filter_source.itemText(0) == "All sources"
+        assert screen.filter_source.itemText(1) == "Manual"
+        assert {entry["sku"] for entry in screen._entries} == {"MANUAL", "OLD-SINGLE", "OLD-BATCH"}
+
+        screen.filter_source.setCurrentIndex(1)
+        assert [entry["sku"] for entry in screen._entries] == ["MANUAL"]
+
+        main.i18n = SimpleNamespace(tr=lambda key, **values: translate("lt", key, **values))
+        screen.retranslate_ui()
+        assert screen.filter_source.currentData() == "manual"
+        assert screen.filter_source.itemText(0) == "Visi šaltiniai"
+        assert screen.filter_source.itemText(1) == "Rankiniu būdu"
+
+        screen.filter_source.setCurrentIndex(0)
+        assert len(screen._entries) == 3
+        assert {entry["source"] for entry in manager.list_entries()} == {
+            "manual", "regular_upload", "batch_upload"
+        }
+    finally:
+        screen._tick_timer.stop()
+        # Flush queued fluent-widget layout callbacks while their controls exist.
+        app.processEvents()
+        screen.deleteLater()
+        main.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)

@@ -237,6 +237,9 @@ class AccountScreen(ResponsiveWidget):
         layout.addWidget(self.brand_card)
         layout.addStretch(1)
 
+        from GUI_Qt.layouts.system import arrange_account
+        arrange_account(self)
+
         # Apply theme after all widgets exist (important for scroll area + cards)
         self._apply_theme()
 

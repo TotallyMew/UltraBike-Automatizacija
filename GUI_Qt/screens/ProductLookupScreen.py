@@ -1,12 +1,14 @@
 """Product lookup and exports in one guarded workspace."""
-from PySide6.QtWidgets import QTabWidget, QVBoxLayout
-from qfluentwidgets import InfoBar
+from PySide6.QtWidgets import QVBoxLayout
+from qfluentwidgets import InfoBar, TitleLabel, CaptionLabel
 
+from GUI_Qt.screens.SpecCheckerScreen import SpecCheckerScreen
 from GUI_Qt.screens.NameGetterScreen import NameGetterScreen
 from GUI_Qt.screens.CodeGetterScreen import CodeGetterScreen
 from GUI_Qt.screens.ProductNameGetterScreen import ProductNameGetterScreen
 from GUI_Qt.services.product_work import acquire_product_browser, release_product_browser
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
+from GUI_Qt.widgets.workspace import WorkspaceTabs
 
 
 class _GuardedLookupPanel:
@@ -50,23 +52,49 @@ class _NamesPanel(_GuardedLookupPanel, ProductNameGetterScreen):
     pass
 
 
+class _SpecificationsPanel(_GuardedLookupPanel, SpecCheckerScreen):
+    pass
+
+
 class ProductLookupScreen(ResponsiveWidget):
-    """Retain input-code lookup, ERP export and list-name export as three modes."""
-    PANEL_TYPES = (_NamesByCodePanel, _CodesPanel, _NamesPanel)
-    LABEL_KEYS = ("nav.name_getter", "nav.code_getter", "nav.product_name_getter")
+    """Retain input-code lookup, ERP export and list-name export as four modes."""
+    PANEL_TYPES = (_NamesByCodePanel, _CodesPanel, _NamesPanel, _SpecificationsPanel)
+    LABEL_KEYS = ("nav.name_getter", "nav.code_getter", "nav.product_name_getter", "nav.spec_checker")
 
     def __init__(self, main_window, parent=None):
         super().__init__(parent)
         self.main = main_window
         self._active_worker = None
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        self.tabs = QTabWidget(self)
+        from GUI_Qt.styles.screen_theme import PAGE_MARGINS, PAGE_SPACING, apply_screen_theme
+        from GUI_Qt.widgets.workspace import bind_text
+        from GUI_Qt.layouts.tools import arrange_table_tool
+        layout.setContentsMargins(*PAGE_MARGINS)
+        layout.setSpacing(PAGE_SPACING)
+        self.title = bind_text(TitleLabel(), self.main, "nav.product_lookup")
+        self.subtitle = bind_text(CaptionLabel(), self.main, "layout.lookup_subtitle")
+        layout.addWidget(self.title)
+        layout.addWidget(self.subtitle)
+        apply_screen_theme(self, "ProductLookupScreen")
+        self.tabs = WorkspaceTabs(self)
         self.panels = tuple(panel_type(main_window, self) for panel_type in self.PANEL_TYPES)
+        self.tabs.setDocumentMode(True)
         for panel in self.panels:
+            panel.setProperty("embeddedWorkspace", True)
+            arrange_table_tool(panel)
             self.tabs.addTab(panel, "")
         layout.addWidget(self.tabs)
         self.retranslate_ui()
+
+    def select_mode(self, index):
+        if not self.request_navigation_away():
+            return False
+        self.tabs.setCurrentIndex(index)
+        return True
+
+    def iter_workers(self):
+        if self._active_worker is not None and self._active_worker.isRunning():
+            yield self._active_worker
 
     def _worker_finished(self, worker):
         if self._active_worker is not worker or worker.isRunning():

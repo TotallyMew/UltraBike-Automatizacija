@@ -61,20 +61,10 @@ ROUTES = (
               _lazy("GUI_Qt.screens.SpotifyScreen", "SpotifyScreen", "spotify_screen")),
     RouteSpec("activity", "nav.activity", "insights", FluentIcon.HISTORY,
               _lazy("GUI_Qt.screens.ActivityScreen", "ActivityScreen", "activity_screen")),
-    RouteSpec("spec_checker", "nav.spec_checker", "product_tools", FluentIcon.CHECKBOX,
-              _lazy("GUI_Qt.screens.SpecCheckerScreen", "SpecCheckerScreen", "spec_checker_screen")),
-    RouteSpec("basso_images", "nav.basso_images", "brand_tools", FluentIcon.IMAGE_EXPORT,
-              _lazy("GUI_Qt.screens.BassoImageScreen", "BassoImageScreen", "basso_images_screen")),
-    RouteSpec("pinarello_images", "nav.pinarello_images", "brand_tools", FluentIcon.IMAGE_EXPORT,
-              _lazy("GUI_Qt.screens.PinarelloImageScreen", "PinarelloImageScreen", "pinarello_images_screen")),
-    RouteSpec("castelli_url_getter", "nav.castelli_url_getter", "brand_tools", FluentIcon.LINK,
-              _lazy("GUI_Qt.screens.CastelliUrlGetterScreen", "CastelliUrlGetterScreen", "castelli_url_getter_screen")),
-    RouteSpec("castelli_images", "nav.castelli_images", "brand_tools", FluentIcon.IMAGE_EXPORT,
-              _lazy("GUI_Qt.screens.CastelliImageDownloaderScreen", "CastelliImageDownloaderScreen", "castelli_image_downloader_screen")),
-    RouteSpec("abus_url_getter", "nav.abus_url_getter", "brand_tools", FluentIcon.LINK,
-              _lazy("GUI_Qt.screens.AbusUrlGetterScreen", "AbusUrlGetterScreen", "abus_url_getter_screen")),
-    RouteSpec("oakley_url_getter", "nav.oakley_url_getter", "brand_tools", FluentIcon.LINK,
-              _lazy("GUI_Qt.screens.OakleyUrlGetterScreen", "OakleyUrlGetterScreen", "oakley_url_getter_screen")),
+    RouteSpec("brand_urls", "layout.url_finder", "brand_tools", FluentIcon.LINK,
+              _lazy("GUI_Qt.screens.BrandToolsScreen", "BrandUrlFinderScreen", "brand_url_screen")),
+    RouteSpec("brand_images", "layout.image_downloader", "brand_tools", FluentIcon.IMAGE_EXPORT,
+              _lazy("GUI_Qt.screens.BrandToolsScreen", "BrandImageDownloaderScreen", "brand_image_screen")),
     RouteSpec("orbea", "nav.orbea", "operations", FluentIcon.ROBOT,
               _lazy("GUI_Qt.screens.OrbeaScreen", "OrbeaScreen", "orbea_screen")),
     RouteSpec("kross", "nav.kross", "operations", FluentIcon.ROBOT,
@@ -94,7 +84,22 @@ ROUTE_ALIASES = {
     "name_getter": "product_lookup",
     "code_getter": "product_lookup",
     "product_name_getter": "product_lookup",
+    "spec_checker": "product_lookup",
+    "abus_url_getter": "brand_urls",
+    "castelli_url_getter": "brand_urls",
+    "oakley_url_getter": "brand_urls",
+    "basso_images": "brand_images",
+    "pinarello_images": "brand_images",
+    "castelli_images": "brand_images",
 }
+
+# Saved activity links still open the correct brand or lookup tab.
+ROUTE_MODES = {
+    "name_getter": 0, "code_getter": 1, "product_name_getter": 2, "spec_checker": 3,
+    "abus_url_getter": 0, "castelli_url_getter": 1, "oakley_url_getter": 2,
+    "basso_images": 0, "pinarello_images": 1, "castelli_images": 2,
+}
+
 
 def resolve_route_key(key: str) -> str:
     return ROUTE_ALIASES.get(str(key or ""), str(key or ""))

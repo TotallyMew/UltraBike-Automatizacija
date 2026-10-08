@@ -251,6 +251,9 @@ class SpotifyScreen(ResponsiveWidget):
         best_layout.addWidget(self.best_detail)
         best_layout.addWidget(self.best_tracks)
         self.layout.addWidget(self.best_card)
+        from GUI_Qt.layouts.system import arrange_spotify
+        arrange_spotify(self)
+
         self.layout.addStretch(1)
 
     @staticmethod
@@ -731,6 +734,13 @@ class SpotifyScreen(ResponsiveWidget):
             layout.takeAt(0)
 
     def _on_breakpoint_changed(self, breakpoint: str) -> None:
+        if hasattr(self, "_workspace"):
+            self._take_grid(self.metrics_grid)
+            for column in range(3):
+                self.metrics_grid.setColumnStretch(column, 1 if column == 0 else 0)
+            for index, widget in enumerate((self.plays_metric, self.tracks_metric, self.sessions_metric)):
+                self.metrics_grid.addWidget(widget, index, 0)
+            return
         self._take_grid(self.metrics_grid)
         metrics = (self.plays_metric, self.tracks_metric, self.sessions_metric)
         columns = 1 if breakpoint == "xs" else 2 if breakpoint == "sm" else 3

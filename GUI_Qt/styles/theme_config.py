@@ -101,22 +101,22 @@ CORE_SWATCHES = {
 MODE_COLOR_ROLES = {
     'light': {
         # Neutral ramp / elevation
-        'canvas': '#F8FAFC',
+        'canvas': '#F5F5F5',
         'surface': '#FFFFFF',
-        'surface_alt': '#F1F5F9',
-        'stroke': '#E2E8F0',
+        'surface_alt': '#F5F5F5',
+        'stroke': '#E0E0E0',
         'stroke_subtle': '#F1F5F9',
 
         # Brand interaction ramp
-        'accent': '#2B2D42',
-        'accent_hover': '#3D405B',
-        'accent_pressed': '#202234',
+        'accent': '#4338CA',
+        'accent_hover': '#3730A3',
+        'accent_pressed': '#312E81',
         'accent_text': '#FFFFFF',
         'focus_ring': '#4338CA',
 
         # Text roles
-        'text_primary': '#0F172A',
-        'text_secondary': '#475569',
+        'text_primary': '#242424',
+        'text_secondary': '#616161',
         'text_tertiary': '#64748B',
         'text_disabled': '#CBD5E1',
 
@@ -459,7 +459,7 @@ SIZES = {
     'form_card_max_width': 1600,
     'options_card_max_width': 760,
     'divider_thickness': 1,
-    'center_form_max_width': 400,
+    'center_form_max_width': 480,
 }
 
 # Typography System - Fluent Design 2 Type Ramp
@@ -525,9 +525,9 @@ COMPONENT_COLORS = {
     },
     'table': {
         'header_bg_dark': COLORS['surface_alt_dark'],
-        'header_bg_light': COLORS['accent_light'],
+        'header_bg_light': COLORS['surface_alt_light'],
         'header_text_dark': COLORS['text_primary_dark'],
-        'header_text_light': COLORS['accent_text_light'],
+        'header_text_light': COLORS['text_primary_light'],
         'row_bg_dark': COLORS['surface_dark'],
         'row_bg_light': COLORS['surface_light'],
         'row_alt_bg_dark': COLORS['surface_alt_dark'],

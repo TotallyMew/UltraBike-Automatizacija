@@ -729,6 +729,9 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
         button_layout.addWidget(save_btn)
         main_layout.addWidget(button_container)
 
+        from GUI_Qt.layouts.system import arrange_settings
+        arrange_settings(self)
+
         # Connect all controls to mark dirty when changed
         self._connect_dirty_tracking()
 
@@ -1209,6 +1212,8 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
             return
 
         self._is_dirty = True
+        if hasattr(self, "_update_save_status"):
+            self._update_save_status()
 
         # Enable Save/Cancel buttons
         if "save_btn" in self._ui:
@@ -1219,6 +1224,8 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
     def _mark_clean(self):
         """Mark settings as saved (no unsaved changes)"""
         self._is_dirty = False
+        if hasattr(self, "_update_save_status"):
+            self._update_save_status()
 
         # Disable Save/Cancel buttons
         if "save_btn" in self._ui:

@@ -6,7 +6,7 @@ from qfluentwidgets import MessageBox
 
 class ShutdownService:
     SCREEN_ATTRIBUTES = (
-        "product_lookup_screen", "basso_images_screen", "pinarello_images_screen",
+        "product_lookup_screen", "brand_url_screen", "brand_image_screen", "basso_images_screen", "pinarello_images_screen",
         "spec_checker_screen", "castelli_url_getter_screen",
         "castelli_image_downloader_screen", "abus_url_getter_screen",
         "oakley_url_getter_screen", "orbea_screen", "kross_screen",
@@ -27,7 +27,11 @@ class ShutdownService:
                 screen is getattr(self.main, "orbea_screen", None) and not include_orbea
             ):
                 continue
-            for value in vars(screen).values():
+            nested = getattr(screen, "iter_workers", None)
+            values = list(vars(screen).values())
+            if callable(nested):
+                values.extend(nested())
+            for value in values:
                 if isinstance(value, QThread) and id(value) not in seen and value.isRunning():
                     seen.add(id(value))
                     yield screen, value

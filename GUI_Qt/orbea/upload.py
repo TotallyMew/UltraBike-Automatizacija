@@ -224,7 +224,8 @@ class OrbeaUploadPanel(QWidget):
             (self.export_results, "export_results", "Export upload results to Excel"),
             (self.all_steps, "all_steps", "Select all steps"), (self.clear_steps, "clear_steps", "Clear steps"),
         ):
-            button.setText(self._t(key, fallback))
+            button.setText(self.screen.main.i18n.tr("layout.all" if key == "all_steps" else "layout.clear")
+                if key in ("all_steps", "clear_steps") else self._t(key, fallback))
         self.retry_upload.setToolTip(self._t("retry_unfinished.tip", "Skip successful uploads and resume only unfinished steps on failed or unprocessed products."))
         self.table.setHorizontalHeaderLabels([self._t(key, label) for key, label in (
             ("selected", "Select"), ("sku", "SKU"), ("product", "Product"), ("status", "Status"), ("details", "Details"))])

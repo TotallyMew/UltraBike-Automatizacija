@@ -148,15 +148,8 @@ class NavigationRouteTests(unittest.TestCase):
         expected = {
             "operations": ["orbea", "kross"],
             "insights": ["history", "earnings", "spotify", "activity"],
-            "product_tools": ["product_lookup", "translations", "spec_checker"],
-            "brand_tools": [
-                "basso_images",
-                "pinarello_images",
-                "castelli_url_getter",
-                "castelli_images",
-                "abus_url_getter",
-                "oakley_url_getter",
-            ],
+            "product_tools": ["product_lookup", "translations"],
+            "brand_tools": ["brand_urls", "brand_images"],
             "system": ["account", "settings", "info"],
         }
 
@@ -197,9 +190,9 @@ class NavigationRouteTests(unittest.TestCase):
         self.assertEqual(route_icons["product_lookup"], FluentIcon.SEARCH)
         self.assertEqual(route_icons["orbea"], FluentIcon.ROBOT)
         self.assertEqual(route_icons["kross"], FluentIcon.ROBOT)
-        for key in ("castelli_url_getter", "abus_url_getter", "oakley_url_getter"):
+        for key in ("brand_urls",):
             self.assertEqual(route_icons[key], FluentIcon.LINK)
-        for key in ("basso_images", "pinarello_images", "castelli_images"):
+        for key in ("brand_images",):
             self.assertEqual(route_icons[key], FluentIcon.IMAGE_EXPORT)
 
     def test_navigation_refresh_covers_every_group_and_route(self):

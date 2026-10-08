@@ -367,7 +367,7 @@ class BassoImageScreen(ResponsiveWidget):
         )
 
     def _on_breakpoint_changed(self, breakpoint: str):
-        margins = get_responsive_margins(breakpoint)
+        margins = (0, 0, 0, 0) if self.property("embeddedWorkspace") else get_responsive_margins(breakpoint)
         spacing = get_responsive_spacing(breakpoint)
         if self.content_widget.layout():
             self.content_widget.layout().setContentsMargins(*margins)

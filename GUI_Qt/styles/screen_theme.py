@@ -34,11 +34,11 @@ from GUI_Qt.styles.theme_config import (
 
 # Windows/Fluent-style page gutters used across this app.
 # Keep these centralized so we can tune spacing globally.
-PAGE_MARGINS = (SPACING["xxxl"], SPACING["lg"], SPACING["xxxl"], SPACING["lg"])  # 40,20,40,20
-PAGE_SPACING = SPACING["lg"]  # 20
+PAGE_MARGINS = (SPACING["xxl"], SPACING["xl"], SPACING["xxl"], SPACING["xl"])
+PAGE_SPACING = SPACING["base"]
 
 # Standard card padding (used for toolbars/sections)
-CARD_MARGINS = (SPACING["xl"], SPACING["lg"], SPACING["xl"], SPACING["lg"])  # 24,20,24,20
+CARD_MARGINS = (SPACING["xl"], SPACING["base"], SPACING["xl"], SPACING["base"])
 CARD_SPACING = SPACING["base"]  # 16
 
 # Large cards (forms) need slightly more breathing room.
@@ -53,7 +53,7 @@ ROW_SPACING = SPACING["sm"]  # 8
 ICON_TEXT_GAP = SPACING["md"]  # 12
 
 # Common content gaps (used in many forms and card internals)
-CONTENT_SPACING = SPACING["md"]  # 12
+CONTENT_SPACING = SPACING["base"]
 
 # Common paddings used across toolbars/footers/panels
 TOOLBAR_MARGINS = (SPACING["lg"], SPACING["base"], SPACING["lg"], SPACING["base"])  # 20,16,20,16
@@ -234,7 +234,7 @@ def get_responsive_margins(breakpoint: str) -> tuple:
     elif breakpoint == 'sm':
         return (SPACING['xl'], SPACING['lg'], SPACING['xl'], SPACING['lg'])  # 24, 20, 24, 20
     else:
-        return PAGE_MARGINS  # 40, 20, 40, 20
+        return PAGE_MARGINS  # 32, 24, 32, 24
 
 
 def get_responsive_spacing(breakpoint: str) -> int:
@@ -249,7 +249,7 @@ def get_responsive_spacing(breakpoint: str) -> int:
     if breakpoint == 'xs':
         return SPACING['md']  # 12 - Compact
     else:
-        return PAGE_SPACING  # 20 - Normal
+        return PAGE_SPACING  # 16 - Normal
 
 
 def get_responsive_card_max_width(breakpoint: str, card_type: str = 'form') -> int | None:

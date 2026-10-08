@@ -137,6 +137,9 @@ class KrossScreen(ResponsiveWidget):
         self._build_results_card()
         self._build_upload_card()
         self._build_log_card()
+        from GUI_Qt.layouts.automation import arrange_kross
+        arrange_kross(self)
+
         self._layout.addStretch(1)
         enforce_transparent_labels(self)
 
@@ -1129,8 +1132,8 @@ class KrossScreen(ResponsiveWidget):
         self._upload_title.setText(self.tr("kross.upload.title"))
         self._upload_hint.setText(self.tr("kross.upload.hint"))
         self._stages_label.setText(self.tr("kross.stages.label"))
-        self._select_all_stages_button.setText(self.tr("common.select_all"))
-        self._clear_stages_button.setText(self.tr("common.deselect_all"))
+        self._select_all_stages_button.setText(self.tr("layout.all"))
+        self._clear_stages_button.setText(self.tr("layout.clear"))
         self._stages_hint.setText(self.tr("kross.stages.hint"))
         for stage, checkbox in self._stage_checks.items():
             checkbox.setText(self.tr(f"kross.stage.{stage}"))

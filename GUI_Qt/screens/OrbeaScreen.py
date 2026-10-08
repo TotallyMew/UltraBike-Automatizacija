@@ -259,6 +259,9 @@ class OrbeaScreen(ResponsiveWidget):
         for page in self._section_pages.values():
             self._layout.addWidget(page, 1)
 
+        from GUI_Qt.layouts.automation import arrange_orbea
+        arrange_orbea(self)
+
         self._section_tabs.keyChanged.connect(self._switch_section)
         self._switch_section("setup")
 

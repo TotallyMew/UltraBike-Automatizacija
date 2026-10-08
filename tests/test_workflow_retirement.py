@@ -15,6 +15,7 @@ from GUI_Qt.screens.ProductLookupScreen import ProductLookupScreen
 from GUI_Qt.screens.NameGetterScreen import NameGetterScreen
 from GUI_Qt.screens.CodeGetterScreen import CodeGetterScreen
 from GUI_Qt.screens.ProductNameGetterScreen import ProductNameGetterScreen
+from GUI_Qt.screens.SpecCheckerScreen import SpecCheckerScreen
 
 
 @pytest.mark.parametrize("route", ("name_getter", "code_getter", "product_name_getter"))
@@ -89,7 +90,7 @@ def lookup():
 
 
 @pytest.mark.parametrize("index,base", (
-    (0, NameGetterScreen), (1, CodeGetterScreen), (2, ProductNameGetterScreen),
+    (0, NameGetterScreen), (1, CodeGetterScreen), (2, ProductNameGetterScreen), (3, SpecCheckerScreen),
 ))
 def test_each_lookup_mode_locks_navigation_until_its_worker_finishes(lookup, monkeypatch, index, base):
     worker = _Worker()

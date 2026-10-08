@@ -287,6 +287,8 @@ class EarningsScreen(ResponsiveWidget):
         )
         self.section_tabs.setCurrentIndex(0)
         QTimer.singleShot(0, self.sku_input.setFocus)
+        from GUI_Qt.layouts.earnings import arrange_earnings
+        arrange_earnings(self)
         self._apply_theme()
 
     @staticmethod
@@ -336,6 +338,8 @@ class EarningsScreen(ResponsiveWidget):
             self.analytics_metrics_layout.setColumnStretch(column, 1 if column < columns else 0)
 
     def _arrange_projection_metrics(self, *, compact: bool) -> None:
+        if hasattr(self, "_analytics_workspace"):
+            compact = True
         self._clear_grid(self.projection_metrics_layout)
         columns = 2 if compact else 4
         for index, metric in enumerate(self.projection_metrics):
@@ -344,6 +348,8 @@ class EarningsScreen(ResponsiveWidget):
             self.projection_metrics_layout.setColumnStretch(column, 1 if column < columns else 0)
 
     def _arrange_analytics_config(self, *, compact: bool) -> None:
+        if hasattr(self, "_analytics_workspace"):
+            return
         self._clear_grid(self.analytics_config_layout)
         if compact:
             self.analytics_config_layout.addWidget(self.goal_panel, 0, 0)
@@ -372,6 +378,8 @@ class EarningsScreen(ResponsiveWidget):
                 self.header_layout.addWidget(button, 0, offset)
 
     def _arrange_live_tools(self, *, compact: bool) -> None:
+        if hasattr(self, "_log_workspace"):
+            return
         self._clear_grid(self.live_tools_layout)
         if compact:
             self.live_tools_layout.addWidget(self.entry_panel, 0, 0)
@@ -385,6 +393,19 @@ class EarningsScreen(ResponsiveWidget):
             self.live_tools_layout.setColumnStretch(1, 2)
 
     def _arrange_goal_quest_header(self, *, compact: bool) -> None:
+        if hasattr(self, "_log_workspace"):
+            self._clear_grid(self.goal_quest_header_layout)
+            grid = self.goal_quest_header_layout
+            grid.addWidget(self.goal_quest_title, 0, 0)
+            grid.addWidget(self.goal_quest_level, 0, 1)
+            grid.addWidget(self.goal_quest_create, 1, 0)
+            grid.addWidget(self.goal_quest_adjust, 1, 1)
+            grid.addWidget(self.goal_quest_view, 2, 0, 1, 2)
+            grid.setColumnStretch(0, 1)
+            grid.setColumnStretch(1, 1)
+            for column in range(2, 6):
+                grid.setColumnStretch(column, 0)
+            return
         self._clear_grid(self.goal_quest_header_layout)
         for column in range(6):
             self.goal_quest_header_layout.setColumnStretch(column, 0)
@@ -415,7 +436,7 @@ class EarningsScreen(ResponsiveWidget):
         self._arrange_goal_quest_header(compact=compact)
         self._arrange_live_tools(compact=compact)
         self._arrange_history_toolbar(compact=compact)
-        margins = (16, 14, 18, 20) if compact else (24, 20, 28, 28)
+        margins = (16, 16, 16, 20) if compact else (32, 24, 32, 24)
         self.content.layout().setContentsMargins(*margins)
 
     def _update_header_labels(self, *, compact: bool | None = None) -> None:
@@ -1005,10 +1026,8 @@ class EarningsScreen(ResponsiveWidget):
             self.filter_type.addItem(label, userData=key)
         self.filter_type.currentIndexChanged.connect(self._refresh_entries)
         self.filter_source = ComboBox()
-        self.filter_source.addItem("All sources", userData=None)
-        self.filter_source.addItem("Manual", userData="manual")
-        self.filter_source.addItem("Regular upload", userData="regular_upload")
-        self.filter_source.addItem("Batch upload", userData="batch_upload")
+        self.filter_source.addItem(self.main.i18n.tr("earnings.history.source.all"), userData=None)
+        self.filter_source.addItem(self.main.i18n.tr("earnings.history.source.manual"), userData="manual")
         self.filter_source.currentIndexChanged.connect(self._refresh_entries)
         self.filter_date = ComboBox()
         self.filter_date.addItem("All dates", userData=None)
@@ -1209,6 +1228,18 @@ class EarningsScreen(ResponsiveWidget):
         return card
 
     def _arrange_history_toolbar(self, *, compact: bool) -> None:
+        if hasattr(self, "_record_filter_fields"):
+            grid = self.history_toolbar_layout
+            self._clear_grid(grid)
+            columns = 2 if compact else 5
+            for index, field in enumerate(self._record_filter_fields):
+                grid.addWidget(field, index // columns, index % columns)
+            for column in range(5):
+                grid.setColumnStretch(column, 2 if column == 0 else 1 if column < columns else 0)
+            row = (len(self._record_filter_fields) - 1) // columns + 1
+            for column, button in enumerate((self.clear_filters_button, self.edit_entry_button, self.delete_entry_button)):
+                grid.addWidget(button, row, column)
+            return
         layout = getattr(self, "history_toolbar_layout", None)
         if layout is None:
             return
@@ -1275,6 +1306,8 @@ class EarningsScreen(ResponsiveWidget):
 
     # ------------------------------------------------------------- refresh/UI
     def refresh_all(self):
+        if hasattr(self, "_refresh_recent"):
+            self._refresh_recent()
         self._reload_brands()
         self._refresh_metrics()
         self._refresh_goal()
@@ -1820,7 +1853,9 @@ class EarningsScreen(ResponsiveWidget):
         if not hasattr(self, "history_tabs"):
             return
         empty = not self._entries and self._sessions_count == 0
+        self.history_tabs.setMinimumHeight(280 if empty else 420)
         self.history_tabs.setMaximumHeight(280 if empty else 16777215)
+        self.history_panel.setMaximumHeight(self.history_panel.sizeHint().height() if empty else 16777215)
 
     # --------------------------------------------------------------- entries
     def _add_entry(self):
@@ -2955,6 +2990,8 @@ class EarningsScreen(ResponsiveWidget):
         self.projection_month.title.setText(tr("earnings.projection.month"))
         self.projection_year.title.setText(tr("earnings.projection.year"))
         self.history_heading.setText(tr("earnings.history.title"))
+        self.filter_source.setItemText(0, tr("earnings.history.source.all"))
+        self.filter_source.setItemText(1, tr("earnings.history.source.manual"))
         self.sku_label.setText(tr("earnings.field.sku"))
         self.name_label.setText(tr("earnings.field.name"))
         self.brand_label.setText(tr("earnings.field.brand"))

@@ -292,13 +292,14 @@ class TranslationsScreen(ResponsiveWidget):
         self.refresh_btn = TransparentToolButton(FluentIcon.SYNC, self)
         self.refresh_btn.clicked.connect(self._load_translations)
 
-        toolbar_layout.addWidget(self.search_input, 0, 0, 1, 4)
-        toolbar_layout.addWidget(brand_label, 1, 0)
-        toolbar_layout.addWidget(self.brand_filter, 1, 1)
-        toolbar_layout.addWidget(self.add_btn, 1, 2)
-        toolbar_layout.addWidget(self.refresh_btn, 1, 3)
+        toolbar_layout.addWidget(self.search_input, 0, 2)
+        toolbar_layout.addWidget(brand_label, 0, 0)
+        toolbar_layout.addWidget(self.brand_filter, 0, 1)
+        toolbar_layout.addWidget(self.add_btn, 0, 3)
+        toolbar_layout.addWidget(self.refresh_btn, 0, 4)
         toolbar_layout.setColumnStretch(1, 1)
 
+        toolbar_layout.setColumnStretch(2, 1)
         layout.addWidget(toolbar_card)
 
         # === TABLE ===

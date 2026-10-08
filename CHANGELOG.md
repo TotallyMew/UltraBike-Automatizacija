@@ -7,6 +7,20 @@ are generated from the installer and are not a substitute for this history.
 
 ### Changed
 
+- Applied the proposed layouts across automation, Earnings, Settings, Account,
+  Activity, upload history, sign-in, help, translations, and Spotify, using
+  Fluent spacing tokens and native controls. Setup and review sit beside run
+  and upload panels, which stack on narrower windows.
+- Grouped brand URL and image tools into tabbed workspaces, and added the
+  specification checker to Product lookup. Existing tool links select the
+  corresponding tab, and running work remains guarded during navigation and
+  shutdown.
+
+- Removed retired regular/batch upload choices from the earnings Records source
+  filter. Historical earnings remain visible under All sources. Removed unused
+  retired upload, batch, analytics, and extended-mode translations in both languages,
+  retaining the shared strings used by current lookup and specification tools.
+
 - Retired Single Upload, Unified Batch, Descriptions, Folder Creator, and the old
   Analytics screen, including their navigation, UI helpers, and packaging entries.
   Removed the write-only recent-product cache update and obsolete upload settings.

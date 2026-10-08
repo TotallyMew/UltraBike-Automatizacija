@@ -20,7 +20,7 @@ from qfluentwidgets import (
     InfoBar,
     InfoBarPosition,
     PushButton,
-    TitleLabel,
+    TitleLabel, qconfig,
 )
 
 from GUI_Qt.styles.screen_theme import PAGE_MARGINS, PAGE_SPACING
@@ -85,6 +85,13 @@ class ActivityScreen(ResponsiveWidget):
         ):
             actions.addWidget(button)
         layout.addLayout(actions)
+        from GUI_Qt.layouts.records import arrange_activity
+        arrange_activity(self)
+        from GUI_Qt.styles.screen_theme import apply_screen_theme
+        self._apply_screen_theme = lambda: apply_screen_theme(self, "ActivityScreen")
+        from GUI_Qt.widgets.workspace import connect_signal
+        connect_signal(qconfig.themeChangedFinished, self, self._apply_screen_theme)
+        self._apply_screen_theme()
         self._update_actions()
 
     def _selected(self):
@@ -95,7 +102,7 @@ class ActivityScreen(ResponsiveWidget):
 
     def refresh(self) -> None:
         selected_id = self._selected().id if self._selected() else ""
-        self._records = self.tracker.list(limit=500)
+        self._records = self._filter_records(self.tracker.list(limit=500))
         self.table.setRowCount(len(self._records))
         selected_row = -1
         for row, record in enumerate(self._records):
@@ -132,6 +139,8 @@ class ActivityScreen(ResponsiveWidget):
         self._update_actions()
 
     def _update_actions(self) -> None:
+        if hasattr(self, "_update_job_details"):
+            self._update_job_details()
         record = self._selected()
         self.cancel_button.setEnabled(
             bool(record and record.status not in TERMINAL_STATUSES)

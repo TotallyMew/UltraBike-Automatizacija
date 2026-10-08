@@ -10,7 +10,8 @@ class NavigationService:
 
     def open(self, route_key: str) -> bool:
         main = self.main
-        from GUI_Qt.routes import resolve_route_key
+        from GUI_Qt.routes import resolve_route_key, ROUTE_MODES
+        mode = ROUTE_MODES.get(route_key)
         route_key = resolve_route_key(route_key)
         if route_key not in main.ROUTES:
             return False
@@ -37,6 +38,10 @@ class NavigationService:
             )
             self.restore_selection()
             return False
+        if mode is not None and hasattr(screen, "select_mode"):
+            if not screen.select_mode(mode):
+                self.restore_selection()
+                return False
         main._show_screen(screen)
         main._current_route = route_key
         try:

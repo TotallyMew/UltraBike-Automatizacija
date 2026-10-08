@@ -280,6 +280,9 @@ class FullHistoryScreen(ResponsiveWidget):
             content=self.content_widget
         )
 
+        from GUI_Qt.layouts.records import arrange_history
+        arrange_history(self)
+
         # Populate filters
         self._populate_filters()
 
@@ -294,6 +297,9 @@ class FullHistoryScreen(ResponsiveWidget):
         super().showEvent(event)
 
     def _apply_column_sizing(self) -> None:
+        if hasattr(self, "_workspace"):
+            self.table.horizontalHeader().setSectionResizeMode(11, QHeaderView.ResizeMode.Stretch)
+            return
         """Size columns so key fields aren't half-hidden until horizontal scrolling."""
         try:
             header = self.table.horizontalHeader()
@@ -610,6 +616,7 @@ class FullHistoryScreen(ResponsiveWidget):
         """
 
         self.all_history = cursor.execute(query).fetchall()
+        self._refresh_upload_metrics()
         self._apply_filters()
 
     def _apply_filters(self):
@@ -685,6 +692,7 @@ class FullHistoryScreen(ResponsiveWidget):
 
             # Column 3: Product Code
             item = QTableWidgetItem(str(record['product_code'] or ''))
+            item.setData(Qt.ItemDataRole.UserRole, dict(record))
             self.table.setItem(row_idx, 3, item)
 
             # Column 4: Status
@@ -764,6 +772,7 @@ class FullHistoryScreen(ResponsiveWidget):
             self.table.setItem(row_idx, 11, item)
 
         self.table.setSortingEnabled(True)
+        self._update_upload_details()
 
         # After data is in place, auto-fit compact columns and give Error remaining space
         self._apply_column_sizing()
@@ -902,6 +911,9 @@ class FullHistoryScreen(ResponsiveWidget):
         self.update_translations()
 
     def update_translations(self):
+        if hasattr(self, "_refresh_upload_metrics"):
+            self._refresh_upload_metrics()
+            self._update_upload_details()
         """Update UI text for current language"""
         tr = self.main.i18n.tr
 

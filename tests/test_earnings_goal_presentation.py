@@ -285,13 +285,14 @@ def test_goal_dialog_deadline_toggle_preserves_enabled_state_and_value_contract(
 
     dialog.amount.setValue(125.75)
     dialog.deadline_enabled.setChecked(True)
-    dialog.deadline.setDate(QDate(2026, 8, 24))
+    deadline = QDate.currentDate().addDays(30)
+    dialog.deadline.setDate(deadline)
 
     assert dialog.deadline.isEnabled()
     dialog.title.setText("  New   workshop bike  ")
     assert dialog.values() == (
         12_575,
-        QDate(2026, 8, 24).toPython(),
+        deadline.toPython(),
         "New workshop bike",
         None,
     )

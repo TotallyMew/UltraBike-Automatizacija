@@ -132,6 +132,13 @@ class LoginScreen(QWidget):
 
         button_row_layout.addWidget(self.login_button, 1)
         button_row_layout.addWidget(self.progress_ring)
+        from GUI_Qt.widgets.workspace import bind_text
+        from qfluentwidgets import PushButton
+        self.saved_login_button = bind_text(PushButton(), self.main, "layout.login.saved")
+        self.saved_login_button.clicked.connect(self._use_saved_login)
+        getter = getattr(self.main.credential_manager, "get_saved_credentials", None)
+        self.saved_login_button.setEnabled(bool(callable(getter) and all(getter())))
+        center_layout.addWidget(self.saved_login_button)
         center_layout.addWidget(button_row)
 
         # Horizontally center the container
@@ -148,6 +155,11 @@ class LoginScreen(QWidget):
         self.setLayout(main_layout)
 
         self.retranslate_ui()
+
+    def _use_saved_login(self):
+        email, password = self.main.credential_manager.get_saved_credentials()
+        if email and password:
+            self.prefill_credentials(email, password)
 
     def retranslate_ui(self):
         tr = self.main.i18n.tr

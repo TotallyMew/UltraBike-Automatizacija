@@ -1561,7 +1561,7 @@ class BrandManagerDialog(QDialog):
 
 
 class UploadEarningsDialog(QDialog):
-    """One compact review for saved regular or batch upload products."""
+    """One compact review for saved product uploads."""
 
     def __init__(self, service: EarningsManager, items: list[dict[str, Any]], parent=None):
         super().__init__(parent)

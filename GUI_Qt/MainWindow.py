@@ -142,6 +142,8 @@ class MainWindow(FluentWindow):
         self.castelli_image_downloader_screen = None
         self.abus_url_getter_screen = None
         self.oakley_url_getter_screen = None
+        self.brand_url_screen = None
+        self.brand_image_screen = None
         self.orbea_screen = None
         self.kross_screen = None
 
@@ -774,6 +776,8 @@ class MainWindow(FluentWindow):
                 getattr(self, "top_bar", None),
                 getattr(self, "full_history_screen", None),
                 getattr(self, "product_lookup_screen", None),
+                getattr(self, "brand_url_screen", None),
+                getattr(self, "brand_image_screen", None),
                 getattr(self, "earnings_screen", None),
                 getattr(self, "spotify_screen", None),
                 getattr(self, "activity_screen", None),

@@ -643,7 +643,7 @@ class PinarelloImageScreen(ResponsiveWidget):
 
     def _on_breakpoint_changed(self, breakpoint: str):
         """Respond to breakpoint changes - adjust margins and spacing."""
-        margins = get_responsive_margins(breakpoint)
+        margins = (0, 0, 0, 0) if self.property("embeddedWorkspace") else get_responsive_margins(breakpoint)
         spacing = get_responsive_spacing(breakpoint)
         if hasattr(self, 'content_widget') and self.content_widget.layout():
             self.content_widget.layout().setContentsMargins(*margins)
