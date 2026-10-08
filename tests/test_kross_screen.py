@@ -434,3 +434,35 @@ class KrossScreenTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_kross_saved_upload_export_includes_pending_products_without_browser(tmp_path, monkeypatch):
+    import json
+    from openpyxl import load_workbook
+    app = QApplication.instance() or QApplication([])
+    main = _Main(_Settings({"kross_download_path": str(tmp_path)}))
+    screen = KrossScreen(main)
+    try:
+        folder = tmp_path / "SKU-1"
+        folder.mkdir()
+        (folder / "kross-upload-result.json").write_text(json.dumps({"preparation": {
+            "product_code": "SKU-1", "product_id": "p1", "status": "saved_automatically",
+            "photo_upload": {"action": "uploaded", "uploaded_photos": 3}},
+            "selected_stages": ["product_photos", "save"], "completed_stages": ["product_photos", "save"]}))
+        screen._populate_table((KrossMatch("SKU-1", "local_ready", pimbo_product_id="p1", local_folder=str(folder)),
+                                KrossMatch("SKU-2", "local_ready", local_folder=str(tmp_path / "SKU-2"))))
+        screen._update_action_state()
+        assert screen._export_upload_button.isEnabled() and main.driver is None
+        path = tmp_path / "kross-results.xlsx"
+        monkeypatch.setattr("GUI_Qt.screens.KrossScreen.QFileDialog.getSaveFileName", lambda *args: (str(path), "Excel (*.xlsx)"))
+        screen._export_upload_results()
+        workbook = load_workbook(path)
+        assert workbook["Results"].max_row == 3 and workbook["Needs checking"].max_row == 2
+        assert workbook["Results"].cell(2, 10).value == 3
+        assert workbook["Results"].cell(3, 4).value == "Unprocessed"
+        workbook.close()
+    finally:
+        assert screen.shutdown()
+        screen.deleteLater()
+        main.deleteLater()
+        app.processEvents()

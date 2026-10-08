@@ -2,8 +2,10 @@
 import json
 import re
 import time
+from threading import Event
 from abc import ABC, abstractmethod
 from datetime import datetime
+from dataclasses import replace
 
 # Local application imports
 from Database.DatabaseManager import DatabaseManager
@@ -21,6 +23,8 @@ from Managers.TranslationManager import TranslationManager
 from Utilities.ErrorManager import ErrorManager
 from Utilities.ImageHandler import ImageHandler
 from Utilities.ProductNavigationHandler import ProductNavigationHandler
+from Utilities.ProductDataSafety import normalize_brand_options
+from Database.ConnectionAccess import with_database_lock
 
 class ProductUploader(ABC):
     def set_retry_callback(self, callback):
@@ -62,7 +66,8 @@ class ProductUploader(ABC):
         self.driver = driver
         self.logger = logger
         self.brandName = brand_name
-        self.brand_options = brand_options or {}
+        self.brand_options = normalize_brand_options(brand_options)
+        self._stop_requested = Event()
         self.batch_id = batch_id
         self.master_password = master_password
 
@@ -114,6 +119,18 @@ class ProductUploader(ABC):
         if self.logger:
             self.logger.error(f"{self.brandName}Uploader", message, exception=exception, **context)
 
+    def request_stop(self):
+        self._stop_requested.set()
+
+    def _run_stage(self, stage, action, *args, **kwargs):
+        self.failed_stage = stage
+        if self._stop_requested.is_set():
+            raise PimAutomationError("Upload stopped. Review or reload any unsaved PIMBO changes.")
+        result = action(*args, **kwargs)
+        if self._stop_requested.is_set():
+            raise PimAutomationError("Upload stopped. Review or reload any unsaved PIMBO changes.")
+        return result
+
     def run(self):
         """Main execution flow with database tracking"""
         self._log("Starting upload process", code=self.ultraBikeCode)
@@ -124,17 +141,19 @@ class ProductUploader(ABC):
             print(f"[Upload] === Starting upload for {self.ultraBikeCode} ({self.brandName}) ===")
             print(f"[Upload] Step 1/9: Scraping...")
             self._progress("Renkami tiekėjo duomenys")
-            self.scrape()
+            self._run_stage("scrape", self.scrape)
             self._magicai_source_text = getattr(
                 self.translationManager,
                 "raw_source_text",
                 "",
             )
             print(f"[Upload] Step 2/9: Translating...")
-            self.translate()
+            self._run_stage("translate", self.translate)
+            # Validate the selected copy before changing the product.
+            self._run_stage("description_source", self._prepare_description)
             print(f"[Upload] Step 3/9: Opening product...")
-            self.openProduct()
-            self.preparation_result = self.pim_editor.begin(self.ultraBikeCode)
+            self._run_stage("open_product", self.openProduct)
+            self.preparation_result = self._run_stage("begin", self.pim_editor.begin, self.ultraBikeCode)
             if self.preparation_result.status == PimPreparationStatus.BLOCKED_NON_DRAFT:
                 duration = time.time() - self.start_time
                 self._record_preparation(duration)
@@ -143,55 +162,55 @@ class ProductUploader(ABC):
                 )
                 return self.preparation_result
 
-            if self.pim_editor.ensure_product_family("Dviračiai"):
+            if self._run_stage("product_family", self.pim_editor.ensure_product_family, "Dviračiai"):
                 self._changed_fields.append("product_family")
 
             # === BASIC INFO TAB ===
             # Images
             if self.settings_manager.download_pictures_and_upload():
                 print(f"[Upload] Step 4/9: Uploading images...")
-                self.uploadImages()
+                self._run_stage("images", self.uploadImages)
                 print(f"[Upload] Images uploaded")
             else:
                 print(f"[Upload] Step 4/9: Image upload disabled, skipping")
 
             # Description
             print(f"[Upload] Step 5/9: Uploading description...")
-            self.uploadDescription()
+            self._run_stage("description", self.uploadDescription)
             print(f"[Upload] Description done")
 
             # Brand
             print(f"[Upload] Step 6/9: Uploading brand...")
-            if self.uploadBrand():
+            if self._run_stage("brand", self.uploadBrand):
                 self._changed_fields.append("brand")
             print(f"[Upload] Brand done")
 
-            # Extract wheel size from title (still on Basic Info)
-            self.extractWheelSizeFromTitle()
+            # An existing PIM title can belong to an older configuration. Only
+            # supplier data and explicitly selected attributes are authoritative.
 
             # === ATTRIBUTES TAB ===
             print(f"[Upload] Step 7/9: Uploading attributes...")
-            self.uploadAttributes()
+            self._run_stage("attributes", self.uploadAttributes)
             print(f"[Upload] Attributes done")
 
             # === VARIANTS TAB ===
             print(f"[Upload] Step 8/9: Collecting variant sizes...")
-            self.collectVariantSizes()
+            self._run_stage("variants", self.collectVariantSizes)
             print(f"[Upload] Variant sizes done")
 
             # === SPECIFICATIONS TAB ===
             print(f"[Upload] Step 9/9: Uploading features...")
-            self.uploadFeatures()
-            self.fillVariantSizesIntoSpecs()
-            self.extractKomplektacijaFromSpecs()
+            self._run_stage("specifications", self.uploadFeatures)
+            self._run_stage("variant_sizes", self.fillVariantSizesIntoSpecs)
+            self._run_stage("groupset", self.extractKomplektacijaFromSpecs)
             print(f"[Upload] Features done")
 
             print("[Upload] Running current PIMBO MagicAI workflow...")
             self._progress("MagicAI: pradedamas produkto paruošimas")
-            self.runMagicAi()
+            self._run_stage("magicai", self.runMagicAi)
             print("[Upload] MagicAI workflow done")
 
-            self.preparation_result = self.pim_editor.finish(
+            self.preparation_result = self._run_stage("finish", self.pim_editor.finish,
                 self.preparation_result,
                 changed_fields=self._changed_fields,
                 ai_steps=self._ai_steps,
@@ -199,6 +218,7 @@ class ProductUploader(ABC):
             )
             if not self.preparation_result.ready_for_review:
                 raise PimAutomationError(self.preparation_result.error)
+            self.failed_stage = ""
 
             # Calculate duration
             duration = time.time() - self.start_time
@@ -220,8 +240,9 @@ class ProductUploader(ABC):
             duration = time.time() - self.start_time if self.start_time else 0
             self.preparation_result = PimPreparationResult(
                 product_code=self.ultraBikeCode or "",
-                product_id=getattr(self.pim_editor, "product_id", ""),
+                product_id=self.preparation_result.product_id,
                 initial_version=getattr(self.preparation_result, "initial_version", None),
+                initial_fields=self.preparation_result.initial_fields,
                 status=PimPreparationStatus.FAILED,
                 changed_fields=tuple(self._changed_fields),
                 ai_steps=tuple(self._ai_steps),
@@ -229,12 +250,18 @@ class ProductUploader(ABC):
                 final_url=getattr(self.driver, "current_url", ""),
                 failed_stage=str(getattr(self, "failed_stage", "") or ""),
                 error=str(e),
+                photo_upload=dict(getattr(self.pim_editor, "photo_upload", {}) or {}),
             )
-            self._record_failure(str(e), duration)
+            try:
+                self._record_failure(str(e), duration)
+            except Exception as history_error:
+                self.preparation_result = replace(self.preparation_result,
+                    warnings=self.preparation_result.warnings + (f"History could not be recorded: {history_error}",))
             self._log_error("Upload process failed", exception=e, code=self.ultraBikeCode)
             ErrorManager.show_error("UNEXPECTED_ERROR", error=str(e))
             return self.preparation_result
 
+    @with_database_lock
     def _record_success(self, duration):
         """Record a prepared-for-review result (never an automatic save)."""
         cursor = self.db.conn.cursor()
@@ -273,12 +300,14 @@ class ProductUploader(ABC):
             details_json,
             datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         ))
+        self.preparation_result = replace(self.preparation_result, history_id=cursor.lastrowid)
         self.db.conn.commit()
         self._log("Preparation result recorded in database", status=status)
 
     def _record_preparation(self, duration):
         self._record_success(duration)
 
+    @with_database_lock
     def _record_failure(self, error_message, duration):
         """Record failed upload to database"""
         cursor = self.db.conn.cursor()
@@ -313,9 +342,11 @@ class ProductUploader(ABC):
             details_json,
             datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         ))
+        self.preparation_result = replace(self.preparation_result, history_id=cursor.lastrowid)
         self.db.conn.commit()
         self._log("Failure recorded in database")
 
+    @with_database_lock
     def _cache_recent_product(self):
         """Add product to recent products cache"""
         cursor = self.db.conn.cursor()
@@ -401,12 +432,12 @@ class ProductUploader(ABC):
                 ErrorManager.show_warning(
                     f"Nuotraukų siuntimas nėra sukurtas {self.brandName}"
                 )
-                return
+                raise PimAutomationError(f"Image upload is not supported for {self.brandName}; disable it or use the supplier workflow")
             image_paths = self.image_handler.download_kross_images(
                 self.bicycleUrlOrCode,
                 self.ultraBikeCode,
             )
-            prepared = self.pim_editor.upload_product_images(
+            prepared = self._run_stage("images_upload", self.pim_editor.upload_product_images,
                 image_paths,
                 skip_if_present=True,
             )
@@ -418,7 +449,26 @@ class ProductUploader(ABC):
         except Exception as e:
             self._log_error("Image upload failed", exception=e)
             ErrorManager.show_error("UPLOAD_IMAGE_FAILED")
-            # Don't raise - continue without images
+            raise
+
+    def _prepare_description(self):
+        append_disclaimer = self.brand_options.get("append_disclaimer", False)
+        if self.description_name:
+            descriptions = self.description_manager.prepare_description(
+                self.description_name, append_disclaimer=append_disclaimer, only_lt=True,
+            )
+            if not descriptions or not str(descriptions.get("lt") or "").strip():
+                raise PimAutomationError(f"Selected description {self.description_name!r} is missing or empty")
+        elif append_disclaimer:
+            descriptions = self.description_manager.prepare_raw_description(
+                "", "", "", append_disclaimer=True, only_lt=True,
+            )
+            if not descriptions or not str(descriptions.get("lt") or "").strip():
+                raise PimAutomationError("Requested disclaimer is missing or empty")
+        else:
+            descriptions = None
+        self._prepared_descriptions = descriptions
+        return descriptions
 
     def uploadDescription(self):
         """Upload product description if provided."""
@@ -446,6 +496,7 @@ class ProductUploader(ABC):
                 except Exception as e:
                     self._log_error("Standalone disclaimer upload failed", exception=e)
                     ErrorManager.show_warning(f"Disclaimer įkėlimo klaida: {str(e)}")
+                    raise
                 return
 
             self._log("No description to upload")
@@ -454,15 +505,13 @@ class ProductUploader(ABC):
         self._log("Uploading description", name=self.description_name, append_disclaimer=append_disclaimer)
 
         try:
-            descriptions = self.description_manager.prepare_description(
-                self.description_name,
-                append_disclaimer=append_disclaimer,
-                only_lt=True,
-            )
+            descriptions = getattr(self, "_prepared_descriptions", None)
+            if descriptions is None:
+                descriptions = self._prepare_description()
             if descriptions is None:
                 self._log_error("Description was not found")
                 ErrorManager.show_warning(f"Nepavyko įkelti aprašymo '{self.description_name}'")
-                return
+                raise PimAutomationError(f"Selected description {self.description_name!r} could not be loaded")
             changed = self.pim_editor.set_localized_descriptions(descriptions)
             if changed:
                 self._changed_fields.extend(
@@ -479,6 +528,7 @@ class ProductUploader(ABC):
         except Exception as e:
             self._log_error("Description upload failed", exception=e)
             ErrorManager.show_warning(f"Aprašymo įkėlimo klaida: {str(e)}")
+            raise
 
 
     def uploadFeatures(self):
@@ -487,10 +537,13 @@ class ProductUploader(ABC):
         try:
             ltData = self.translationManager.loadLT()
 
-            self.features_uploaded = sum(len(table) for table in ltData)
+            self.features_uploaded = 0
             self._log("LT feature data loaded", lt_count=len(ltData))
 
             skipped, filled_count = self._set_specifications(ltData)
+            self.features_uploaded = filled_count
+            if filled_count:
+                self._changed_fields.append("specifications")
             if skipped:
                 details = {}
                 if getattr(self, "_details_json", None):
@@ -504,10 +557,9 @@ class ProductUploader(ABC):
                     f"Specification {item.get('key')}: {item.get('reason')}"
                     for item in skipped
                 )
+                raise PimAutomationError("Required specifications were not found in PIMBO: " + ", ".join(item["key"] for item in skipped))
 
             self._log("Features uploaded successfully", count=self.features_uploaded)
-            if filled_count:
-                self._changed_fields.append("specifications")
         except Exception as e:
             self._log_error("Feature upload failed", exception=e)
             ErrorManager.show_error("UPLOAD_FEATURE_FAILED", feature="multiple")
@@ -522,6 +574,8 @@ class ProductUploader(ABC):
         self.pim_editor.open_section("specifications")
         for table in tables or []:
             for name, value in (table or {}).items():
+                if self._stop_requested.is_set():
+                    raise PimAutomationError("Upload stopped during specifications; review unsaved changes")
                 if value in (None, ""):
                     continue
                 changed = self.pim_editor.set_specification(
@@ -533,6 +587,9 @@ class ProductUploader(ABC):
                     skipped.append({"key": str(name), "reason": "not_found"})
                 elif changed:
                     filled_count += 1
+                    self.features_uploaded = filled_count
+                    if "specifications" not in self._changed_fields:
+                        self._changed_fields.append("specifications")
         return skipped, filled_count
 
     def _build_magic_source_text(self):
@@ -540,22 +597,12 @@ class ProductUploader(ABC):
         raw_source = str(getattr(self, "_magicai_source_text", "") or "").strip()
         parts = [raw_source] if raw_source else []
         if not raw_source:
-            try:
-                tables = self.translationManager.loadLT()
-                for table in tables or []:
-                    for key, value in (table or {}).items():
-                        if value not in (None, ""):
-                            parts.append(f"{key}: {value}")
-            except Exception as error:
-                self._preparation_warnings.append(
-                    f"Could not load LT specification source: {error}"
-                )
-            try:
-                description = self.pim_editor.description_html()
-                if description:
-                    parts.append(description)
-            except Exception:
-                pass
+            tables = self.translationManager.loadLT()
+            for table in tables:
+                for key, value in table.items():
+                    parts.append(f"{key}: {value}")
+        if not parts:
+            raise PimAutomationError("Fresh supplier specifications are required before running MagicAI")
         if self.bicycleUrlOrCode:
             parts.append(f"Supplier source: {self.bicycleUrlOrCode}")
         source_text = "\n".join(str(part) for part in parts if str(part).strip())
@@ -583,7 +630,9 @@ class ProductUploader(ABC):
         for stage, action in actions:
             self._progress(f"MagicAI: {stage}")
             try:
-                step = action()
+                step = self._run_stage(f"magicai_{stage}", action)
+                if not isinstance(step, PimAiStepResult) or not step.success:
+                    raise PimAutomationError(getattr(step, "detail", "") or f"MagicAI {stage} did not complete")
             except Exception as error:
                 self.failed_stage = f"magicai_{stage}"
                 self._ai_steps.append(
@@ -619,6 +668,7 @@ class ProductUploader(ABC):
 
         except Exception as e:
             self._log_error("Failed to collect variant sizes", exception=e)
+            raise
 
     def fillVariantSizesIntoSpecs(self):
         """Fill previously collected variant sizes into the 'Galimi rėmo dydžiai' spec field.
@@ -637,12 +687,12 @@ class ProductUploader(ABC):
                 overwrite=True,
             )
             if changed is None:
-                self._log("Spec field 'Galimi rėmo dydžiai' not found, skipping")
+                raise PimAutomationError("Specification 'Galimi rėmo dydžiai' was not found")
             elif changed:
                 self._changed_fields.append("specification:Galimi rėmo dydžiai")
                 self._log("Variant sizes filled", value=sizes_str)
         except Exception:
-            self._log("Spec field 'Galimi rėmo dydžiai' not found, skipping")
+            raise
 
     @staticmethod
     def _sort_sizes(sizes):
@@ -732,7 +782,9 @@ class ProductUploader(ABC):
 
         self._log("Extracting Komplektacija from specs")
         try:
-            value = self.pim_editor.specification_value("Grupė") or ""
+            # Do not derive attributes from an old PIMBO value left by a prior job.
+            value = next((str(table["Grupė"]) for table in self.translationManager.loadLT()
+                          if table.get("Grupė")), "")
             if not value:
                 self._log("Grupė spec field is empty, skipping Komplektacija")
                 return
@@ -751,9 +803,11 @@ class ProductUploader(ABC):
                 self._preparation_warnings.append(
                     "Attribute Komplektacija was not available in the current Family schema"
                 )
+                raise PimAutomationError("Supplier groupset could not be applied to Komplektacija")
 
         except Exception as e:
             self._log_error("Failed to extract Komplektacija", exception=e)
+            raise
 
     def uploadBrand(self):
         """Set the uploader's brand through the current PIMBO editor."""
@@ -766,10 +820,12 @@ class ProductUploader(ABC):
         changed_count = 0
         self.pim_editor.open_section("attributes")
         for attribute in attribute_values or []:
+            if self._stop_requested.is_set():
+                raise PimAutomationError("Upload stopped during attributes; review unsaved changes")
             name = str(attribute.get("name") or "").strip()
             value = str(attribute.get("value") or "").strip()
             if not name or not value:
-                continue
+                raise PimAutomationError("A selected attribute has an empty name or value")
             try:
                 changed = self.pim_editor.set_attribute(name, value)
                 if changed is None:
@@ -796,6 +852,8 @@ class ProductUploader(ABC):
         self._log("Uploading attributes", count=len(attribute_values))
         try:
             skipped, changed_count = self._set_attributes(attribute_values)
+            if changed_count:
+                self._changed_fields.append("attributes")
             if skipped:
                 details = {}
                 if getattr(self, "_details_json", None):
@@ -809,12 +867,12 @@ class ProductUploader(ABC):
                     f"Attribute {item.get('key')}: {item.get('reason')}"
                     for item in skipped
                 )
-            if changed_count:
-                self._changed_fields.append("attributes")
+                raise PimAutomationError("Selected attributes could not be applied: " + ", ".join(item["key"] for item in skipped))
             self._log("Attributes uploaded", skipped=len(skipped))
         except Exception as e:
             self._log_error("Attribute upload failed", exception=e)
             self._preparation_warnings.append(f"Attribute preparation failed: {e}")
+            raise
 
     def __del__(self):
         """Cleanup database connection if we own it"""

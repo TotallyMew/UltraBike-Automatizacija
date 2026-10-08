@@ -28,6 +28,7 @@ from Managers.PimboProductEditor import (
     PimboProductEditor,
 )
 from Utilities.ProductNavigationHandler import ProductNavigationHandler
+from Utilities.ProductHistory import record_review_status
 
 
 # ---------------------------------------------------------------------------
@@ -86,6 +87,7 @@ class _ReviewWorker(QThread):
         super().__init__(*args, **kwargs)
         self._review_condition = threading.Condition()
         self._review_actions: dict[str, str | None] = {}
+        self._active_processors = set()
         self.review_response.connect(self._receive_review_response)
 
     def _receive_review_response(self, token: str, action: str):
@@ -97,6 +99,8 @@ class _ReviewWorker(QThread):
     def stop(self):
         self._stop = True
         with self._review_condition:
+            for processor in self._active_processors:
+                processor.stop_batch()
             for token in self._review_actions:
                 self._review_actions[token] = "stop"
             self._review_condition.notify_all()
@@ -114,37 +118,18 @@ class _ReviewWorker(QThread):
         db = getattr(main, "db", None)
         if db is None:
             return
+        record_review_status(db, result)
+
+    def _process_upload(self, processor, items):
+        with self._review_condition:
+            self._active_processors.add(processor)
+            if self._stop:
+                processor.stop_batch()
         try:
-            row = db.conn.execute(
-                """
-                SELECT id, details_json FROM processing_history
-                WHERE product_code = ?
-                ORDER BY id DESC LIMIT 1
-                """,
-                (result.product_code,),
-            ).fetchone()
-            if row is None:
-                return
-            try:
-                details = json.loads(row["details_json"] or "{}") or {}
-            except Exception:
-                details = {}
-            details["pim_preparation"] = result.to_dict()
-            db.conn.execute(
-                """
-                UPDATE processing_history
-                SET status = ?, details_json = ?
-                WHERE id = ?
-                """,
-                (
-                    result.status.value,
-                    json.dumps(details, ensure_ascii=False),
-                    row["id"],
-                ),
-            )
-            db.conn.commit()
-        except Exception:
-            pass
+            return processor.process_batch(items, master_password=self.master_password)
+        finally:
+            with self._review_condition:
+                self._active_processors.discard(processor)
 
     def await_manual_review(
         self,
@@ -177,6 +162,9 @@ class _ReviewWorker(QThread):
                     self.row_update.emit(row, "Paruošta peržiūrai", verified.error)
                 continue
             if action == "discard":
+                if editor.product_id != result.product_id:
+                    return result.with_status(PimPreparationStatus.FAILED,
+                        error="A different PIMBO product is open; discard was cancelled")
                 driver.refresh()
                 editor.wait_ready()
                 if editor.is_dirty():
@@ -196,6 +184,8 @@ class _ReviewWorker(QThread):
         result: PimPreparationResult,
     ) -> PimPreparationResult:
         """Pause a failed dirty form; only explicit discard may navigate away."""
+        if not result.product_id:
+            return result
         editor = PimboProductEditor(driver)
         if not editor.is_dirty():
             return result
@@ -212,6 +202,9 @@ class _ReviewWorker(QThread):
         action = self._wait_review_action(token)
         if action != "discard":
             return result
+        if editor.product_id != result.product_id:
+            return result.with_status(PimPreparationStatus.FAILED,
+                error="A different PIMBO product is open; discard was cancelled")
         driver.refresh()
         editor.wait_ready()
         if editor.is_dirty():
@@ -279,15 +272,7 @@ class BatchUploadWorker(_ReviewWorker):
                 self.row_update.emit(table_row, "Processing...", "")
                 self.log.emit("BatchUpload", f"Processing {row_data['code']} ({idx + 1}/{total})")
 
-                items = [{
-                    "brand": row_data["brand"],
-                    "code": row_data["code"],
-                    "url": row_data["url"],
-                    "description_name": row_data.get("description_name"),
-                    "frameset_only": row_data.get("frameset_only", False),
-                    "append_disclaimer": row_data.get("append_disclaimer", False),
-                    "attribute_values": row_data.get("attribute_values", []),
-                }]
+                items = [dict(row_data)]
 
                 batch_processor.set_progress_callback(
                     lambda message, current_row=table_row: self.row_update.emit(
@@ -296,7 +281,7 @@ class BatchUploadWorker(_ReviewWorker):
                         str(message),
                     )
                 )
-                result = batch_processor.process_batch(items, master_password=self.master_password)
+                result = self._process_upload(batch_processor, items)
                 entries = result.get("results", []) if result else []
                 entry = entries[0] if entries else {}
                 preparation_data = entry.get("preparation") or {}
@@ -445,17 +430,9 @@ class ParallelBatchUploadWorker(_ReviewWorker):
                     )
                 )
 
-                items = [{
-                    "brand": row_data["brand"],
-                    "code": row_data["code"],
-                    "url": row_data["url"],
-                    "description_name": row_data.get("description_name"),
-                    "frameset_only": row_data.get("frameset_only", False),
-                    "append_disclaimer": row_data.get("append_disclaimer", False),
-                    "attribute_values": row_data.get("attribute_values", []),
-                }]
+                items = [dict(row_data)]
 
-                result = bp.process_batch(items, master_password=self.master_password)
+                result = self._process_upload(bp, items)
                 entries = result.get("results", []) if result else []
                 entry = entries[0] if entries else {}
                 preparation_data = entry.get("preparation") or {}

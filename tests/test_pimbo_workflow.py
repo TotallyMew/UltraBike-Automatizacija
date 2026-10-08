@@ -108,6 +108,10 @@ class _FileDriver(_Driver):
         return []
 
 
+    def execute_script(self, script, *args):
+        return []
+
+
 class _FileEditor(PimboProductEditor):
     def open_section(self, section):
         self.opened = section
@@ -131,6 +135,10 @@ class _GroupedFileDriver(_Driver):
     def find_elements(self, by, value):
         if "input[type='file']" in value:
             return self.inputs
+        return []
+
+
+    def execute_script(self, script, *args):
         return []
 
 

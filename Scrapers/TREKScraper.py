@@ -16,33 +16,43 @@ def extract_size_specific_data(row_data: Dict[str, List[Tuple[str, str]]]) -> Di
             if size:  # Only add non-empty size strings
                 all_sizes.update(size.split(', '))
     
+    if not all_sizes:
+        all_sizes.add("")
+
     # Initialize dictionaries for each size
     for size in all_sizes:
         size_specific_data[size] = {}
     
     # Fill in the data for each size
     for key, variants in row_data.items():
-        # If there's only one variant with no size specified, apply to all sizes
-        if len(variants) == 1 and not variants[0][0]:
-            for size in all_sizes:
-                size_specific_data[size][key] = variants[0][1]
-        else:
-            # For size-specific variants
-            for size_str, value in variants:
-                if size_str:
-                    for size in size_str.split(', '):
-                        size_specific_data[size][key] = value
+        common = {value for size, value in variants if not size}
+        if len(common) > 1:
+            raise ValueError(f"Conflicting TREK specifications for {key}")
+        specific = {}
+        for size_str, value in variants:
+            if size_str:
+                for size in size_str.split(', '):
+                    if size in specific and specific[size] != value:
+                        raise ValueError(f"Conflicting TREK specifications for {key}, size {size}")
+                    specific[size] = value
+        for size in all_sizes:
+            if size in specific:
+                size_specific_data[size][key] = specific[size]
+            elif common:
+                size_specific_data[size][key] = next(iter(common))
     
     return size_specific_data
 
-def scrapeAndTranslateToFileTREK(url: str, outputFile: str, preferred_size: Optional[str] = None):
-    translation_handler = TranslationHandler()
-    keyTranslations = translation_handler.load_translations("Assets/Translations\\vertimasDetalesEN-LT.txt")
-    valueTranslations = translation_handler.load_value_translations("Assets/Translations\\vertimasSavybesEN-LT.txt")
+def scrapeAndTranslateToFileTREK(url: str, outputFile: str, preferred_size: Optional[str] = None, db_manager=None):
+    translation_handler = TranslationHandler(db_manager)
+    keyTranslations = translation_handler.get_translations_by_category("EN", "LT", "component")
+    valueTranslations = {}
+    for category in ("material", "color", "property"):
+        valueTranslations.update(translation_handler.get_translations_by_category("EN", "LT", category))
     
     try:
         # Get HTML content from URL
-        response = requests.get(url)
+        response = requests.get(url, timeout=20)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
         
@@ -130,14 +140,21 @@ def scrapeAndTranslateToFileTREK(url: str, outputFile: str, preferred_size: Opti
         size_specific_data = extract_size_specific_data(all_data_with_variants)
         
         # Determine which size data to use
-        available_sizes = list(size_specific_data.keys())
-        selected_size = preferred_size if preferred_size in available_sizes else available_sizes[0] if available_sizes else None
+        available_sizes = sorted(size_specific_data)
+        if not available_sizes:
+            raise ValueError("No TREK specifications were collected")
+        if preferred_size is not None and preferred_size not in available_sizes:
+            raise ValueError(f"TREK size {preferred_size!r} is unavailable; choose from {available_sizes}")
+        if len(available_sizes) > 1 and preferred_size is None:
+            raise ValueError(f"TREK specifications differ by size; select preferred_size from {available_sizes}")
+        selected_size = preferred_size if preferred_size is not None else available_sizes[0]
         
         # Write to file
         with open(outputFile, "w", encoding="utf-8") as f:
             # If a specific size was selected, write only that size's data
-            if selected_size:
-                f.write(f"Dydis: {selected_size}\n\n")
+            if selected_size is not None:
+                if selected_size:
+                    f.write(f"Dydis: {selected_size}\n\n")
                 for key, value in size_specific_data[selected_size].items():
                     f.write(f"{key}: {value}\n")
             else:
@@ -151,4 +168,4 @@ def scrapeAndTranslateToFileTREK(url: str, outputFile: str, preferred_size: Opti
         return f"Successfully scraped data. Available sizes: {', '.join(available_sizes)}"
     
     except Exception as e:
-        return f"Error processing TREK data: {str(e)}"
+        raise RuntimeError(f"TREK scraping failed: {e}") from e

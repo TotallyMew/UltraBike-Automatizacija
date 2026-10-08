@@ -138,6 +138,10 @@ class ProductNavigationHandler:
     def _open_exact_result(self, unique_code):
         """Open the exact External ID row returned by the current product search."""
 
+        rows = self.driver.find_elements(*ProductListSelectors.product_row_by_code(unique_code))
+        if len(rows) > 1:
+            raise PimAutomationError(f"Several PIMBO products have External ID {unique_code!r}; open the correct product explicitly")
+
         row = WebDriverWait(self.driver, 5).until(
             EC.element_to_be_clickable(
                 ProductListSelectors.product_row_by_code(unique_code)

@@ -1,12 +1,12 @@
-"""Extract readable bicycle-description text from Orbea CMS model pages.
+"""Extract product Features descriptions and legacy Orbea model-page copy.
 
 Examples:
     python tools/orbea_description_extractor.py https://cms.orbea.com/en-au/m/kemen-adv
     python tools/orbea_description_extractor.py --url-file orbea_urls.txt
 
-The extractor renders each page in Selenium, scrolls through lazy-loaded
-sections, opens every ``View content`` detail dialog, removes slider/button
-noise, and writes UTF-8-with-BOM text files that open cleanly in Notepad.
+Current product pages use their locale-independent Features dialog, including
+all carousel cards. Legacy model pages use their expanded detail dialogs.
+Output is UTF-8-with-BOM text that opens cleanly in Notepad.
 """
 
 from __future__ import annotations
@@ -334,8 +334,20 @@ def _expand_detail_dialogs(driver) -> tuple[list[list[str]], list[str]]:
 
 def extract_description(driver, url: str) -> DescriptionDocument:
     from selenium.webdriver.common.by import By
+    from bs4 import BeautifulSoup
+    from tools.orbea_automation.features import read_feature_description
 
     main = _load_page(driver, url)
+    features = read_feature_description(driver, timeout=EXPANDED_CONTENT_TIMEOUT)
+    if features is not None:
+        headings = driver.find_elements(By.CSS_SELECTOR, "main h1, h1")
+        model = next((normalize_space(heading.text) for heading in headings if normalize_space(heading.text)), safe_slug(url).replace("-", " ").title())
+        soup = BeautifulSoup(features, "html.parser")
+        return DescriptionDocument(
+            url=url, model=model,
+            main_lines=[model, *clean_lines(soup.get_text("\n", strip=True))],
+            heading_keys={heading.get_text(" ", strip=True).casefold() for heading in soup.find_all(["h2", "h3"])},
+        )
     _scroll_for_lazy_text(driver)
     slider_warnings = _advance_all_sliders(driver)
     main = _wait_for_main(driver)

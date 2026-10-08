@@ -105,9 +105,9 @@ class MatchResult:
 
 
 class CatalogueIndex:
-    def __init__(self, entries: Iterable[CatalogueEntry]):
+    def __init__(self, entries: Iterable[CatalogueEntry], *, allow_empty: bool = False):
         entries = tuple(entries)
-        if not entries:
+        if not entries and not allow_empty:
             raise ValueError("No catalogue identifiers ending in TTCC were found")
 
         grouped: dict[str, dict[str, list[CatalogueEntry]]] = {}
@@ -317,4 +317,3 @@ def select_representative_variant(
         ),
         valid[0],
     )
-

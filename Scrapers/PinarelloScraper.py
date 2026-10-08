@@ -1,5 +1,6 @@
 import requests
 from bs4 import BeautifulSoup
+from Utilities.ProductDataSafety import SpecificationMap
 from Utilities.TranslationHandler import TranslationHandler
 
 def scrapeAndTranslateToFilePinarello(bicycleUrlOrCode, outputFile, frameset_only=None, db_manager=None):
@@ -36,7 +37,7 @@ def scrapeAndTranslateToFilePinarello(bicycleUrlOrCode, outputFile, frameset_onl
         if not partsDivs:
             raise ValueError("Pinarello puslapio struktūra pasikeitė, atnaujinkite programą.")
 
-        tableData = {}
+        tableData = SpecificationMap()
 
         for partDiv in partsDivs:
             titleDiv = partDiv.find('div', class_='text--small color--mid-dark-gray mb-2')
@@ -51,7 +52,8 @@ def scrapeAndTranslateToFilePinarello(bicycleUrlOrCode, outputFile, frameset_onl
             if not title or not spec:
                 continue
 
-            # Filter if frameset mode
+            if frameset_only and title not in allowed_fields:
+                continue
 
             if title.lower() == "axles disc":
                 for subTitle in ["Front Hub", "Rear Hub"]:
@@ -87,9 +89,6 @@ def scrapeAndTranslateToFilePinarello(bicycleUrlOrCode, outputFile, frameset_onl
                     uniqueKeys.add(size_key)
                 continue
 
-            if frameset_only and title not in allowed_fields:
-                continue
-
             translatedKey = keyTranslations.get(title, title)
             translatedValue = translation_handler.translate_first_word(valueTranslations.get(spec, spec), valueTranslations)
 
@@ -107,6 +106,6 @@ def scrapeAndTranslateToFilePinarello(bicycleUrlOrCode, outputFile, frameset_onl
         return f"Total unique keys: {len(uniqueKeys)}"
 
     except requests.HTTPError as e:
-        return f"HTTP klaida: {e}"
+        raise RuntimeError(f"Pinarello HTTP error: {e}") from e
     except Exception as e:
-        return f"Klaida apdorojant Pinarello duomenis: {e}"
+        raise RuntimeError(f"Pinarello scraping failed: {e}") from e

@@ -1,6 +1,6 @@
 """Stable route navigation for the authenticated application shell."""
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QThread
 from qfluentwidgets import InfoBar, InfoBarPosition
 
 
@@ -53,10 +53,19 @@ class NavigationService:
         stack = getattr(main, "content_stack", None)
         screen = stack.currentWidget() if stack is not None else None
         guard = getattr(screen, "request_navigation_away", None)
-        if not callable(guard):
-            return True
         try:
-            return bool(guard())
+            if callable(guard) and not guard():
+                return False
+            running = screen is not None and any(
+                isinstance(value, QThread) and value.isRunning()
+                for value in vars(screen).values()
+            )
+            owner_getter = getattr(main, "browser_lease_owner", None)
+            if running or (callable(owner_getter) and owner_getter() is not None):
+                InfoBar.warning(title=main.i18n.tr("common.warning"),
+                    content=main.i18n.tr("kross.browser.busy"), parent=main)
+                return False
+            return True
         except Exception as error:
             try:
                 main.logger.error(

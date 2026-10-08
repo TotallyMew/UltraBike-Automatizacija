@@ -89,16 +89,25 @@ a = Analysis(
         "tools.kross_automation",
         "tools.kross_automation.dimensions",
         "tools.kross_automation.service",
+        "tools.supplier_upload",
         "tools.orbea_automation",
         "tools.orbea_automation.catalogue",
+        "tools.orbea_automation.collection",
+        "tools.orbea_automation.features",
         "tools.orbea_automation.checkpoint",
         "tools.orbea_automation.descriptions",
         "tools.orbea_automation.models",
         "tools.orbea_automation.photos",
+        "tools.orbea_automation.photo_packages",
+        "tools.orbea_automation.custom_photos",
         "tools.orbea_automation.pimbo",
         "tools.orbea_automation.report",
         "tools.orbea_automation.service",
         "tools.orbea_automation.utils",
+        "tools.orbea_automation.website",
+        "tools.orbea_automation.upload",
+        "tools.orbea_automation.specifications",
+        "GUI_Qt.orbea.upload",
         "tools.orbea_table_image_downloader",
     ],
     hookspath=[],
@@ -114,6 +123,16 @@ a = Analysis(
     cipher=block_cipher,
     noarchive=False,
 )
+
+# Qt6Core uses Windows' native, unversioned ICU API. A foreign icuuc.dll on
+# PATH (for example Poppler's ICU 78) exports versioned names and silently
+# gets collected instead, causing QtCore to fail with WinError 127. Let the
+# OS resolve its own ICU, just as it does when running the unfrozen app.
+a.binaries = [
+    entry for entry in a.binaries
+    if Path(entry[0]).name.lower() != "icuuc.dll"
+    and not Path(entry[0]).name.lower().startswith("icudt")
+]
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 

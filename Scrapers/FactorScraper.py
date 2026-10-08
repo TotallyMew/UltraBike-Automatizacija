@@ -1,5 +1,6 @@
 ﻿import requests
 from bs4 import BeautifulSoup
+from Utilities.ProductDataSafety import SpecificationMap
 from Utilities.TranslationHandler import TranslationHandler, load_translations, load_value_translations
 
 def scrapeAndTranslateToFileFactor(bicycleUrlOrCode, outputFile, db_manager=None):
@@ -18,9 +19,7 @@ def scrapeAndTranslateToFileFactor(bicycleUrlOrCode, outputFile, db_manager=None
 
     # Skip these fields until translations are available
     skip_fields = {
-        "barstem", "head tube diameter", "saddle rail clamps",
-        "cable routing", "compatible components", "max chainring",
-        "wheel size", "manufacturer warranty", "included accessories"
+        "manufacturer warranty", "included accessories"
     }
 
     allData = []
@@ -39,7 +38,7 @@ def scrapeAndTranslateToFileFactor(bicycleUrlOrCode, outputFile, db_manager=None
         if not tables:
             raise ValueError("Factor puslapio struktūra pasikeitė, atnaujinkite programą.")
 
-        tableData = {}
+        tableData = SpecificationMap()
 
         # Process first two tables (Specs and Groupset Specs, skip Geometry)
         for table_index, table in enumerate(tables[:2]):
@@ -92,6 +91,6 @@ def scrapeAndTranslateToFileFactor(bicycleUrlOrCode, outputFile, db_manager=None
         return f"Total unique keys: {len(uniqueKeys)}"
 
     except requests.HTTPError as e:
-        return f"HTTP klaida: {e}"
+        raise RuntimeError(f"Factor HTTP error: {e}") from e
     except Exception as e:
-        return f"Klaida apdorojant Factor duomenis: {e}"
+        raise RuntimeError(f"Factor scraping failed: {e}") from e

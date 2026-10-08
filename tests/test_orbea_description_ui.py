@@ -143,6 +143,16 @@ class OrbeaDescriptionUiTests(unittest.TestCase):
             str(self.description_output),
         )
 
+    def test_product_features_url_is_accepted_without_a_model_page_path(self):
+        self.screen._description_urls_edit.setPlainText(
+            "https://www.orbea.com/es-es/orca-m11eltd-pwr?color=A8"
+        )
+        self.app.processEvents()
+        self.assertTrue(self.screen._description_start_btn.isEnabled())
+        self.assertTrue(self.screen._validate_description_inputs())
+        self.assertEqual(self.screen._create_description_config().urls,
+            ("https://www.orbea.com/es-es/orca-m11eltd-pwr",))
+
 
 if __name__ == "__main__":
     unittest.main()

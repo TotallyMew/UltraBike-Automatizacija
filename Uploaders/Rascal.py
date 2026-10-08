@@ -6,7 +6,7 @@ class Rascal(ProductUploader):
         # Get variant choice (if multiple variants exist)
         # GUI does not currently expose variant selection.
         # If the page contains multiple variants, the scraper will raise a clear error.
-        variant_index = None
+        variant_index = self.brand_options.get('variant_index')
         
         self.translationManager.prepareTranslationFiles(
             scrape_func=scrapeAndTranslateToFileRascal,

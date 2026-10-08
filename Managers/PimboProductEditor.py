@@ -13,8 +13,9 @@ import time
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Any, Callable, Iterable, Mapping
+from urllib.parse import urlsplit
 
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
+from selenium.common.exceptions import NoAlertPresentException, NoSuchElementException, TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import Select
@@ -56,6 +57,8 @@ class PimPreparationResult:
     final_url: str = ""
     failed_stage: str = ""
     error: str = ""
+    history_id: int | None = None
+    photo_upload: dict[str, Any] = field(default_factory=dict)
 
     @property
     def ready_for_review(self) -> bool:
@@ -91,6 +94,8 @@ class PimPreparationResult:
             "final_url": self.final_url,
             "failed_stage": self.failed_stage,
             "error": self.error,
+            "history_id": self.history_id,
+            "photo_upload": dict(self.photo_upload),
         }
 
     @classmethod
@@ -107,8 +112,8 @@ class PimPreparationResult:
             ai_steps=tuple(
                 PimAiStepResult(
                     step=str(item.get("step") or ""),
-                    success=bool(item.get("success")),
-                    changed=bool(item.get("changed")),
+                    success=item.get("success") is True,
+                    changed=item.get("changed") is True,
                     attempts=int(item.get("attempts") or 0),
                     detail=str(item.get("detail") or ""),
                 )
@@ -118,6 +123,8 @@ class PimPreparationResult:
             final_url=str(data.get("final_url") or ""),
             failed_stage=str(data.get("failed_stage") or ""),
             error=str(data.get("error") or ""),
+            history_id=data.get("history_id"),
+            photo_upload=dict(data.get("photo_upload") or {}),
         )
 
 
@@ -201,6 +208,13 @@ class PimboProductEditor:
         self.timeout = timeout
         self.title_template = title_template
         self.description_template = description_template
+        self._bound_product_id = ""
+        self._photo_upload_product_id = ""
+        self.photo_upload: dict[str, Any] = {}
+
+    def _assert_bound_product(self) -> None:
+        if self._bound_product_id and self.product_id != self._bound_product_id:
+            raise PimAutomationError("A different PIMBO product is open; preparation stopped before editing it")
 
     def _log(self, message: str, **context: Any) -> None:
         if self.logger:
@@ -252,13 +266,16 @@ class PimboProductEditor:
         return next(iter(self._displayed(self.driver.find_elements(by, value))), None)
 
     def _click(self, element: Any) -> None:
+        self._assert_bound_product()
         self.driver.execute_script("arguments[0].scrollIntoView({block:'center'});", element)
         try:
             element.click()
         except Exception:
+            self._assert_bound_product()
             self.driver.execute_script("arguments[0].click();", element)
 
     def _set_input_value(self, element: Any, value: str) -> None:
+        self._assert_bound_product()
         value = str(value or "")
         self.driver.execute_script(
             """
@@ -390,9 +407,19 @@ class PimboProductEditor:
         return version, actual_code
 
     def begin(self, product_code: str) -> PimPreparationResult:
+        self._assert_bound_product()
+        product_id = self.product_id
+        if not product_id:
+            raise PimAutomationError("No PIMBO product is open")
         try:
             version, _ = self.assert_draft(product_code)
+            if self.product_id != product_id:
+                raise PimAutomationError("PIMBO product changed during preparation checks")
+            self._bound_product_id = product_id
+            self._photo_upload_product_id = ""
+            self.photo_upload = {}
             initial_fields = self.capture_field_state()
+            self._assert_bound_product()
             return PimPreparationResult(
                 product_code=product_code,
                 product_id=self.product_id,
@@ -427,20 +454,24 @@ class PimboProductEditor:
             const placeholder = (arguments[1] || '').toLowerCase();
             const scopes = [];
             const combo = input.closest('[role="combobox"]');
-            if (combo) scopes.push(combo);
+            if (combo && combo !== input) scopes.push(combo);
             let node = input.parentElement;
-            for (let depth = 0; node && depth < 4; depth++, node = node.parentElement) {
+            for (let depth = 0; node && depth < 6; depth++, node = node.parentElement) {
+              // Never widen the read to a card containing unrelated fields.
+              const controls = Array.from(node.querySelectorAll('input, select, textarea'));
+              if (controls.some(control => control !== input && control.type !== 'hidden')) break;
               if (!scopes.includes(node)) scopes.push(node);
             }
             for (const scope of scopes) {
-              const matchingInputs = scope.querySelectorAll(
-                `input[placeholder="${CSS.escape(arguments[1] || '')}"]`
-              );
-              if (matchingInputs.length > 1) continue;
-              const values = (scope.innerText || '').split(/\\n/)
-                .map(v => v.trim()).filter(Boolean)
+              const controls = Array.from(scope.querySelectorAll('input, select, textarea'));
+              if (controls.some(control => control !== input && control.type !== 'hidden')) continue;
+              const copy = scope.cloneNode(true);
+              copy.querySelectorAll('h1, h2, h3, h4, h5, h6, [role="heading"], label, input, select, textarea, [role="listbox"], [role="option"]')
+                .forEach(node => node.remove());
+              const values = (copy.innerText || copy.textContent || '').split(/\\n/)
+                .map(v => v.replace(/\\*/g, '').trim()).filter(Boolean)
                 .filter(v => !v.toLowerCase().includes(placeholder.replace('...', '')))
-                .filter(v => !/^(brand|product family|family|product categories|categories|category|required|draft|in review|published|disabled|status)$/i.test(v));
+                .filter(v => !/^(brand|product family|family|product details|product categories|categories|category|required|draft|in review|published|disabled|status)$/i.test(v));
               if (values.length) return values[0];
             }
             return '';
@@ -639,6 +670,7 @@ class PimboProductEditor:
             self.driver.switch_to.default_content()
 
     def set_description_html(self, value: str) -> bool:
+        self._assert_bound_product()
         self.open_section("general")
         before = self.description_html()
         if before == value:
@@ -653,6 +685,7 @@ class PimboProductEditor:
         try:
             self.driver.switch_to.frame(iframe)
             body = self.driver.find_element(By.ID, "hugerte")
+            self._assert_bound_product()
             self.driver.execute_script(
                 """
                 const body = arguments[0];
@@ -728,6 +761,7 @@ class PimboProductEditor:
         if before.casefold() == value.casefold():
             return False
         self._click(field)
+        self._assert_bound_product()
         field.send_keys(Keys.CONTROL, "a")
         field.send_keys(value)
         literal = self._xpath_literal(value)
@@ -829,10 +863,10 @@ class PimboProductEditor:
                 for element, context in contexts
                 if not any(alias in context for alias in reserved_aliases)
             ]
-            if candidates:
+            if len(candidates) == 1:
                 return candidates[0]
-            if len(inputs) == 1:
-                return inputs[0]
+            if len(candidates) > 1:
+                raise PimAutomationError("PIMBO product-photo upload area is ambiguous")
             raise PimAutomationError(
                 "PIMBO product-photo upload area could not be distinguished from table images"
             )
@@ -852,6 +886,116 @@ class PimboProductEditor:
             raise PimAutomationError(f"PIMBO {label!r} image upload area was not found")
         raise PimAutomationError(f"PIMBO {label!r} image upload area is ambiguous")
 
+    ORBEA_PHOTO_PLACEHOLDER = "https://www.orbea.com/uploads/products/images/picture-coming-soon.webp"
+
+    @classmethod
+    def _is_photo_placeholder(cls, source: str) -> bool:
+        # Query strings do not change this asset; host and path must match exactly.
+        actual, expected = urlsplit(source), urlsplit(cls.ORBEA_PHOTO_PLACEHOLDER)
+        return (actual.scheme, actual.netloc, actual.path) == (expected.scheme, expected.netloc, expected.path)
+
+    def _product_photo_cards(self) -> list[dict[str, Any]]:
+        self._assert_bound_product()
+        image_input = self._image_group_input("product")
+        cards = self.driver.execute_script(
+            """
+            const input = arguments[0];
+            const selector = "input[type='file'][accept*='image']";
+            let root = input.parentElement;
+            if (!root) throw new Error('Product photo area was not found');
+            for (let depth = 0; root.parentElement && depth < 8; depth++) {
+              const parent = root.parentElement;
+              if (parent.tagName === 'MAIN' || parent.querySelectorAll(selector).length !== 1) break;
+              root = parent;
+            }
+            const cards = [];
+            const paired = new Set();
+            for (const img of root.querySelectorAll('img')) {
+              let button = null;
+              for (let node = img.parentElement; node; node = node.parentElement) {
+                const buttons = node.querySelectorAll('button[aria-label="Remove image"]');
+                if (buttons.length === 1 && node.querySelectorAll('img').length === 1) {
+                  button = buttons[0]; break;
+                }
+                if (node === root) break;
+              }
+              if (button || img.matches('img.size-full.object-cover')) {
+                if (button) paired.add(button);
+                cards.push({src: img.getAttribute('src') || img.currentSrc || '', button});
+              }
+            }
+            // An unreadable image still counts as an existing photo, never an empty gallery.
+            for (const button of root.querySelectorAll('button[aria-label="Remove image"]')) {
+              if (!paired.has(button)) cards.push({src: '', button});
+            }
+            return cards;
+            """,
+            image_input,
+        )
+        if not isinstance(cards, list):
+            raise PimAutomationError("PIMBO product photos could not be inspected")
+        return cards
+
+    def _remove_photo_placeholder(self, card: dict[str, Any], before_count: int) -> None:
+        self._assert_bound_product()
+        button = card.get("button")
+        if button is None:
+            raise PimAutomationError("The Orbea placeholder has no Remove image control")
+        # The trash icon is intentionally transparent until hover, so do not use is_displayed.
+        self.driver.execute_script("arguments[0].click();", button)
+
+        def confirmation():
+            try:
+                return self.driver.switch_to.alert
+            except NoAlertPresentException:
+                return None
+
+        alert = self._wait_until(confirmation, "PIMBO image removal confirmation did not appear")
+        prompt = _clean(alert.text)
+        if prompt != "Remove this image from the product? The file will remain in the media library.":
+            alert.dismiss()
+            raise PimAutomationError(f"Unexpected image removal confirmation: {prompt}")
+        alert.accept()
+        self._wait_until(
+            lambda: sum(self._is_photo_placeholder(item.get("src", "")) for item in self._product_photo_cards()) < before_count,
+            "The Orbea placeholder remained after confirming its removal",
+        )
+        self.photo_upload["placeholders_removed"] += 1
+
+    def prepare_product_photo_upload(self, *, has_replacements: bool = True) -> bool:
+        """Inspect once per product, replace only the exact placeholder, and keep real photos."""
+        self._assert_bound_product()
+        self.open_section("general")
+        if not self.product_id:
+            raise PimAutomationError("No PIMBO product is open for photo upload")
+        self._photo_upload_product_id = self.product_id
+        self.photo_upload = {"action": "checking", "existing_photos": 0,
+                             "placeholders_removed": 0, "uploaded_photos": 0}
+        try:
+            cards = self._product_photo_cards()
+            placeholders = [card for card in cards if self._is_photo_placeholder(card.get("src", ""))]
+            real_count = len(cards) - len(placeholders)
+            self.photo_upload["existing_photos"] = real_count
+            if placeholders and (has_replacements or real_count):
+                while placeholders:
+                    self._remove_photo_placeholder(placeholders[0], len(placeholders))
+                    cards = self._product_photo_cards()
+                    placeholders = [card for card in cards if self._is_photo_placeholder(card.get("src", ""))]
+                # Recheck after deletion in case the gallery changed while removing it.
+                real_count = len(cards)
+                self.photo_upload["existing_photos"] = real_count
+            if real_count:
+                self.photo_upload["action"] = "skipped_existing"
+                return False
+            if not has_replacements:
+                self.photo_upload["action"] = "missing_photos"
+                return False
+            self.photo_upload["action"] = "ready"
+            return True
+        except Exception as error:
+            self.photo_upload.update(action="failed", error=str(error))
+            raise
+
     def _upload_images_to_group(
         self,
         paths: Iterable[str],
@@ -863,14 +1007,20 @@ class PimboProductEditor:
         files = [str(path) for path in paths if str(path)]
         if not files:
             return 0
-        if skip_if_present and group == "product":
-            remove_buttons = self._displayed(
-                self.driver.find_elements(By.XPATH, "//main//button[@aria-label='Remove image']")
-            )
-            if remove_buttons:
+        if group == "product":
+            if not self._photo_upload_product_id or self._photo_upload_product_id != self.product_id or self.photo_upload.get("action") == "missing_photos":
+                if not self.prepare_product_photo_upload(has_replacements=True):
+                    return 0
+            if self.photo_upload.get("action") == "skipped_existing":
                 return 0
+            if self.photo_upload.get("action") == "failed":
+                raise PimAutomationError(self.photo_upload.get("error") or "Product photo inspection failed")
         image_input = self._image_group_input(group)
+        self._assert_bound_product()
         image_input.send_keys("\n".join(files))
+        if group == "product":
+            self.photo_upload["uploaded_photos"] += len(files)
+            self.photo_upload["action"] = "uploaded"
         return len(files)
 
     def upload_product_images(self, paths: Iterable[str], *, skip_if_present: bool = True) -> int:
@@ -907,6 +1057,7 @@ class PimboProductEditor:
         return _clean(field.get_attribute("value"))
 
     def set_attribute(self, name: str, value: str) -> bool | None:
+        self._assert_bound_product()
         self.open_section("attributes")
         field = self._field_after_label(name, placeholder="Search or add new...")
         if field is None:
@@ -1505,7 +1656,10 @@ class PimboProductEditor:
                 )
             raise PimAutomationError(str(error)) from error
 
-    def fill_empty_specifications_with_ai(self, source_text: str) -> PimAiStepResult:
+    def fill_empty_specifications_with_ai(
+        self, source_text: str, *, excluded_fields: Iterable[str] = (),
+    ) -> PimAiStepResult:
+        """Fill empty values while preserving excluded fields, including blanks."""
         source_text = str(source_text or "").strip()
         if not source_text:
             raise PimAutomationError("Specification MagicAI source text is empty")
@@ -1518,8 +1672,18 @@ class PimboProductEditor:
             return PimAiStepResult("specifications", True, False, 0, "MagicAI unavailable for this product schema")
 
         spec_inputs = panel.find_elements(By.CSS_SELECTOR, "input[placeholder='Enter value...']")
+        preserved = {}
+        excluded_indexes = set()
+        for name in dict.fromkeys(excluded_fields):
+            field = self._field_after_label(name, placeholder="Enter value...")
+            if field is not None:
+                if field not in spec_inputs:
+                    raise PimAutomationError(f"Excluded specification {name!r} could not be identified")
+                preserved[name] = str(field.get_attribute("value") or "")
+                excluded_indexes.add(spec_inputs.index(field))
         before = [str(item.get_attribute("value") or "") for item in spec_inputs]
-        empty_before = sum(not _clean(value) for value in before)
+        eligible_before = [value for index, value in enumerate(before) if index not in excluded_indexes]
+        empty_before = sum(not _clean(value) for value in eligible_before)
         if empty_before == 0:
             return PimAiStepResult(
                 "specifications", True, False, 0, "no empty specification fields"
@@ -1543,18 +1707,28 @@ class PimboProductEditor:
                 lambda: self._find_visible(By.XPATH, "//main//button[normalize-space()='Extract & fill']"),
                 "Specification MagicAI Extract & fill button was not found",
             )
-            self._click(extract)
-            self._wait_until(
-                lambda: self._find_visible(By.XPATH, "//main//button[normalize-space()='Extract & fill']") is None,
-                "Specification MagicAI did not finish",
-                90.0,
-            )
+            try:
+                self._click(extract)
+                self._wait_until(
+                    lambda: self._find_visible(By.XPATH, "//main//button[normalize-space()='Extract & fill']") is None,
+                    "Specification MagicAI did not finish",
+                    90.0,
+                )
+            finally:
+                # PIMBO extracts all empty fields together. Restore manual fields
+                # before validation or Save, even if extraction failed partway.
+                for name, value in preserved.items():
+                    restored = self._set_specification_in_open_section(name, value, overwrite=True)
+                    if restored is None:
+                        raise PimAutomationError(f"Excluded specification {name!r} could not be restored")
             panel = self._active_panel()
             after_inputs = panel.find_elements(By.CSS_SELECTOR, "input[placeholder='Enter value...']") if panel else []
             after = [str(item.get_attribute("value") or "") for item in after_inputs]
+            if excluded_indexes and len(after) != len(before):
+                raise PimAutomationError("Specification fields changed during MagicAI; product was not saved")
             last_filled, changed_existing = self.validate_specification_transition(
-                before,
-                after,
+                eligible_before,
+                [value for index, value in enumerate(after) if index not in excluded_indexes],
             )
             if changed_existing:
                 raise PimAutomationError(
@@ -1899,13 +2073,15 @@ class PimboProductEditor:
     def run_full_magic_ai(self, source_text: str) -> tuple[PimAiStepResult, ...]:
         """Run the full product enrichment sequence, without saving."""
 
-        steps = [
-            self.generate_product_name(),
-            self.generate_description(),
-            self.suggest_category("Dviračiai"),
-            self.fill_empty_specifications_with_ai(source_text),
-            self.translate_lt_to_all(overwrite=True),
-        ]
+        steps = []
+        for action in (self.generate_product_name, self.generate_description,
+                       lambda: self.suggest_category("Dviračiai"),
+                       lambda: self.fill_empty_specifications_with_ai(source_text),
+                       lambda: self.translate_lt_to_all(overwrite=True)):
+            step = action()
+            if not isinstance(step, PimAiStepResult) or not step.success:
+                raise PimAutomationError(getattr(step, "detail", "") or "A required MagicAI step failed")
+            steps.append(step)
         self.switch_locale("lt")
         return tuple(steps)
 
@@ -1920,14 +2096,25 @@ class PimboProductEditor:
         if base.status == PimPreparationStatus.BLOCKED_NON_DRAFT:
             return base
         changed = tuple(dict.fromkeys(str(item) for item in changed_fields if item))
+        if self.photo_upload.get("placeholders_removed") and "images" not in changed:
+            changed += ("images",)
         result = replace(
             base,
             status=PimPreparationStatus.READY_FOR_REVIEW,
             changed_fields=changed,
+            photo_upload=dict(self.photo_upload),
             ai_steps=tuple(ai_steps),
             warnings=tuple(warnings),
             final_url=self.driver.current_url,
         )
+        if not base.product_id or self.product_id != base.product_id:
+            return replace(result, status=PimPreparationStatus.FAILED,
+                           error="PIMBO product changed during preparation")
+        failed_steps = [step for step in result.ai_steps if not step.success]
+        if failed_steps:
+            return replace(result, status=PimPreparationStatus.FAILED,
+                           failed_stage=failed_steps[0].step,
+                           error=failed_steps[0].detail or "A required MagicAI step failed")
         if not self.is_dirty():
             return replace(
                 result,
@@ -2010,6 +2197,9 @@ class PimboProductEditor:
                 error="Initial PIMBO product version was not available",
             )
 
+        if self.current_version() != result.initial_version:
+            return result.with_status(PimPreparationStatus.FAILED,
+                error="PIMBO product version changed during preparation; automatic Save was cancelled")
         button = self.save_button()
         if button is None or not button.is_enabled() or not self.is_dirty():
             return result.with_status(

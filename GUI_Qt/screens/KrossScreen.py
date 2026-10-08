@@ -21,6 +21,7 @@ from qfluentwidgets import (
 )
 
 from Managers.PimboProductEditor import PimPreparationStatus
+from Utilities.UploadResultsReport import result_record, upload_result_row, write_upload_results, read_supplier_result
 from GUI_Qt.kross.workers import (
     KrossCollectionWorker, KrossFilterWorker, KrossSkuCollectionWorker,
     KrossUploadWorker,
@@ -79,6 +80,8 @@ class KrossScreen(ResponsiveWidget):
         self._discovery_worker = None  # Compatibility alias for the former flow.
         self._owns_browser_lease = False
         self._matches: dict[str, KrossMatch] = {}
+        self._upload_results = {}
+        self._upload_batch_error = ""
         self._row_by_sku: dict[str, int] = {}
         self._sku_by_row: dict[int, str] = {}
         self._closing = False
@@ -382,6 +385,12 @@ class KrossScreen(ResponsiveWidget):
         bottom.addWidget(self._progress, 1)
         bottom.addWidget(self._progress_label)
         layout.addLayout(bottom)
+        export_row = QHBoxLayout()
+        self._export_upload_button = PushButton(FluentIcon.DOCUMENT, "")
+        self._export_upload_button.clicked.connect(self._export_upload_results)
+        export_row.addWidget(self._export_upload_button)
+        export_row.addStretch()
+        layout.addLayout(export_row)
         self._layout.addWidget(card)
 
     def _build_log_card(self) -> None:
@@ -867,6 +876,7 @@ class KrossScreen(ResponsiveWidget):
         self._upload_finished_count = 0
         self._upload_failed_count = 0
         self._upload_warning_count = 0
+        self._upload_batch_error = ""
         self._active_upload_total = len(selected)
         self._log_message(self.tr("kross.upload.starting", count=len(selected)))
         self._upload_worker = KrossUploadWorker(self._service, selected, Path(output_text), options)
@@ -884,6 +894,7 @@ class KrossScreen(ResponsiveWidget):
         self._progress_label.setText(message)
 
     def _on_upload_result(self, result: KrossUploadResult) -> None:
+        self._upload_results[(result.match.sku, result.match.local_folder)] = result_record(result)
         row = self._row_by_sku.get(result.match.sku)
         if row is None:
             return
@@ -913,6 +924,7 @@ class KrossScreen(ResponsiveWidget):
             self._progress.setValue(int(self._upload_finished_count * 100 / self._active_upload_total))
 
     def _finish_upload(self) -> None:
+        self._upload_batch_error = getattr(self._upload_worker, "_batch_error", "")
         self._upload_worker = None
         self._release_browser()
         self._update_action_state()
@@ -943,9 +955,22 @@ class KrossScreen(ResponsiveWidget):
                 parent=self, position=InfoBarPosition.TOP, duration=4000,
             )
 
+    def _export_upload_results(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(self, self.tr("kross.upload.export_results"),
+            str(Path(self._output_input.text()) / "kross-upload-results.xlsx"), "Excel (*.xlsx)")
+        if not path:
+            return
+        try:
+            rows = [upload_result_row(match, self._upload_results.get((match.sku, match.local_folder)) or read_supplier_result(match, "kross"), brand="KROSS") for match in self._matches.values()]
+            write_upload_results(path, rows, context={"Batch stop reason": self._upload_batch_error})
+            self._log_message(self.tr("kross.upload.export_saved", path=path))
+        except Exception as error:
+            self._show_error(str(error))
+
     # --------------------------------------------------------- Table / state
 
     def _populate_table(self, matches: tuple[KrossMatch, ...]) -> None:
+        self._upload_batch_error = ""
         self._table.blockSignals(True)
         self._table.setRowCount(len(matches))
         self._matches.clear()
@@ -1005,6 +1030,7 @@ class KrossScreen(ResponsiveWidget):
         self._browse_output_button.setEnabled(not busy)
         self._manual_skus_input.setEnabled(not busy)
         self._upload_button.setEnabled(not busy and bool(self._selected_ready_matches()) and self._workflow_options().any_selected)
+        self._export_upload_button.setEnabled(not busy and bool(self._matches))
         for widget in self._filter_widgets:
             widget.setEnabled(not busy)
         for checkbox in (*self._collection_checks.values(), *self._stage_checks.values()):
@@ -1109,6 +1135,7 @@ class KrossScreen(ResponsiveWidget):
         for stage, checkbox in self._stage_checks.items():
             checkbox.setText(self.tr(f"kross.stage.{stage}"))
         self._upload_button.setText(self.tr("kross.upload.start"))
+        self._export_upload_button.setText(self.tr("kross.upload.export_results"))
         self._log_title.setText(self.tr("kross.log.title"))
         if not self._filter_state_label.text():
             self._filter_state_label.setText(self.tr("kross.filters.defaults"))

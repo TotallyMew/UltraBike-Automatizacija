@@ -5,13 +5,13 @@ import re
 import time
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import urljoin, urlsplit
 
 from .catalogue import (
     CatalogueIndex,
     MatchResult,
     normalize_code,
     parse_number,
-    select_representative_variant,
 )
 from .checkpoint import RunCheckpoint, utc_now
 from .models import (
@@ -32,6 +32,14 @@ SORT_LABELS = ("Recent", "Least complete", "Most complete")
 
 def _clean(value: Any) -> str:
     return re.sub(r"\s+", " ", str(value or "").replace("\u00a0", " ")).strip()
+
+
+def list_variant_code(value: Any) -> str:
+    """Read an exposed Orbea code without absorbing a '+3' variant count."""
+    from .website import template_code
+
+    match = re.match(r"([A-Z][A-Z0-9]{3}(?:[A-Z0-9]{4})?)\b", _clean(value).upper())
+    return match[1] if match and template_code(match[1]) else ""
 
 
 def _same_label(left: Any, right: Any) -> bool:
@@ -559,10 +567,23 @@ class PimboBrowserClient:
             if spec.stock == "Out of stock" and (stock or 0) > 0:
                 raise RuntimeError("Pimbo returned an in-stock row")
 
-    def _wait_for_rows(self, *, allow_empty: bool = False) -> list[Any]:
+    def _rows_signature(self, rows: list[Any]) -> tuple[str, ...]:
+        return tuple(self.driver.execute_script(
+            """return arguments[0].map(row => {
+                const link = row.querySelector("a[href*='/dashboard/products/']");
+                return link ? link.href : row.textContent.trim();
+            });""", rows,
+        ))
+
+    def _wait_for_rows(
+        self, *, allow_empty: bool = False,
+        previous_rows: tuple[str, ...] | None = None,
+    ) -> list[Any]:
         By = self._by()
         deadline = time.monotonic() + 15.0
         last_error: BaseException | None = None
+        stable_signature = None
+        stable_since = time.monotonic()
         while time.monotonic() < deadline:
             self._check_cancelled()
             try:
@@ -571,14 +592,22 @@ class PimboBrowserClient:
                         By.CSS_SELECTOR,
                         "main table tbody tr[data-slot='table-row']",
                     )
-                    if rows:
+                    loading = self.driver.execute_script(
+                        "return !!document.querySelector(\"main [aria-busy='true'], main table .animate-spin, main [data-loading='true']\");"
+                    )
+                    signature = self._rows_signature(rows)
+                    ready = not loading and (rows or (allow_empty and self.driver.find_elements(By.CSS_SELECTOR, "main table")))
+                    if previous_rows is not None and signature == previous_rows:
+                        ready = False
+                    if not ready or signature != stable_signature:
+                        stable_signature = signature if ready else None
+                        stable_since = time.monotonic()
+                    elif time.monotonic() - stable_since >= 0.45:
                         return rows
-                    if allow_empty and self.driver.find_elements(
-                        By.CSS_SELECTOR, "main table"
-                    ):
-                        return []
             except Exception as error:
                 last_error = error
+                stable_signature = None
+                stable_since = time.monotonic()
             time.sleep(0.15)
         detail = f": {last_error}" if last_error else ""
         raise TimeoutError(f"The Pimbo product list did not load{detail}")
@@ -601,13 +630,23 @@ class PimboBrowserClient:
             raise RuntimeError("Pimbo pagination was not found")
         current = int(page_input.get_attribute("value") or "1")
         if current == page_number:
+            self._wait_for_rows(allow_empty=True)
             return
+        previous_rows = self._rows_signature(self._wait_for_rows(allow_empty=True))
         page_input = self._safe_click(
             self._page_input,
             "The Pimbo page field remained covered",
         )
-        page_input.send_keys(Keys.CONTROL, "a")
-        page_input.send_keys(str(page_number))
+        # React can submit a request for every digit typed (2, then 23).
+        # Set the complete number in one input event to avoid racing requests.
+        self.driver.execute_script(
+            """const input = arguments[0];
+            const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+            setter.call(input, arguments[1]);
+            input.dispatchEvent(new Event('input', {bubbles: true}));
+            input.dispatchEvent(new Event('change', {bubbles: true}));""",
+            page_input, str(page_number),
+        )
         page_input.send_keys(Keys.ENTER)
         self._wait_until(
             lambda: self._page_input() is not None
@@ -615,7 +654,7 @@ class PimboBrowserClient:
             12.0,
             f"Pimbo did not move to page {page_number}",
         )
-        self._wait_for_rows(allow_empty=True)
+        self._wait_for_rows(allow_empty=True, previous_rows=previous_rows)
 
     def _totals(self) -> tuple[int | None, int]:
         By = self._by()
@@ -671,66 +710,61 @@ class PimboBrowserClient:
             "list_status": _clean(cells[6].text) if len(cells) > 6 else "",
         }
 
-    def _extract_one_variant(self, row: Any) -> dict[str, Any]:
-        By = self._by()
-        self.driver.execute_script(
-            "arguments[0].scrollIntoView({block:'center'}); arguments[0].click();", row
+    def _page_list_snapshots(self) -> list[dict[str, Any]]:
+        """Read the rendered list page in one browser call, without clicking rows."""
+        self._check_cancelled()
+        snapshots = self.driver.execute_script(
+            r"""return Array.from(document.querySelectorAll("main table tbody tr[data-slot='table-row']"), row => {
+                const cells = Array.from(row.children).filter(cell => cell.tagName === 'TD');
+                const text = node => (node?.textContent || '').replace(/\s+/g, ' ').trim();
+                const title = row.querySelector('span.font-medium[title]');
+                const code = cells[1]?.querySelector('span.font-mono');
+                const link = row.querySelector("a[href*='/dashboard/products/']");
+                return {
+                    title: title?.getAttribute('title') || text(title) || row.querySelector('img[alt]')?.getAttribute('alt') || '',
+                    visible_code: text(code),
+                    row_href: link?.href || '',
+                    brand: text(cells[2]),
+                    variant_count: text(cells[4]),
+                    list_stock: text(cells[5]),
+                    list_status: text(cells[6]),
+                };
+            });"""
         )
-        self._wait_until(
-            lambda: bool(re.search(r"/dashboard/products/[^/?#]+", self.driver.current_url)),
-            15.0,
-            "The Pimbo product did not open",
-        )
-        product_url = self.driver.current_url
-        product_id = product_url.rstrip("/").split("/")[-1]
+        if not isinstance(snapshots, list):
+            raise RuntimeError("The Pimbo product list could not be read")
+        for snapshot in snapshots:
+            for key in ('title', 'visible_code', 'row_href', 'brand', 'list_status'):
+                snapshot[key] = _clean(snapshot.get(key))
+            for key in ('variant_count', 'list_stock'):
+                snapshot[key] = parse_number(snapshot.get(key))
+        return snapshots
 
-        def variants_button() -> Any:
-            buttons = self.driver.find_elements(
-                By.XPATH, "//button[@role='tab' and normalize-space()='Variants']"
-            )
-            return next((button for button in buttons if button.is_displayed()), None)
+    @classmethod
+    def _list_row_key(cls, snapshot: dict[str, Any], page_number: int, row_number: int) -> str:
+        if snapshot.get('row_href'):
+            return cls._row_key(snapshot, page_number, row_number)
+        code = list_variant_code(snapshot.get('visible_code') or snapshot.get('sku'))
+        if code:
+            # Stable across pagination, title edits and changing '+N' labels.
+            return hashlib.sha1(f"pimbo-list-sku\0{code}".encode('utf-8')).hexdigest()
+        return cls._row_key(snapshot, page_number, row_number)
 
-        tab = self._wait_until(variants_button, 12.0, "The Variants tab did not appear")
-        if tab.get_attribute("aria-selected") != "true":
-            tab = self._safe_click(
-                variants_button,
-                "The Pimbo Variants tab remained covered",
-            )
-        self._wait_until(
-            lambda: tab.get_attribute("aria-selected") == "true"
-            and self.driver.find_elements(By.CSS_SELECTOR, "div[role='tabpanel']"),
-            10.0,
-            "The Variants tab did not load",
-        )
-        time.sleep(0.25)
-
-        rows = self.driver.find_elements(
-            By.CSS_SELECTOR,
-            "div[role='tabpanel'] table tbody tr[data-slot='table-row']",
-        )
-        variants: list[dict[str, Any]] = []
-        for variant_row in rows:
-            cells = variant_row.find_elements(By.CSS_SELECTOR, "td")
-            if not cells:
-                continue
-            links = cells[0].find_elements(
-                By.CSS_SELECTOR, "a[href^='/dashboard/variants/']"
-            )
-            sku = _clean(links[0].text if links else cells[0].text)
-            if sku:
-                variants.append(
-                    {
-                        "sku": normalize_code(sku),
-                        "stock": parse_number(cells[6].text) if len(cells) > 6 else None,
-                    }
-                )
-        chosen = select_representative_variant(variants)
+    @staticmethod
+    def _list_row_detail(snapshot: dict[str, Any]) -> dict[str, Any]:
+        sku = list_variant_code(snapshot.get('visible_code'))
+        url = urljoin(PIMBO_PRODUCTS_URL, str(snapshot.get('row_href') or '')) if snapshot.get('row_href') else ''
+        parts = urlsplit(url)
+        product = re.fullmatch(r'/dashboard/products/([^/]+)/?', parts.path)
+        if parts.scheme != 'https' or parts.hostname != urlsplit(PIMBO_PRODUCTS_URL).hostname or product is None:
+            url, product_id = '', ''
+        else:
+            product_id = product[1]
         return {
-            "product_url": product_url,
-            "product_id": product_id,
-            "sku": normalize_code(chosen.get("sku", "")) if chosen else "",
-            "variant_stock": chosen.get("stock") if chosen else None,
-            "variant_count_found": len(rows),
+            'sku': sku, 'sku_source': 'Pimbo product list',
+            'product_url': url, 'product_id': product_id,
+            # The list exposes aggregate stock, not this variant's stock.
+            'variant_stock': None, 'variant_count_found': None,
         }
 
     def _restore_list(self, page: int, filters: PimboFilterSpec) -> None:
@@ -774,109 +808,73 @@ class PimboBrowserClient:
         products, pages = self._totals()
         checkpoint.set_totals(products=products, pages=pages)
         processed = checkpoint.processed_row_keys(retry_failed=retry_failed)
+        # Older partial scans used position keys for rows without links. Retain
+        # their completed work when resuming with the exposed list code.
+        for saved in checkpoint.results:
+            if saved.get('row_key') in processed:
+                processed.add(self._list_row_key(saved, saved.get('page', 1), saved.get('row', 1)))
         product_ids = checkpoint.known_product_ids()
         newly_scanned = 0
-        completed_rows = len(processed)
+        visited_rows = 0
+        checkpoint.data['scan_source'] = 'Pimbo product list'
+        checkpoint.data['scan_completed'] = False
 
         if log:
             log(f"Filtered Pimbo list: {products or 'unknown'} products across {pages} pages")
+            log("Reading exposed list codes and titles; product and Variants pages are not opened")
+            if config.product_code_prefix:
+                log(f"Product code must start with: {config.product_code_prefix}")
         for page_number in range(1, pages + 1):
             self._check_cancelled()
+            products, current_pages = self._totals()
+            checkpoint.set_totals(products=products, pages=current_pages)
+            if page_number > current_pages:
+                break
             self.go_to_page(page_number)
-            row_count = len(self._wait_for_rows(allow_empty=True))
-            for row_index in range(row_count):
+            self._wait_for_rows(allow_empty=True)
+            snapshots = self._page_list_snapshots()
+            for row_number, snapshot in enumerate(snapshots, 1):
                 self._check_cancelled()
                 if config.max_products is not None and newly_scanned >= config.max_products:
-                    checkpoint.data["scan_completed"] = False
+                    checkpoint.data['scan_completed'] = False
                     checkpoint.save()
                     return
-
-                row, snapshot = self._row_snapshot(row_index)
-                row_key = self._row_key(snapshot, page_number, row_index + 1)
+                visited_rows += 1
+                if config.product_code_prefix and not snapshot['visible_code'].upper().startswith(config.product_code_prefix):
+                    if row_progress:
+                        row_progress(visited_rows, products,
+                            f"Skipped {snapshot['visible_code'] or '(no code)'}: code does not start with {config.product_code_prefix}")
+                    continue
+                row_key = self._list_row_key(snapshot, page_number, row_number)
                 if row_key in processed:
                     if row_progress:
-                        row_progress(completed_rows, products, "Resuming completed products")
+                        row_progress(visited_rows, products, "Reusing a saved list row")
                     continue
-
-                likely, candidate_reason = catalogue.is_likely_bicycle(
-                    snapshot["visible_code"], snapshot["title"]
-                )
-                base = {
-                    "row_key": row_key,
-                    "page": page_number,
-                    "row": row_index + 1,
-                    "scanned_at": utc_now(),
-                    "candidate_reason": candidate_reason,
-                    **snapshot,
-                }
+                likely, candidate_reason = catalogue.is_likely_bicycle(snapshot['visible_code'], snapshot['title'])
+                detail = self._list_row_detail(snapshot)
                 if not config.all_products and not likely:
-                    result = {
-                        **base,
-                        "status": "excluded",
-                        "match_method": "catalogue prefilter",
-                        "note": "Scanned but not opened: no bicycle code/title candidate",
-                        "product_url": "",
-                        "product_id": "",
-                        "sku": "",
-                        "variant_stock": None,
-                        "variant_count_found": None,
-                        **self._blank_entry_fields(),
-                    }
+                    match = MatchResult('excluded', 'catalogue prefilter', None, 'No bicycle code/title candidate')
+                elif detail['product_id'] and detail['product_id'] in product_ids:
+                    match = MatchResult('duplicate', 'Pimbo product ID', None, 'This Pimbo product was already processed')
+                elif not detail['sku']:
+                    match = MatchResult('no_variant', 'Pimbo product list', None, 'No recognised Orbea code was exposed in this list row')
                 else:
-                    try:
-                        detail = self._extract_one_variant(row)
-                        if detail["product_id"] in product_ids:
-                            match = MatchResult(
-                                "duplicate",
-                                "Pimbo product ID",
-                                None,
-                                "This Pimbo product was already processed",
-                            )
-                        elif not detail["sku"]:
-                            match = MatchResult(
-                                "no_variant",
-                                "Variants tab",
-                                None,
-                                "No variant SKU was found",
-                            )
-                        else:
-                            match = catalogue.match(detail["sku"], snapshot["title"])
-                        result = {
-                            **base,
-                            **detail,
-                            "status": match.status,
-                            "match_method": match.method,
-                            "note": match.note,
-                            **match.catalogue_fields(),
-                        }
-                        if detail["product_id"]:
-                            product_ids.add(detail["product_id"])
-                    except RunCancelled:
-                        raise
-                    except Exception as error:
-                        result = {
-                            **base,
-                            "status": "error",
-                            "match_method": "browser",
-                            "note": f"{type(error).__name__}: {_clean(error)}",
-                            "product_url": self.driver.current_url,
-                            "product_id": "",
-                            "sku": "",
-                            "variant_stock": None,
-                            "variant_count_found": None,
-                            **self._blank_entry_fields(),
-                        }
-                    finally:
-                        if not self._on_products_page():
-                            self._restore_list(page_number, config.filters)
-
+                    match = MatchResult('unmatched', 'Pending Orbea TTCC search', None, 'List code saved; URL lookup follows the Pimbo scan')
+                result = {
+                    'row_key': row_key, 'page': page_number, 'row': row_number,
+                    'scanned_at': utc_now(), 'candidate_reason': candidate_reason,
+                    **snapshot, **detail,
+                    'status': match.status, 'match_method': match.method,
+                    'note': match.note, **match.catalogue_fields(),
+                }
                 checkpoint.upsert_result(result)
                 processed.add(row_key)
+                if detail['product_id']:
+                    product_ids.add(detail['product_id'])
                 newly_scanned += 1
-                completed_rows += 1
                 if row_progress:
-                    row_progress(completed_rows, products, f"{result.get('sku') or snapshot['visible_code']} → {result['status']}")
+                    row_progress(visited_rows, products, f"{result.get('sku') or snapshot['visible_code']} → {result['status']}")
 
-        checkpoint.data["scan_completed"] = True
-        checkpoint.data["scan_completed_at"] = utc_now()
+        checkpoint.data['scan_completed'] = True
+        checkpoint.data['scan_completed_at'] = utc_now()
         checkpoint.save()

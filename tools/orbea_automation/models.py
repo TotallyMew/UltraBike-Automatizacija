@@ -68,7 +68,7 @@ class PimboFilterSpec:
 
 @dataclass(frozen=True)
 class OrbeaRunConfig:
-    catalogue_path: Path
+    catalogue_path: Path | None
     output_root: Path
     filters: PimboFilterSpec = field(default_factory=PimboFilterSpec)
     all_products: bool = True
@@ -81,15 +81,30 @@ class OrbeaRunConfig:
     table_render_timeout: float = 8.0
     selector_timeout: float = 5.0
     image_retry_limit: int = 1
+    product_code_prefix: str = ""
+    collect_product_data: bool = False
+    download_description: bool = False
+    download_specifications: bool = False
+    resume_run_dir: Path | None = None
+    downloads_only: bool = False
     search: str = field(default="orbea", init=False)
 
     def __post_init__(self) -> None:
         object.__setattr__(
-            self, "catalogue_path", Path(self.catalogue_path).expanduser().resolve()
+            self, "product_code_prefix", str(self.product_code_prefix or "").strip().upper()
+        )
+        object.__setattr__(
+            self, "catalogue_path",
+            Path(self.catalogue_path).expanduser().resolve() if self.catalogue_path else None,
         )
         object.__setattr__(
             self, "output_root", Path(self.output_root).expanduser().resolve()
         )
+        if self.resume_run_dir is not None:
+            run_dir = Path(self.resume_run_dir).expanduser().resolve()
+            if run_dir.parent != self.output_root:
+                raise ValueError("The saved run must belong to the selected output folder")
+            object.__setattr__(self, "resume_run_dir", run_dir)
         if self.max_products is not None and self.max_products < 1:
             raise ValueError("max_products must be positive when supplied")
         for name in (
@@ -107,13 +122,17 @@ class OrbeaRunConfig:
         """Return fields that must match before an unfinished run can resume."""
 
         return {
-            "catalogue_path": str(self.catalogue_path),
+            "catalogue_path": str(self.catalogue_path) if self.catalogue_path else "",
             "catalogue_sha256": catalogue_sha256,
             "filters": self.filters.as_dict(),
             "search": self.search,
+            "product_code_prefix": self.product_code_prefix,
             "all_products": self.all_products,
             "download_images": self.download_images,
             "download_product_photos": self.download_product_photos,
+            "collect_product_data": self.collect_product_data,
+            "download_description": self.download_description,
+            "download_specifications": self.download_specifications,
         }
 
 
@@ -138,6 +157,15 @@ class OrbeaRunResult:
     cancelled: bool
     resumed: bool
     counts: Mapping[str, int] = field(default_factory=dict)
+
+
+class OrbeaRunFailure(RuntimeError):
+    """A failed run with any saved report and checkpoint still available."""
+
+    def __init__(self, message: str, partial_result: OrbeaRunResult, *, reason: str = ""):
+        super().__init__(message)
+        self.partial_result = partial_result
+        self.reason = reason
 
 
 class CancellationToken:

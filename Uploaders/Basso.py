@@ -6,14 +6,12 @@ from Managers.TranslationManager import TranslationManager
 
 class Basso(ProductUploader):
     def scrape(self):
-        credentials = None
-        try:
-            if getattr(self, 'master_password', None):
-                user, pwd = self.session_manager.get_external_credentials('basso', self.master_password)
-                if user and pwd:
-                    credentials = (user, pwd)
-        except Exception:
-            credentials = None
+        if not self.master_password:
+            raise ValueError("Unlock Basso credentials before collecting product data")
+        user, pwd = self.session_manager.get_external_credentials('basso', self.master_password)
+        if not user or not pwd:
+            raise ValueError("Basso credentials are missing")
+        credentials = (user, pwd)
 
         # Pass both ultraBikeCode and bassoConfigurationCode to the scrape function
         self.translationManager.prepareTranslationFiles(

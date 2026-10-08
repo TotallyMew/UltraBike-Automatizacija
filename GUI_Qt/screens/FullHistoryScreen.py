@@ -17,6 +17,7 @@ from qfluentwidgets import (
 from datetime import datetime, timedelta
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
+from Utilities.UploadResultsReport import add_upload_results, history_upload_row
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
 from GUI_Qt.widgets import enable_table_copy
 from GUI_Qt.styles.theme_config import (
@@ -878,6 +879,8 @@ class FullHistoryScreen(ResponsiveWidget):
                         pass
                 ws.column_dimensions[column_letter].width = min(max_length + 2, 60)
 
+            add_upload_results(wb, [history_upload_row(record) for record in self.filtered_history],
+                               context={"Source": "Filtered upload history"})
             wb.save(file_path)
 
             InfoBar.success(

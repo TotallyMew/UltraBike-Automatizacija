@@ -375,6 +375,8 @@ def create_driver(
     browser_name: str,
     show_browser: bool,
     page_load_timeout: float = DEFAULT_TIMEOUT,
+    *,
+    profile_dir: Path | None = None,
 ):
     from selenium import webdriver
     from selenium.webdriver.chrome.options import Options as ChromeOptions
@@ -387,6 +389,9 @@ def create_driver(
     from webdriver_manager.firefox import GeckoDriverManager
     from webdriver_manager.microsoft import EdgeChromiumDriverManager
 
+    if profile_dir is not None:
+        profile_dir = Path(profile_dir).resolve()
+        profile_dir.mkdir(parents=True, exist_ok=True)
     name = browser_name.casefold()
     if name == "chrome":
         options = ChromeOptions()
@@ -398,6 +403,8 @@ def create_driver(
         if not show_browser:
             options.add_argument("--headless=new")
         options.add_argument("--window-size=1800,1400")
+        if profile_dir is not None:
+            options.add_argument(f"--user-data-dir={profile_dir}")
         options.add_argument("--disable-gpu")
         options.add_argument("--disable-dev-shm-usage")
         driver = webdriver.Chrome(
@@ -410,6 +417,8 @@ def create_driver(
         if not show_browser:
             options.add_argument("--headless=new")
         options.add_argument("--window-size=1800,1400")
+        if profile_dir is not None:
+            options.add_argument(f"--user-data-dir={profile_dir}")
         options.add_argument("--disable-gpu")
         driver = webdriver.Edge(
             service=EdgeService(EdgeChromiumDriverManager().install()), options=options
@@ -419,6 +428,11 @@ def create_driver(
         options.page_load_strategy = "eager"
         if not show_browser:
             options.add_argument("-headless")
+        if profile_dir is not None:
+            # FirefoxOptions.profile copies a profile to a temporary folder.
+            # Use the dedicated folder directly so normal site cookies survive.
+            options.add_argument("-profile")
+            options.add_argument(str(profile_dir))
         driver = webdriver.Firefox(
             service=FirefoxService(GeckoDriverManager().install()), options=options
         )
@@ -1161,6 +1175,7 @@ def capture_orbea_tables(
     need_size_guide: bool = True,
     geometry_position: str = DEFAULT_GEOMETRY_POSITION,
     timeouts: CaptureTimeouts | None = None,
+    after_navigation=None,
 ) -> dict[str, Any]:
     """Capture the available Orbea tables once and classify each independently.
 
@@ -1206,6 +1221,11 @@ def capture_orbea_tables(
         result["errors"].append(message)
         result["retryable"] = need_geometry or need_size_guide
         return result
+
+    # Wait for any site verification before probing controls. Access and stop
+    # exceptions propagate to the caller, preserving pending table downloads.
+    if after_navigation is not None:
+        after_navigation()
 
     try:
         controls = discover_table_controls(

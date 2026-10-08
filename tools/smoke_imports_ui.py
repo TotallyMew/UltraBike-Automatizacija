@@ -19,9 +19,22 @@ if str(PROJECT_ROOT) not in sys.path:
 import py_compile
 
 
+ORBEA_UI_MODULES = (
+    "GUI_Qt.screens.OrbeaScreen",
+    "GUI_Qt.orbea.actions",
+    "GUI_Qt.orbea.controller",
+    "GUI_Qt.orbea.direct_workflow",
+    "GUI_Qt.orbea.description_workflow",
+    "GUI_Qt.orbea.photo_workflow",
+    "GUI_Qt.orbea.table_image_workflow",
+    "GUI_Qt.orbea.workers",
+    "GUI_Qt.orbea.tabs",
+    "GUI_Qt.orbea.upload",
+)
+
+
 def main() -> None:
-    # Importing GUI modules (or even some style modules) can pull in Qt/QFluentWidgets
-    # and execute import-time side effects. Keep this script compile-only.
+    # Compile first, then check imports without constructing application windows.
     to_compile = [
         PROJECT_ROOT / "Managers" / "PimboProductEditor.py",
         PROJECT_ROOT / "Managers" / "EarningsManager.py",
@@ -53,11 +66,12 @@ def main() -> None:
         PROJECT_ROOT / "GUI_Qt" / "earnings" / "dialogs.py",
         PROJECT_ROOT / "GUI_Qt" / "earnings" / "widgets.py",
         PROJECT_ROOT / "GUI_Qt" / "earnings" / "presentation.py",
-        PROJECT_ROOT / "GUI_Qt" / "orbea" / "controller.py",
-        PROJECT_ROOT / "GUI_Qt" / "orbea" / "workers.py",
-        PROJECT_ROOT / "GUI_Qt" / "orbea" / "tabs.py",
         PROJECT_ROOT / "GUI_Qt" / "MainWindow.py",
     ]
+    to_compile.extend(
+        PROJECT_ROOT.joinpath(*module.split(".")).with_suffix(".py")
+        for module in ORBEA_UI_MODULES
+    )
     for path in to_compile:
         py_compile.compile(str(path), doraise=True)
     modules = [
@@ -89,11 +103,9 @@ def main() -> None:
         "GUI_Qt.earnings.dialogs",
         "GUI_Qt.earnings.widgets",
         "GUI_Qt.earnings.presentation",
-        "GUI_Qt.orbea.controller",
-        "GUI_Qt.orbea.workers",
-        "GUI_Qt.orbea.tabs",
         "GUI_Qt.MainWindow",
     ]
+    modules.extend(ORBEA_UI_MODULES)
     for module_name in modules:
         importlib.import_module(module_name)
     print("compile-and-import-ok")

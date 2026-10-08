@@ -2,6 +2,7 @@
 
 import requests
 from bs4 import BeautifulSoup
+from Utilities.ProductDataSafety import SpecificationMap
 from Utilities.TranslationHandler import TranslationHandler, load_translations, load_value_translations
 
 def scrapeAndTranslateToFileKROSS(bicycleUrlOrCode, outputFile, db_manager=None):
@@ -20,7 +21,7 @@ def scrapeAndTranslateToFileKROSS(bicycleUrlOrCode, outputFile, db_manager=None)
     uniqueKeys = set()
 
     try:
-        response = requests.get(bicycleUrlOrCode)
+        response = requests.get(bicycleUrlOrCode, timeout=20)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
 
@@ -34,7 +35,7 @@ def scrapeAndTranslateToFileKROSS(bicycleUrlOrCode, outputFile, db_manager=None)
 
         for table in tables:
             rows = table.find_all("tr")
-            tableData = {}
+            tableData = SpecificationMap()
 
             for row in rows:
                 cells = row.find_all("td")
@@ -43,24 +44,11 @@ def scrapeAndTranslateToFileKROSS(bicycleUrlOrCode, outputFile, db_manager=None)
                     value = cells[1].get_text(strip=True)
                     
 
-                    if value.upper() == "BRAK" or value.upper() == "NIE" or value.upper() == "TAK":
-                        continue 
                     if key.upper() in [
                         "KOLOR BAZOWY",
                         "PRODUCENT",
                         "OSOBA ODPOWIEDZIALNA W UE",
-                        "MOMENT OBROTOWY SILNIKA",
-                        "MOC SILNIKA",
-                        "UMIEJSCOWIENIE SILNIKA",
-                        "POJEMNOŚĆ BATERII",
-                        "UMIEJSCOWIENIE BATERII",
-                        "MAKSYMALNY ZASIĘG (KM)",
-                        "NAPIĘCIE SILNIKA (V)",
-                        "ŁADOWARKA (NAPIĘCIE/NATĘŻENIE)",
-                        "CZAS ŁADOWANIA (H)",
-                        "MAKSYMALNA PRĘDKOŚĆ WSPOMAGANIA (KM/H)",
                         "NUMER CERTYFIKATU",
-                        "TRYB WSPOMAGANIA"
                     ]:
                         continue
 
@@ -85,8 +73,7 @@ def scrapeAndTranslateToFileKROSS(bicycleUrlOrCode, outputFile, db_manager=None)
             colors = colorText.split()
 
             if len(colors) >= 1:
-                mainColor = colors[0]
-                translated = translation_handler.translate_first_word(valueTranslations.get(mainColor, mainColor), valueTranslations)
+                translated = translation_handler.translate_first_word(valueTranslations.get(colorText, colorText), valueTranslations, source_lang="PL")
                 allData[0]["Spalva"] = translated
                 uniqueKeys.add("Spalva")
 
@@ -100,6 +87,6 @@ def scrapeAndTranslateToFileKROSS(bicycleUrlOrCode, outputFile, db_manager=None)
         return f"Total unique keys: {len(uniqueKeys)}"
 
     except requests.HTTPError as e:
-        return f"HTTP klaida: {e}"
+        raise RuntimeError(f"KROSS HTTP error: {e}") from e
     except Exception as e:
-        return f"Klaida apdorojant KROSS duomenis: {e}"
+        raise RuntimeError(f"KROSS scraping failed: {e}") from e

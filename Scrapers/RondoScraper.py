@@ -1,5 +1,6 @@
 ﻿import requests
 from bs4 import BeautifulSoup
+from Utilities.ProductDataSafety import SpecificationMap
 from Utilities.TranslationHandler import TranslationHandler
 
 def scrapeAndTranslateToFileRondo(url, outputFile, db_manager=None):
@@ -15,7 +16,7 @@ def scrapeAndTranslateToFileRondo(url, outputFile, db_manager=None):
     valueTranslations.update(translation_handler.get_translations_by_category("EN", "LT", "property"))
     
     allData = []
-    tableData = {}
+    tableData = SpecificationMap()
     uniqueKeys = set()
 
     try:
@@ -69,6 +70,6 @@ def scrapeAndTranslateToFileRondo(url, outputFile, db_manager=None):
         return f"Total unique keys: {len(uniqueKeys)}"
 
     except requests.HTTPError as e:
-        return f"HTTP klaida: {e}"
+        raise RuntimeError(f"Rondo HTTP error: {e}") from e
     except Exception as e:
-        return f"Klaida apdorojant Rondo duomenis: {e}"
+        raise RuntimeError(f"Rondo scraping failed: {e}") from e

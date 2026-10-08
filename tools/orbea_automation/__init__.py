@@ -12,6 +12,8 @@ from .checkpoint import (
     RunCheckpoint,
     create_run_directory,
     find_latest_compatible_run,
+    find_latest_saved_run,
+    saved_run_config,
 )
 from .descriptions import (
     DescriptionProgress,
@@ -24,6 +26,7 @@ from .models import (
     CancellationToken,
     FilterOption,
     OrbeaRunConfig,
+    OrbeaRunFailure,
     OrbeaRunResult,
     PimboFilterOptions,
     PimboFilterSpec,
@@ -71,6 +74,7 @@ __all__ = [
     "OrbeaPhotoService",
     "OrbeaPhotoVariant",
     "OrbeaRunConfig",
+    "OrbeaRunFailure",
     "OrbeaRunResult",
     "OrbeaTableBatchResult",
     "OrbeaTableImageService",
@@ -84,6 +88,8 @@ __all__ = [
     "create_run_directory",
     "extract_template_codes",
     "find_latest_compatible_run",
+    "find_latest_saved_run",
+    "saved_run_config",
     "normalize_code",
     "normalize_orbea_table_url",
     "run_pipeline",

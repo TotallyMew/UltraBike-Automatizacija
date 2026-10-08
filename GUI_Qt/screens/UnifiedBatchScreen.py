@@ -1014,9 +1014,22 @@ class UnifiedBatchScreen(ResponsiveWidget):
     # ------------------------------------------------------- Lifecycle
     def hideEvent(self, event):
         super().hideEvent(event)
+        if not self._release_product_browser():
+            return
         if self.session_manager is not None:
             try:
                 self.session_manager.shutdown_all()
                 self.session_manager = None
             except Exception:
                 pass
+
+    def _release_product_browser(self):
+        from GUI_Qt.services.product_work import release_product_browser
+        return release_product_browser(self.main, self, self.worker, self.session_manager)
+
+    def request_navigation_away(self):
+        if self._release_product_browser():
+            return True
+        InfoBar.warning(title=self.main.i18n.tr("common.warning"),
+            content=self.main.i18n.tr("upload.cancel.content"), parent=self)
+        return False

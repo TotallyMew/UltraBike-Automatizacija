@@ -361,6 +361,7 @@ class OrbeaTableImageService:
                             str(getattr(driver, "page_source", "") or ""),
                             folder,
                             product_folder="product-photos",
+                            asset_root=output_root / ".orbea-assets",
                             progress=photo_progress,
                             log=log,
                             cancellation=cancellation,

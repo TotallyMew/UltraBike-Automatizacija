@@ -86,9 +86,14 @@ DIRECT_SIZE_GUIDE_SETTING = "orbea_direct_size_guide_image"
 DIRECT_PRODUCT_PHOTOS_SETTING = "orbea_direct_product_photos"
 TABLE_IMAGES_SETTING = "orbea_download_table_images"
 PRODUCT_PHOTOS_SETTING = "orbea_download_product_photos"
+COLLECTION_SETTING = "orbea_collection_options"
 PREVIEW_LIMIT = 500
 
 
+from GUI_Qt.orbea.actions import current_activity, set_controls_locked
+from GUI_Qt.orbea.description_workflow import DescriptionWorkflow
+from GUI_Qt.orbea.photo_workflow import PhotoWorkflow
+from GUI_Qt.orbea.table_image_workflow import TableImageWorkflow
 from GUI_Qt.orbea.controller import (
     OrbeaWorkflowController, _create_model, _plain, _read,
 )
@@ -96,7 +101,8 @@ from GUI_Qt.orbea.workers import (
     OrbeaDescriptionWorker, OrbeaExcelSortWorker, OrbeaFilterWorker,
     OrbeaPhotoWorker, OrbeaRunWorker, OrbeaTableImageWorker,
 )
-from GUI_Qt.orbea.tabs import OrbeaSectionPage, OrbeaSectionTabs
+from GUI_Qt.orbea.tabs import OrbeaDisclosure, OrbeaSectionPage, OrbeaSectionTabs
+from GUI_Qt.orbea.upload import OrbeaUploadPanel
 
 class OrbeaScreen(ResponsiveWidget):
     """End-to-end Orbea automation UI backed by the authenticated Pimbo driver."""
@@ -111,6 +117,7 @@ class OrbeaScreen(ResponsiveWidget):
         description_service_factory: Callable[[], Any] | None = None,
         photo_service_factory: Callable[[], Any] | None = None,
         table_image_service_factory: Callable[[], Any] | None = None,
+        upload_service_factory: Callable[[], Any] | None = None,
     ):
         super().__init__(main_window)
         self.main = main_window
@@ -133,6 +140,7 @@ class OrbeaScreen(ResponsiveWidget):
         self._owns_browser_lease = False
         self._restoring_filters = False
         self._closing = False
+        self._upload_service_factory = upload_service_factory
         self._workbook_path: Path | None = None
         self._run_dir: Path | None = None
         self._description_output_dir: Path | None = None
@@ -154,6 +162,9 @@ class OrbeaScreen(ResponsiveWidget):
 
         self.setObjectName("OrbeaScreen")
         self._build_ui()
+        self._description_workflow = DescriptionWorkflow(self)
+        self._photo_workflow = PhotoWorkflow(self)
+        self._table_image_workflow = TableImageWorkflow(self)
         self._install_default_filters()
         self._load_paths()
         self.retranslate_ui()
@@ -195,39 +206,55 @@ class OrbeaScreen(ResponsiveWidget):
         title_col.setSpacing(2)
         self._title = TitleLabel("")
         self._subtitle = CaptionLabel("")
+        self._subtitle.setWordWrap(True)
         self._subtitle.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')};")
         title_col.addWidget(self._title)
         title_col.addWidget(self._subtitle)
-        header.addLayout(title_col)
-        header.addStretch()
+        header.addLayout(title_col, 1)
         self._layout.addLayout(header)
 
         self._section_tabs = OrbeaSectionTabs(self)
         self._section_keys = self._section_tabs.KEYS
         self._layout.addWidget(self._section_tabs)
 
-        self._setup_page, self._setup_layout = self._section_page()
-        self._progress_page, self._progress_layout = self._section_page()
-        self._photos_page, self._photos_layout = self._section_page()
-        self._descriptions_page, self._descriptions_layout = self._section_page()
-        self._results_page, self._results_layout = self._section_page()
+        self._automation_page, self._automation_layout = self._section_page()
+        self._tools_page, self._tools_layout = self._section_page()
+        self._setup_page = self._progress_page = self._results_page = self._upload_page = self._automation_page
+        self._setup_layout = self._progress_layout = self._upload_layout = self._automation_layout
+        self._photos_page = self._descriptions_page = self._tools_page
 
         self._build_paths_card()
-        self._build_actions_card()
         self._build_filters_card()
+        self._build_actions_card()
         self._build_progress_card()
+        self._report_details = OrbeaDisclosure(self)
+        self._report_details.hide()
+        self._automation_layout.addWidget(self._report_details)
+        self._results_layout = self._report_details.body_layout
+        self._build_results_table()
+        self._upload_panel = OrbeaUploadPanel(self, self._upload_service_factory)
+        self._automation_layout.addWidget(self._upload_panel)
+        self._automation_layout.addStretch()
+
+        self._tools_hint = CaptionLabel("")
+        self._tools_hint.setWordWrap(True)
+        self._tools_layout.addWidget(self._tools_hint)
+        self._image_tool = OrbeaDisclosure(self)
+        self._description_tool = OrbeaDisclosure(self)
+        self._excel_tool = OrbeaDisclosure(self)
+        self._photos_layout = self._image_tool.body_layout
+        self._descriptions_layout = self._description_tool.body_layout
         self._build_table_image_card()
         self._build_photo_card()
         self._build_description_card()
-        self._build_results_table()
+        self._excel_tool.body_layout.addWidget(self._excel_sort_btn)
+        for tool in (self._image_tool, self._description_tool, self._excel_tool):
+            self._tools_layout.addWidget(tool)
+        self._tools_layout.addStretch()
 
-        self._setup_layout.addStretch()
         self._section_pages = {
-            "setup": self._setup_page,
-            "progress": self._progress_page,
-            "photos": self._photos_page,
-            "descriptions": self._descriptions_page,
-            "results": self._results_page,
+            "automation": self._automation_page,
+            "tools": self._tools_page,
         }
         for page in self._section_pages.values():
             self._layout.addWidget(page, 1)
@@ -243,10 +270,17 @@ class OrbeaScreen(ResponsiveWidget):
         return page, page.content_layout
 
     def _switch_section(self, route_key: str) -> None:
+        requested = route_key
         route_key = self._section_tabs.select_key(route_key)
         for key, page in self._section_pages.items():
             page.setVisible(key == route_key)
         self._scroll.verticalScrollBar().setValue(0)
+        if requested in {"progress", "results"}:
+            self._collection_progress_card.setVisible(True)
+            QTimer.singleShot(0, lambda: self._scroll.ensureWidgetVisible(self._collection_progress_card))
+        if requested in {"photos", "descriptions"}:
+            self._image_tool.set_expanded(requested == "photos")
+            self._description_tool.set_expanded(requested == "descriptions")
 
     def _card(self) -> tuple[CardWidget, QVBoxLayout]:
         card = CardWidget()
@@ -271,9 +305,6 @@ class OrbeaScreen(ResponsiveWidget):
         self._catalogue_edit.editingFinished.connect(self._paths_changed)
         self._catalogue_btn = PushButton(FluentIcon.DOCUMENT, "")
         self._catalogue_btn.clicked.connect(self._browse_catalogue)
-        grid.addWidget(self._catalogue_label, 0, 0)
-        grid.addWidget(self._catalogue_edit, 0, 1)
-        grid.addWidget(self._catalogue_btn, 0, 2)
 
         self._output_label = BodyLabel("")
         self._output_edit = LineEdit()
@@ -281,9 +312,9 @@ class OrbeaScreen(ResponsiveWidget):
         self._output_edit.editingFinished.connect(self._paths_changed)
         self._output_btn = PushButton(FluentIcon.FOLDER, "")
         self._output_btn.clicked.connect(self._browse_output)
-        grid.addWidget(self._output_label, 1, 0)
-        grid.addWidget(self._output_edit, 1, 1)
-        grid.addWidget(self._output_btn, 1, 2)
+        grid.addWidget(self._output_label, 0, 0)
+        grid.addWidget(self._output_edit, 0, 1)
+        grid.addWidget(self._output_btn, 0, 2)
 
         # The Pimbo query is intentionally fixed and is not an actionable
         # setting, so retain it for configuration/tests without spending a
@@ -298,28 +329,30 @@ class OrbeaScreen(ResponsiveWidget):
         layout.addLayout(grid)
 
         self._downloads_label = BodyLabel("")
-        self._downloads_label.setVisible(False)
         layout.addWidget(self._downloads_label)
         download_options = FlowLayout()
         download_options.setHorizontalSpacing(CARD_SPACING)
         download_options.setVerticalSpacing(ROW_SPACING)
         self._table_images_check = CheckBox("")
-        self._table_images_check.setChecked(False)
-        self._table_images_check.setVisible(False)
+        self._table_images_check.setChecked(True)
         self._table_images_check.stateChanged.connect(
             self._download_options_changed
         )
         self._product_photos_check = CheckBox("")
-        self._product_photos_check.setChecked(False)
-        self._product_photos_check.setVisible(False)
+        self._product_photos_check.setChecked(True)
         self._product_photos_check.stateChanged.connect(
             self._download_options_changed
         )
         download_options.addWidget(self._table_images_check)
         download_options.addWidget(self._product_photos_check)
+        self._description_check = CheckBox("")
+        self._specifications_check = CheckBox("")
+        for checkbox in (self._description_check, self._specifications_check):
+            checkbox.setChecked(True)
+            checkbox.stateChanged.connect(self._download_options_changed)
+            download_options.addWidget(checkbox)
         layout.addLayout(download_options)
         self._downloads_hint = CaptionLabel("")
-        self._downloads_hint.setVisible(False)
         self._downloads_hint.setWordWrap(True)
         self._downloads_hint.setStyleSheet(
             f"color: {get_text_color(isDarkTheme(), 'secondary')};"
@@ -334,6 +367,8 @@ class OrbeaScreen(ResponsiveWidget):
             self._output_btn,
             self._table_images_check,
             self._product_photos_check,
+            self._description_check,
+            self._specifications_check,
         ])
 
     def _build_filters_card(self):
@@ -351,11 +386,15 @@ class OrbeaScreen(ResponsiveWidget):
         layout.addLayout(top)
 
         self._status_label = BodyLabel("")
-        layout.addWidget(self._status_label)
+        status_field = QWidget()
+        status_box = QVBoxLayout(status_field)
+        status_box.setContentsMargins(0, 0, 0, 0)
+        status_box.setSpacing(4)
+        status_box.addWidget(self._status_label)
         self._status_layout = FlowLayout()
         self._status_layout.setHorizontalSpacing(ROW_SPACING)
         self._status_layout.setVerticalSpacing(ROW_SPACING)
-        layout.addLayout(self._status_layout)
+        status_box.addLayout(self._status_layout)
 
         grid = QGridLayout()
         grid.setHorizontalSpacing(CARD_SPACING)
@@ -365,11 +404,15 @@ class OrbeaScreen(ResponsiveWidget):
         self._source_combo = ComboBox()
         self._locale_combo = ComboBox()
         self._sort_combo = ComboBox()
+        self._code_prefix_edit = LineEdit()
+        self._code_prefix_edit.setClearButtonEnabled(True)
         self._family_field, self._family_label = self._combo_field(self._family_combo)
         self._category_field, self._category_label = self._combo_field(self._category_combo)
         self._source_field, self._source_label = self._combo_field(self._source_combo)
         self._locale_field, self._locale_label = self._combo_field(self._locale_combo)
         self._sort_field, self._sort_label = self._combo_field(self._sort_combo)
+        self._code_prefix_field, self._code_prefix_label = self._combo_field(self._code_prefix_edit)
+        self._code_prefix_label.setBuddy(self._code_prefix_edit)
         grid.addWidget(self._family_field, 0, 0)
         grid.addWidget(self._category_field, 0, 1)
         grid.addWidget(self._source_field, 0, 2)
@@ -378,21 +421,41 @@ class OrbeaScreen(ResponsiveWidget):
         grid.setColumnStretch(0, 1)
         grid.setColumnStretch(1, 1)
         grid.setColumnStretch(2, 1)
-        layout.addLayout(grid)
+        layout.addWidget(self._code_prefix_field)
 
         self._stock_label = BodyLabel("")
-        layout.addWidget(self._stock_label)
+        stock_field = QWidget()
+        stock_box = QVBoxLayout(stock_field)
+        stock_box.setContentsMargins(0, 0, 0, 0)
+        stock_box.setSpacing(4)
+        stock_box.addWidget(self._stock_label)
         self._stock_layout = FlowLayout()
         self._stock_layout.setHorizontalSpacing(ROW_SPACING)
         self._stock_layout.setVerticalSpacing(ROW_SPACING)
-        layout.addLayout(self._stock_layout)
+        stock_box.addLayout(self._stock_layout)
+        basic = QGridLayout()
+        basic.addWidget(status_field, 0, 0)
+        basic.addWidget(stock_field, 0, 1)
+        basic.setColumnStretch(0, 1)
+        basic.setColumnStretch(1, 1)
+        layout.addLayout(basic)
+
+        self._more_filters = OrbeaDisclosure(self)
+        layout.addWidget(self._more_filters)
+        self._more_filters.body_layout.addLayout(grid)
 
         self._bucket_label = BodyLabel("")
-        layout.addWidget(self._bucket_label)
+        self._more_filters.body_layout.addWidget(self._bucket_label)
         self._bucket_layout = FlowLayout()
         self._bucket_layout.setHorizontalSpacing(ROW_SPACING)
         self._bucket_layout.setVerticalSpacing(ROW_SPACING)
-        layout.addLayout(self._bucket_layout)
+        self._more_filters.body_layout.addLayout(self._bucket_layout)
+        catalogue = QGridLayout()
+        catalogue.setColumnStretch(1, 1)
+        catalogue.addWidget(self._catalogue_label, 0, 0)
+        catalogue.addWidget(self._catalogue_edit, 0, 1)
+        catalogue.addWidget(self._catalogue_btn, 0, 2)
+        self._more_filters.body_layout.addLayout(catalogue)
 
         self._setup_layout.addWidget(card)
         combos = [
@@ -404,9 +467,10 @@ class OrbeaScreen(ResponsiveWidget):
         ]
         for combo in combos:
             combo.currentIndexChanged.connect(self._filter_changed)
-        self._config_widgets.extend([self._refresh_btn, *combos])
+        self._code_prefix_edit.textChanged.connect(self._filter_changed)
+        self._config_widgets.extend([self._refresh_btn, *combos, self._code_prefix_edit])
 
-    def _combo_field(self, combo: ComboBox) -> tuple[QWidget, BodyLabel]:
+    def _combo_field(self, combo: ComboBox | LineEdit) -> tuple[QWidget, BodyLabel]:
         field = QWidget()
         box = QVBoxLayout(field)
         box.setContentsMargins(0, 0, 0, 0)
@@ -421,11 +485,11 @@ class OrbeaScreen(ResponsiveWidget):
         card, layout = self._card()
         self._actions_title = BodyLabel("")
         self._actions_title.setStyleSheet("font-size: 15px; font-weight: 600;")
-        layout.addWidget(self._actions_title)
+        self._actions_title.hide()
         actions = QGridLayout()
         actions.setHorizontalSpacing(ROW_SPACING)
         actions.setVerticalSpacing(ROW_SPACING)
-        self._start_btn = PrimaryPushButton(FluentIcon.PLAY, "")
+        self._start_btn = PrimaryPushButton(FluentIcon.SEARCH, "")
         self._start_btn.setObjectName("orbeaPrimaryAction")
         self._start_btn.clicked.connect(self._on_start_stop)
         self._resume_btn = PushButton(FluentIcon.UPDATE, "")
@@ -436,6 +500,14 @@ class OrbeaScreen(ResponsiveWidget):
         self._retry_btn.clicked.connect(
             lambda: self._start_run(resume=True, retry_failed=True, require_existing=True)
         )
+        self._retry_matched_btn = PushButton(FluentIcon.SYNC, "")
+        self._retry_matched_btn.clicked.connect(
+            lambda: self._start_run(resume=True, retry_failed=False, retry_matched=True, require_existing=True)
+        )
+        self._load_collection_btn = PushButton(FluentIcon.FOLDER, "")
+        self._load_collection_btn.clicked.connect(lambda: self._load_saved_collection())
+        self._download_missing_btn = PushButton(FluentIcon.DOWNLOAD, "")
+        self._download_missing_btn.clicked.connect(self._download_saved_items)
         self._open_excel_btn = PushButton(FluentIcon.DOCUMENT, "")
         self._open_excel_btn.setEnabled(False)
         self._open_excel_btn.clicked.connect(self._open_excel)
@@ -444,19 +516,31 @@ class OrbeaScreen(ResponsiveWidget):
         self._open_folder_btn.clicked.connect(self._open_folder)
         self._excel_sort_btn = PushButton(FluentIcon.DOCUMENT, "")
         self._excel_sort_btn.clicked.connect(self._sort_existing_excel)
-        actions.addWidget(self._start_btn, 0, 0)
-        actions.addWidget(self._resume_btn, 0, 1)
-        actions.addWidget(self._retry_btn, 0, 2)
-        for button in (self._start_btn, self._resume_btn, self._retry_btn):
+        actions.addWidget(self._start_btn, 0, 0, 1, 2)
+        actions.addWidget(self._resume_btn, 1, 0)
+        actions.addWidget(self._retry_btn, 1, 1)
+        actions.addWidget(self._retry_matched_btn, 2, 0, 1, 2)
+        actions.addWidget(self._load_collection_btn, 3, 0)
+        actions.addWidget(self._download_missing_btn, 3, 1)
+        for button in (self._start_btn, self._resume_btn, self._retry_btn, self._retry_matched_btn):
             button.setMinimumHeight(38)
-        for column in range(3):
+        for column in range(2):
             actions.setColumnStretch(column, 1)
         layout.addLayout(actions)
+        self._resume_hint = CaptionLabel("")
+        self._resume_hint.setWordWrap(True)
+        self._resume_hint.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')};")
+        layout.addWidget(self._resume_hint)
+        self._saved_download_hint = CaptionLabel("")
+        self._saved_download_hint.setWordWrap(True)
+        layout.addWidget(self._saved_download_hint)
         self._setup_layout.addWidget(card)
         self._config_widgets.append(self._excel_sort_btn)
 
     def _build_progress_card(self):
         card, layout = self._card()
+        self._collection_progress_card = card
+        card.setVisible(False)
         card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         status_row = QHBoxLayout()
         self._stage_label = BodyLabel("")
@@ -476,6 +560,7 @@ class OrbeaScreen(ResponsiveWidget):
         self._progress.setValue(0)
         layout.addWidget(self._progress)
         self._progress_label = CaptionLabel("")
+        self._progress_label.setWordWrap(True)
         self._progress_label.setStyleSheet(f"color: {get_text_color(isDarkTheme(), 'secondary')};")
         layout.addWidget(self._progress_label)
 
@@ -498,13 +583,15 @@ class OrbeaScreen(ResponsiveWidget):
             stats.addWidget(widget, index // 3, index % 3)
             self._stat_labels[key] = label
             self._stat_values[key] = value
-        layout.addLayout(stats)
+        self._collection_details = OrbeaDisclosure(self)
+        layout.addWidget(self._collection_details)
+        self._collection_details.body_layout.addLayout(stats)
 
         self._log = PlainTextEdit()
         self._log.setReadOnly(True)
-        self._log.setMinimumHeight(180)
-        layout.addWidget(self._log, 1)
-        self._progress_layout.addWidget(card, 1)
+        self._log.setFixedHeight(140)
+        self._collection_details.body_layout.addWidget(self._log)
+        self._progress_layout.addWidget(card)
 
     def _build_description_card(self):
         card, layout = self._card()
@@ -781,9 +868,8 @@ class OrbeaScreen(ResponsiveWidget):
         toolbar.setHorizontalSpacing(ROW_SPACING)
         toolbar.setVerticalSpacing(ROW_SPACING)
         toolbar.addWidget(self._results_label, 0, 0, 1, 4)
-        toolbar.addWidget(self._excel_sort_btn, 1, 1)
-        toolbar.addWidget(self._open_excel_btn, 1, 2)
-        toolbar.addWidget(self._open_folder_btn, 1, 3)
+        self._report_details.header_layout.addWidget(self._open_excel_btn)
+        self._report_details.header_layout.addWidget(self._open_folder_btn)
         toolbar.setColumnStretch(0, 1)
         self._results_layout.addLayout(toolbar)
         self._table = QTableWidget(0, 6)
@@ -806,11 +892,10 @@ class OrbeaScreen(ResponsiveWidget):
         self._table.horizontalHeader().setHighlightSections(False)
         self._table.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self._table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
-        self._table.setMinimumHeight(420)
+        self._table.setMinimumHeight(240)
         self._table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         enable_table_copy(self._table)
         self._results_layout.addWidget(self._table, 1)
-        self._update_table_theme()
 
     # -------------------------------------------------------------- Filters
 
@@ -849,8 +934,9 @@ class OrbeaScreen(ResponsiveWidget):
     def _options(self, source: Any, *names: str) -> list[tuple[str, Any]]:
         return self._normalise_options(_read(source, *names, default=[]))
 
-    def _apply_filter_options(self, options: Any):
-        state = self._collect_filter_state() if self._status_buttons else dict(self._saved_filter_state)
+    def _apply_filter_options(self, options: Any, *, state=None):
+        if state is None:
+            state = self._collect_filter_state() if self._status_buttons else dict(self._saved_filter_state)
         self._restoring_filters = True
         try:
             statuses = self._options(options, "statuses", "status_options") or self._normalise_options([
@@ -881,6 +967,7 @@ class OrbeaScreen(ResponsiveWidget):
             ])
             self._populate_combo(self._locale_combo, locales, None, state.get("completeness_locale", "Overall"))
             self._populate_combo(self._sort_combo, sorts, None, state.get("sort", "Recent"))
+            self._code_prefix_edit.setText(str(state.get("product_code_prefix") or ""))
         finally:
             self._restoring_filters = False
         self._save_filter_state()
@@ -976,11 +1063,26 @@ class OrbeaScreen(ResponsiveWidget):
                 if button.isChecked()
             ],
             "sort": _plain(self._sort_combo.currentData()) if hasattr(self, "_sort_combo") else "Recent",
+            "product_code_prefix": self._code_prefix_edit.text().strip(),
         }
 
     def _filter_changed(self, *_args):
         if not self._restoring_filters:
             self._save_filter_state()
+            self._update_more_filters_title()
+
+    def _update_more_filters_title(self):
+        if not hasattr(self, "_more_filters"):
+            return
+        state = self._collect_filter_state()
+        count = sum(bool(state.get(key)) for key in ("family_id", "category_id", "source_id", "completeness_buckets"))
+        count += state.get("completeness_locale", "Overall") != "Overall"
+        count += state.get("sort", "Recent") != "Recent"
+        count += bool(self._catalogue_edit.text().strip())
+        label = self._t("orbea.more_filters", "More filters and optional catalogue")
+        if count:
+            label += self._t("orbea.more_filters.active", " ({count} active)", count=count)
+        self._more_filters.set_title(label)
 
     def _load_filter_state(self) -> dict[str, Any]:
         raw = self._setting_get(FILTER_SETTING, "")
@@ -1034,14 +1136,16 @@ class OrbeaScreen(ResponsiveWidget):
         }
         filters = _create_model(PimboFilterSpec, filter_values, filter_aliases)
         config_values = {
-            "catalogue_path": Path(self._catalogue_edit.text().strip()),
+            "catalogue_path": Path(self._catalogue_edit.text().strip()) if self._catalogue_edit.text().strip() else None,
             "output_root": Path(self._output_edit.text().strip()),
             "filters": filters,
+            "product_code_prefix": state.get("product_code_prefix", ""),
             "all_products": True,
-            # Image work has its own URL-driven table downloader. A Pimbo
-            # catalogue scan must never start image downloads implicitly.
-            "download_images": False,
-            "download_product_photos": False,
+            "download_images": self._table_images_check.isChecked(),
+            "download_product_photos": self._product_photos_check.isChecked(),
+            "collect_product_data": True,
+            "download_description": self._description_check.isChecked(),
+            "download_specifications": self._specifications_check.isChecked(),
             "browser_name": str(self._setting_get("browser_choice", "Chrome") or "Chrome").strip().lower(),
         }
         config_aliases = {
@@ -1234,6 +1338,11 @@ class OrbeaScreen(ResponsiveWidget):
         return _create_model(DescriptionRunConfig, values, aliases)
 
     def _auto_refresh_filters(self):
+        saved = self._saved_resume_config()
+        if saved is not None and self._saved_scan_complete(saved):
+            # Saved website collection has no dependency on Pimbo's filters.
+            self._update_action_states()
+            return
         driver = getattr(self.main, "driver", None)
         if (
             driver is not None
@@ -1245,6 +1354,7 @@ class OrbeaScreen(ResponsiveWidget):
 
     def on_activated(self) -> None:
         """Finish deferred browser setup after a login-time screen preload."""
+        self._update_action_states()
         self._auto_refresh_filters()
 
     def refresh_filter_options(self, *_args, show_errors=True):
@@ -1301,57 +1411,51 @@ class OrbeaScreen(ResponsiveWidget):
             self._progress_stop_btn.setEnabled(False)
             self._stage_label.setText(self._t("orbea.stopping", "Stopping safely…"))
             return
-        # The primary action automatically resumes the newest compatible run.
-        self._start_run(resume=True, retry_failed=False)
+        # A new scan reads the current Pimbo products; Resume keeps saved work.
+        self._start_run(resume=False, retry_failed=False)
 
     def _start_run(
         self,
         *,
         resume: bool,
         retry_failed: bool,
+        retry_matched: bool = False,
         require_existing: bool = False,
+        download_missing: bool = False,
+        config_override=None,
     ):
-        if self.is_running() or not self._validate_inputs():
+        if self.is_running():
             return
         self._closing = False
         driver = getattr(self.main, "driver", None)
-        if driver is None:
-            self._warn(self._t("common.error", "Not connected"), self._t("batchdesc.no_session", "Log in to Pimbo first."))
-            return
         try:
-            config = self._create_run_config()
+            config = config_override or (self._saved_resume_config(retry_failed=retry_failed, retry_matched=retry_matched) if require_existing else None)
+            if require_existing and config is None:
+                message = self._t("orbea.retry_matched.none", "No saved run with matched products was found in this output folder.") if retry_matched else self._t("orbea.resume.none", "No saved incomplete run was found in this output folder.")
+                self._warn(self._t("orbea.resume.none.title", "Nothing to resume"), message)
+                return
+            if config is None:
+                if not self._validate_inputs():
+                    return
+                config = self._create_run_config()
+            saved_scan = bool(resume and config.resume_run_dir and (retry_matched or download_missing or config.downloads_only or self._saved_scan_complete(config)))
+            if driver is None and not saved_scan:
+                self._warn(self._t("common.error", "Not connected"), self._t("batchdesc.no_session", "Log in to Pimbo first."))
+                return
+            if require_existing:
+                self._restore_run_controls(config)
         except Exception as exc:
             self._error(self._t("orbea.service.error.title", "Orbea service unavailable"), str(exc))
             return
-        if require_existing:
-            try:
-                from tools.orbea_automation import find_latest_compatible_run
-
-                existing = find_latest_compatible_run(
-                    config,
-                    include_completed_errors=retry_failed,
-                )
-            except Exception as exc:
-                self._error(self._t("orbea.service.error.title", "Orbea service unavailable"), str(exc))
-                return
-            if existing is None:
-                self._warn(
-                    self._t("orbea.resume.none.title", "Nothing to resume"),
-                    self._t(
-                        "orbea.retry.none" if retry_failed else "orbea.resume.none",
-                        "No compatible run with retryable errors was found."
-                        if retry_failed
-                        else "No compatible incomplete run was found.",
-                    ),
-                )
-                return
-        if not self._acquire_browser():
+        if not saved_scan and not self._acquire_browser():
             self._warn(self._t("orbea.browser.busy.title", "Browser busy"), self._t("orbea.browser.busy", "Another tool is using Pimbo."))
             return
 
         self._save_paths()
         self._save_filter_state()
         self._table.setRowCount(0)
+        self._report_details.hide()
+        self._upload_panel.clear_products()
         self._workbook_path = None
         self._run_dir = None
         self._open_excel_btn.setEnabled(False)
@@ -1366,10 +1470,14 @@ class OrbeaScreen(ResponsiveWidget):
             config,
             resume=resume,
             retry_failed=retry_failed,
+            retry_matched=retry_matched,
+            **({"download_missing": True} if download_missing else {}),
         )
         self._worker.progress_changed.connect(self._on_progress)
         self._worker.log_message.connect(self._append_log)
         self._worker.succeeded.connect(self._on_result)
+        self._worker.partial_result.connect(self._on_partial_result)
+        self._worker.website_blocked.connect(self._on_website_blocked)
         self._worker.failed.connect(self._on_run_error)
         self._worker.finished.connect(self._run_thread_finished)
         if hasattr(self.main, "track_worker"):
@@ -1384,19 +1492,100 @@ class OrbeaScreen(ResponsiveWidget):
             self._run_operation_id = operation.id
         self._worker.start()
 
+    def _load_saved_collection(self, path=None):
+        if self.is_running():
+            return
+        if path is None:
+            path, _ = QFileDialog.getOpenFileName(self,
+                self._t("orbea.saved_collection.pick", "Select a finished Orbea Excel report"),
+                str(self._setting_get("orbea_saved_collection_path", self._output_edit.text())), "Excel (*.xlsx)")
+        if not path:
+            return
+        try:
+            from tools.orbea_automation.saved_collection import open_saved_collection
+            config, result = open_saved_collection(path, Path(self._output_edit.text().strip() or Path(path).parent),
+                browser_name=str(self._setting_get("browser_choice", "Chrome") or "Chrome").lower())
+            self._restore_run_controls(config)
+            self._load_run_result(result)
+            self._setting_set("orbea_saved_collection_path", str(path))
+            self._open_excel_btn.setEnabled(self._workbook_path.is_file())
+            self._open_folder_btn.setEnabled(True)
+            self._stage_label.setText(self._t("orbea.saved_collection.loaded", "Saved collection loaded — choose items to download"))
+            self._switch_section("setup")
+            self._update_action_states()
+        except Exception as exc:
+            self._error(self._t("orbea.saved_collection.error", "Could not open saved collection"), str(exc))
+
+    def _saved_download_config(self):
+        try:
+            from tools.orbea_automation.checkpoint import saved_run_config
+            from tools.orbea_automation.saved_collection import collection_download_counts
+            if self._run_dir and (self._run_dir / "run_checkpoint.json").is_file():
+                if collection_download_counts(self._run_dir)["total"]:
+                    return saved_run_config(self._run_dir)
+            return self._saved_resume_config(retry_matched=True)
+        except (OSError, ValueError, KeyError, TypeError):
+            return None
+
+    def _download_saved_items(self):
+        if self.is_running():
+            return
+        config = self._saved_download_config()
+        if config is None:
+            return
+        from dataclasses import replace
+        checks = self._collection_checkboxes()
+        config = replace(config, collect_product_data=True, downloads_only=True,
+            download_images=checks["tables"].isChecked(), download_product_photos=checks["photos"].isChecked(),
+            download_description=checks["description"].isChecked(), download_specifications=checks["specifications"].isChecked())
+        self._start_run(resume=True, retry_failed=False, download_missing=True, config_override=config)
+
+    def _saved_resume_config(self, *, retry_failed=False, retry_matched=False):
+        if not hasattr(self, "_output_edit") or not self._output_edit.text().strip():
+            return None
+        try:
+            from tools.orbea_automation import find_latest_saved_run, saved_run_config
+            run_dir = find_latest_saved_run(Path(self._output_edit.text().strip()), include_completed_errors=retry_failed, matched_only=retry_matched)
+            return saved_run_config(run_dir, browser_name=str(self._setting_get("browser_choice", "Chrome") or "Chrome").strip().lower()) if run_dir else None
+        except (OSError, ValueError, KeyError, TypeError):
+            return None
+
+    @staticmethod
+    def _saved_scan_complete(config) -> bool:
+        if not config.resume_run_dir:
+            return False
+        try:
+            data = json.loads((config.resume_run_dir / "run_checkpoint.json").read_text(encoding="utf-8"))
+            return bool(data.get("scan_completed"))
+        except (OSError, ValueError):
+            return False
+
+    def _restore_run_controls(self, config):
+        self._catalogue_edit.setText(str(config.catalogue_path or ""))
+        self._output_edit.setText(str(config.output_root))
+        state = {**config.filters.as_dict(), "product_code_prefix": config.product_code_prefix}
+        options = {}
+        for key, field in (("families", "family_id"), ("categories", "category_id"), ("sources", "source_id")):
+            if state[field]:
+                options[key] = [(self._t("orbea.filters.saved_selection", "Saved selection"), state[field])]
+        self._apply_filter_options(options, state=state)
+        for key, selected in (("tables", config.download_images), ("photos", config.download_product_photos),
+                              ("description", config.download_description), ("specifications", config.download_specifications)):
+            self._collection_checkboxes()[key].setChecked(selected)
+
     def _on_progress(self, update):
         stage = str(_plain(_read(update, "stage", "phase", default="Running")) or "Running")
         message = str(_read(update, "message", "detail", default="") or "")
         current = int(_read(update, "current", "done", default=0) or 0)
         total = int(_read(update, "total", default=0) or 0)
         eta = _read(update, "eta_seconds", "eta", default=None)
-        self._stage_label.setText(stage.replace("_", " ").title())
+        self._stage_label.setText(self._t(f"orbea.stage.{stage}", stage.replace("_", " ").title()))
         self._progress_label.setText(message or (f"{current:,} / {total:,}" if total else f"{current:,}"))
         self._progress.setValue(max(0, min(100, int(current * 100 / total)))) if total else self._progress.setValue(0)
         self._eta_label.setText(self._format_eta(eta))
         self._update_counts(_read(update, "counts", default={}) or {})
 
-    def _on_result(self, result):
+    def _load_run_result(self, result):
         workbook = _read(result, "workbook_path", "excel_path")
         run_dir = _read(result, "run_dir", "output_dir")
         self._workbook_path = Path(workbook) if workbook else None
@@ -1404,6 +1593,22 @@ class OrbeaScreen(ResponsiveWidget):
         self._update_counts(_read(result, "counts", default={}) or {})
         if self._workbook_path and self._workbook_path.exists():
             self._load_workbook_preview(self._workbook_path)
+        if self._run_dir and self._run_dir.is_dir():
+            self._report_details.show()
+            self._upload_panel.load_packages(self._run_dir)
+
+    def _on_partial_result(self, result):
+        self._load_run_result(result)
+        if self._run_operation_id and hasattr(self.main, "operation_tracker"):
+            self.main.operation_tracker.update(
+                self._run_operation_id,
+                output_path=str(self._run_dir or ""),
+                resume_ref=str(_read(result, "checkpoint_path", default="") or self._run_dir or ""),
+            )
+        self._switch_section("results")
+
+    def _on_result(self, result):
+        self._load_run_result(result)
         cancelled = bool(_read(result, "cancelled", default=False))
         completed = bool(_read(result, "completed", default=not cancelled))
         if self._run_operation_id and hasattr(self.main, "operation_tracker"):
@@ -1445,6 +1650,17 @@ class OrbeaScreen(ResponsiveWidget):
         self._open_excel_btn.setEnabled(bool(self._workbook_path and self._workbook_path.exists()))
         self._open_folder_btn.setEnabled(bool(self._run_dir and self._run_dir.exists()))
         self._update_action_states()
+
+    def _on_website_blocked(self, message: str):
+        if self._run_operation_id and hasattr(self.main, "operation_tracker"):
+            self.main.operation_tracker.finish(
+                self._run_operation_id, "partial", output_path=str(self._run_dir or ""),
+                error_summary=message,
+            )
+        self._stage_label.setText(self._t("orbea.website.blocked", "Waiting for Orbea access — saved work is ready to resume"))
+        self._progress_label.setText(message)
+        self._append_log(message)
+        self._switch_section("results")
 
     def _sort_existing_excel(self):
         if self.is_running():
@@ -1521,19 +1737,10 @@ class OrbeaScreen(ResponsiveWidget):
         self._update_action_states()
 
     def _set_busy(self, busy: bool):
-        for widget in self._config_widgets:
-            widget.setEnabled(not busy)
-        self._resume_btn.setEnabled(not busy)
-        self._retry_btn.setEnabled(not busy)
-        for widget in self._description_config_widgets:
-            widget.setEnabled(not busy)
-        self._description_start_btn.setEnabled(not busy)
-        for widget in self._photo_config_widgets:
-            widget.setEnabled(not busy)
-        self._photo_start_btn.setEnabled(not busy)
-        for widget in self._table_image_config_widgets:
-            widget.setEnabled(not busy)
-        self._table_image_start_btn.setEnabled(not busy)
+        set_controls_locked(self, busy, active_button=self._start_btn)
+        if busy:
+            self._collection_progress_card.show()
+            self._resume_hint.setText(self._t("orbea.resume.running", "Collection is running. Use Stop to pause before resuming."))
         self._progress_stop_btn.setVisible(busy)
         self._progress_stop_btn.setEnabled(busy)
         if busy:
@@ -1542,605 +1749,77 @@ class OrbeaScreen(ResponsiveWidget):
             self._start_btn.setEnabled(True)
             self._stage_label.setText(self._t("orbea.starting", "Starting…"))
         else:
-            self._start_btn.setText(self._t("orbea.start", "Start Pimbo scan"))
-            self._start_btn.setIcon(FluentIcon.PLAY)
+            self._start_btn.setText(self._t("orbea.start", "Scan Pimbo and collect Orbea data"))
+            self._start_btn.setIcon(FluentIcon.SEARCH)
 
     # --------------------------------------------------- Description extractor
 
     def _on_description_start_stop(self):
-        if self._description_worker and self._description_worker.isRunning():
-            self._description_worker.request_stop()
-            self._description_start_btn.setEnabled(False)
-            self._description_status_label.setText(
-                self._t("orbea.description.stopping", "Stopping safely…")
-            )
-            return
-        if self.is_running() or not self._validate_description_inputs():
-            return
-        self._closing = False
-        try:
-            config = self._create_description_config()
-        except Exception as exc:
-            self._error(
-                self._t("orbea.description.service_error.title", "Description extractor unavailable"),
-                str(exc),
-            )
-            return
-
-        self._save_description_output()
-        self._description_output_dir = Path(self._description_output_edit.text().strip())
-        self._description_open_btn.setEnabled(False)
-        self._description_log.clear()
-        self._description_progress.setValue(0)
-        self._set_description_busy(True)
-        self._description_worker = OrbeaDescriptionWorker(self._make_description_service, config)
-        self._description_worker.progress_changed.connect(self._on_description_progress)
-        self._description_worker.log_message.connect(self._append_description_log)
-        self._description_worker.succeeded.connect(self._on_description_result)
-        self._description_worker.failed.connect(self._on_description_error)
-        self._description_worker.finished.connect(self._description_thread_finished)
-        if hasattr(self.main, "track_worker"):
-            self.main.track_worker(
-                self._description_worker,
-                "orbea",
-                "orbea",
-                output_path=str(self._description_output_dir),
-            )
-        self._description_worker.start()
+        self._description_workflow.start_stop()
 
     def _validate_description_inputs(self) -> bool:
-        if not self._description_urls():
-            self._warn(
-                self._t("orbea.description.urls_invalid.title", "Orbea URL required"),
-                self._t(
-                    "orbea.description.urls_invalid",
-                    "Paste one or more cms.orbea.com model URLs containing /m/.",
-                ),
-            )
-            return False
-        if not self._description_output_edit.text().strip():
-            self._warn(
-                self._t("orbea.description.output_invalid.title", "Output folder required"),
-                self._t("orbea.description.output_invalid", "Choose where extracted text should be saved."),
-            )
-            return False
-        return True
+        return self._description_workflow.validate_inputs()
 
     def _on_description_progress(self, update):
-        status = str(_read(update, "status", "stage", default="Extracting") or "Extracting")
-        current = int(_read(update, "current", "done", default=0) or 0)
-        total = int(_read(update, "total", default=0) or 0)
-        message = str(_read(update, "message", "url", default="") or "")
-        succeeded = int(_read(update, "succeeded", default=0) or 0)
-        failed = int(_read(update, "failed", default=0) or 0)
-        self._description_status_label.setText(status.replace("_", " ").title())
-        if message:
-            self._description_progress_label.setText(message)
-        elif total:
-            self._description_progress_label.setText(
-                self._t(
-                    "orbea.description.progress",
-                    "{current:,} / {total:,} URLs • {succeeded:,} saved • {failed:,} failed",
-                    current=current,
-                    total=total,
-                    succeeded=succeeded,
-                    failed=failed,
-                )
-            )
-        self._description_progress.setValue(
-            max(0, min(100, int(current * 100 / total))) if total else 0
-        )
+        self._description_workflow.on_progress(update)
 
     def _on_description_result(self, result):
-        output_dir = _read(result, "output_dir", "output_root", default=None)
-        if output_dir:
-            self._description_output_dir = Path(output_dir)
-        files = _read(result, "files", "written_files", "paths", default=()) or ()
-        succeeded = int(_read(result, "succeeded", default=len(files)) or 0)
-        failures = _read(result, "failures", default=()) or ()
-        cancelled = bool(_read(result, "cancelled", default=False))
-        if cancelled:
-            self._description_status_label.setText(
-                self._t("orbea.description.stopped", "Stopped — completed text files were kept")
-            )
-        else:
-            self._description_status_label.setText(
-                self._t("orbea.description.complete", "Description extraction complete")
-            )
-            self._description_progress.setValue(100)
-        self._description_progress_label.setText(
-            self._t(
-                "orbea.description.result",
-                "{succeeded:,} saved • {failed:,} failed",
-                succeeded=succeeded,
-                failed=len(failures),
-            )
-        )
+        self._description_workflow.on_result(result)
 
     def _on_description_error(self, message: str):
-        self._description_status_label.setText(
-            self._t("orbea.description.failed", "Description extraction failed")
-        )
-        self._append_description_log(message)
-        if not self._closing:
-            self._error(
-                self._t("orbea.description.failed.title", "Description extraction failed"),
-                message,
-            )
+        self._description_workflow.on_error(message)
 
     def _description_thread_finished(self):
-        self._description_worker = None
-        self._set_description_busy(False)
-        self._description_open_btn.setEnabled(
-            bool(self._description_output_dir and self._description_output_dir.exists())
-        )
-        self._update_action_states()
+        self._description_workflow.finished()
 
     def _set_description_busy(self, busy: bool):
-        for widget in self._config_widgets:
-            widget.setEnabled(not busy)
-        self._start_btn.setEnabled(not busy)
-        self._resume_btn.setEnabled(not busy)
-        self._retry_btn.setEnabled(not busy)
-        for widget in self._description_config_widgets:
-            widget.setEnabled(not busy)
-        for widget in self._photo_config_widgets:
-            widget.setEnabled(not busy)
-        self._photo_start_btn.setEnabled(not busy)
-        for widget in self._table_image_config_widgets:
-            widget.setEnabled(not busy)
-        self._table_image_start_btn.setEnabled(not busy)
-        if busy:
-            self._description_start_btn.setText(self._t("orbea.description.stop", "Stop"))
-            self._description_start_btn.setIcon(FluentIcon.CLOSE)
-            self._description_start_btn.setEnabled(True)
-            self._description_status_label.setText(
-                self._t("orbea.description.starting", "Starting description extraction…")
-            )
-        else:
-            self._description_start_btn.setText(
-                self._t("orbea.description.extract", "Extract descriptions")
-            )
-            self._description_start_btn.setIcon(FluentIcon.PLAY)
+        self._description_workflow.set_busy(busy)
 
     # ---------------------------------------------------- Direct table downloader
 
     def _on_table_image_start_stop(self):
-        if self._table_image_worker and self._table_image_worker.isRunning():
-            self._table_image_worker.request_stop()
-            self._table_image_start_btn.setEnabled(False)
-            self._table_image_status_label.setText(
-                self._t("orbea.tables.stopping", "Stopping safely…")
-            )
-            return
-        if self.is_running() or not self._validate_table_image_inputs():
-            return
-
-        self._closing = False
-        _unique, _duplicates, _invalid, entries = self._table_image_link_state()
-        geometry, size_guide, product_photos = self._table_image_selection()
-        output_dir = Path(self._table_image_output_edit.text().strip())
-        self._save_table_image_output()
-        self._table_output_dir = output_dir
-        self._table_image_open_btn.setEnabled(False)
-        self._table_image_log.clear()
-        self._table_image_log.setVisible(True)
-        self._table_image_progress.setValue(0)
-        self._set_table_image_busy(True)
-        self._table_image_worker = OrbeaTableImageWorker(
-            self._make_table_image_service,
-            entries,
-            output_dir,
-            download_geometry=geometry,
-            download_size_guide=size_guide,
-            download_product_photos=product_photos,
-        )
-        self._table_image_worker.progress_changed.connect(
-            self._on_table_image_progress
-        )
-        self._table_image_worker.log_message.connect(self._append_table_image_log)
-        self._table_image_worker.succeeded.connect(self._on_table_image_result)
-        self._table_image_worker.failed.connect(self._on_table_image_error)
-        self._table_image_worker.finished.connect(self._table_image_thread_finished)
-        if hasattr(self.main, "track_worker"):
-            self.main.track_worker(
-                self._table_image_worker,
-                "orbea",
-                "orbea",
-                total=len(entries),
-                output_path=str(output_dir),
-            )
-        self._table_image_worker.start()
+        self._table_image_workflow.start_stop()
 
     def _validate_table_image_inputs(self) -> bool:
-        urls, _duplicates, invalid, _entries = self._table_image_link_state()
-        if not any(self._table_image_selection()):
-            self._warn(
-                self._t(
-                    "orbea.tables.selection_invalid.title",
-                    "Choose what to download",
-                ),
-                self._t(
-                    "orbea.tables.selection_invalid",
-                    "Select geometry, the CM size guide, product photos, or any combination.",
-                ),
-            )
-            return False
-        if invalid:
-            self._warn(
-                self._t(
-                    "orbea.tables.urls_invalid.title",
-                    "Some product links are invalid",
-                ),
-                self._t(
-                    "orbea.tables.urls_invalid",
-                    "Fix or remove {count:,} invalid lines. Enter one Orbea product URL per line.",
-                    count=len(invalid),
-                ),
-            )
-            return False
-        if not urls:
-            self._warn(
-                self._t(
-                    "orbea.tables.url_invalid.title",
-                    "Orbea product URLs required",
-                ),
-                self._t(
-                    "orbea.tables.url_invalid",
-                    "Paste one or more public Orbea bicycle product-page URLs.",
-                ),
-            )
-            return False
-        if not self._table_image_output_edit.text().strip():
-            self._warn(
-                self._t(
-                    "orbea.tables.output_invalid.title",
-                    "Output folder required",
-                ),
-                self._t(
-                    "orbea.tables.output_invalid",
-                    "Choose where the selected Orbea images should be saved.",
-                ),
-            )
-            return False
-        return True
+        return self._table_image_workflow.validate_inputs()
 
     def _on_table_image_progress(self, update):
-        status = str(_read(update, "status", default="downloading") or "downloading")
-        current = int(_read(update, "current", default=0) or 0)
-        total = int(_read(update, "total", default=0) or 0)
-        message = str(_read(update, "message", default="") or "")
-        status_fallbacks = {
-            "opening_page": "Opening product page…",
-            "saved": "Images saved",
-            "partial": "Some images could not be saved",
-            "downloading": "Downloading images…",
-            "product_photos": "Downloading product photos…",
-        }
-        self._table_image_status_label.setText(
-            self._t(
-                f"orbea.tables.status.{status}",
-                status_fallbacks.get(status, status.replace("_", " ").title()),
-            )
-        )
-        self._table_image_progress.setValue(
-            max(0, min(100, int(current * 100 / total))) if total else 0
-        )
-        self._table_image_progress_label.setText(
-            message
-            or self._t(
-                "orbea.tables.progress",
-                "{current:,} / {total:,} products",
-                current=current,
-                total=total,
-            )
-        )
+        self._table_image_workflow.on_progress(update)
 
     def _on_table_image_result(self, result):
-        output_dir = _read(result, "output_dir", default=None)
-        if output_dir:
-            self._table_output_dir = Path(output_dir)
-        files = _read(result, "files", default=()) or ()
-        failures = _read(result, "failures", default=()) or ()
-        unavailable = _read(result, "unavailable", default=()) or ()
-        products = int(_read(result, "products", default=0) or 0)
-        duplicates = int(_read(result, "duplicates", default=0) or 0)
-        photo_variants = int(_read(result, "photo_variants", default=0) or 0)
-        photo_views = int(_read(result, "photo_views", default=0) or 0)
-        cancelled = bool(_read(result, "cancelled", default=False))
-        if cancelled:
-            self._table_image_status_label.setText(
-                self._t(
-                    "orbea.tables.stopped",
-                    "Stopped — completed images were kept",
-                )
-            )
-        elif failures:
-            self._table_image_status_label.setText(
-                self._t(
-                    "orbea.tables.partial",
-                    "Completed with some failed images",
-                )
-            )
-            self._table_image_progress.setValue(100)
-        else:
-            self._table_image_status_label.setText(
-                self._t("orbea.tables.complete", "Image download complete")
-            )
-            self._table_image_progress.setValue(100)
-        self._table_image_progress_label.setText(
-            self._t(
-                "orbea.tables.result",
-                "Products {products:,} • Images saved {saved:,} • Photo colours {photo_variants:,} • Photo views {photo_views:,} • Duplicates ignored {duplicates:,} • Unavailable {unavailable:,} • Failed {failed:,}",
-                products=products,
-                saved=len(files),
-                photo_variants=photo_variants,
-                photo_views=photo_views,
-                duplicates=duplicates,
-                unavailable=len(unavailable),
-                failed=len(failures),
-            )
-        )
-        if failures and not cancelled:
-            self._warn(
-                self._t(
-                    "orbea.tables.partial.title",
-                    "Some images were not downloaded",
-                ),
-                self._t(
-                    "orbea.tables.partial.detail",
-                    "Successful images were kept. Check the activity log for details.",
-                ),
-            )
+        self._table_image_workflow.on_result(result)
 
     def _on_table_image_error(self, message: str):
-        self._table_image_status_label.setText(
-            self._t("orbea.tables.failed", "Image download failed")
-        )
-        self._append_table_image_log(message)
-        if not self._closing:
-            self._error(
-                self._t("orbea.tables.failed.title", "Image download failed"),
-                message,
-            )
+        self._table_image_workflow.on_error(message)
 
     def _table_image_thread_finished(self):
-        self._table_image_worker = None
-        self._set_table_image_busy(False)
-        self._table_image_open_btn.setEnabled(
-            bool(self._table_output_dir and self._table_output_dir.exists())
-        )
-        self._update_action_states()
+        self._table_image_workflow.finished()
 
     def _set_table_image_busy(self, busy: bool):
-        for group in (
-            self._config_widgets,
-            self._description_config_widgets,
-            self._photo_config_widgets,
-            self._table_image_config_widgets,
-        ):
-            for widget in group:
-                widget.setEnabled(not busy)
-        self._start_btn.setEnabled(not busy)
-        self._resume_btn.setEnabled(not busy)
-        self._retry_btn.setEnabled(not busy)
-        self._description_start_btn.setEnabled(not busy)
-        self._photo_start_btn.setEnabled(not busy)
-        if busy:
-            self._table_image_start_btn.setText(
-                self._t("orbea.tables.stop", "Stop")
-            )
-            self._table_image_start_btn.setIcon(FluentIcon.CLOSE)
-            self._table_image_start_btn.setEnabled(True)
-            self._table_image_status_label.setText(
-                self._t("orbea.tables.starting", "Opening Orbea product pages…")
-            )
-        else:
-            self._table_image_start_btn.setText(
-                self._t("orbea.tables.download", "Download selected")
-            )
-            self._table_image_start_btn.setIcon(FluentIcon.DOWNLOAD)
+        self._table_image_workflow.set_busy(busy)
 
     # --------------------------------------------------------- Photo downloader
 
     def _on_photo_start_stop(self):
-        if self._photo_worker and self._photo_worker.isRunning():
-            self._photo_worker.request_stop()
-            self._photo_start_btn.setEnabled(False)
-            self._photo_status_label.setText(
-                self._t("orbea.photo.stopping", "Stopping safely…")
-            )
-            return
-        if self.is_running() or not self._validate_photo_inputs():
-            return
-
-        self._closing = False
-        _unique, _duplicates, _invalid, entries = self._photo_link_state()
-        output_dir = Path(self._photo_output_edit.text().strip())
-        self._save_photo_output()
-        self._photo_output_dir = output_dir
-        self._photo_open_btn.setEnabled(False)
-        self._photo_log.clear()
-        self._photo_progress.setValue(0)
-        self._set_photo_busy(True)
-        self._photo_worker = OrbeaPhotoWorker(
-            self._make_photo_service, entries, output_dir
-        )
-        self._photo_worker.progress_changed.connect(self._on_photo_progress)
-        self._photo_worker.log_message.connect(self._append_photo_log)
-        self._photo_worker.succeeded.connect(self._on_photo_result)
-        self._photo_worker.failed.connect(self._on_photo_error)
-        self._photo_worker.finished.connect(self._photo_thread_finished)
-        if hasattr(self.main, "track_worker"):
-            self.main.track_worker(
-                self._photo_worker,
-                "orbea",
-                "orbea",
-                total=len(entries),
-                output_path=str(output_dir),
-            )
-        self._photo_worker.start()
+        self._photo_workflow.start_stop()
 
     def _validate_photo_inputs(self) -> bool:
-        urls, _duplicates, invalid, _entries = self._photo_link_state()
-        if invalid:
-            self._warn(
-                self._t("orbea.photo.urls_invalid.title", "Some product links are invalid"),
-                self._t(
-                    "orbea.photo.urls_invalid",
-                    "Fix or remove {count:,} invalid lines. Enter one Orbea product URL per line.",
-                    count=len(invalid),
-                ),
-            )
-            return False
-        if not urls:
-            self._warn(
-                self._t("orbea.photo.url_invalid.title", "Orbea product URLs required"),
-                self._t(
-                    "orbea.photo.url_invalid",
-                    "Paste one or more public cms.orbea.com bicycle product URLs.",
-                ),
-            )
-            return False
-        if not self._photo_output_edit.text().strip():
-            self._warn(
-                self._t("orbea.photo.output_invalid.title", "Output folder required"),
-                self._t(
-                    "orbea.photo.output_invalid",
-                    "Choose where product photo folders should be saved.",
-                ),
-            )
-            return False
-        return True
+        return self._photo_workflow.validate_inputs()
 
     def _on_photo_progress(self, update):
-        status = str(_read(update, "status", default="downloading") or "downloading")
-        current = int(_read(update, "current", default=0) or 0)
-        total = int(_read(update, "total", default=0) or 0)
-        succeeded = int(_read(update, "succeeded", default=0) or 0)
-        failed = int(_read(update, "failed", default=0) or 0)
-        message = str(_read(update, "message", default="") or "")
-        self._photo_status_label.setText(status.replace("_", " ").title())
-        self._photo_progress.setValue(
-            max(0, min(100, int(current * 100 / total))) if total else 0
-        )
-        self._photo_progress_label.setText(
-            message
-            or self._t(
-                "orbea.photo.progress",
-                "{current:,} / {total:,} images • {succeeded:,} saved • {failed:,} failed",
-                current=current,
-                total=total,
-                succeeded=succeeded,
-                failed=failed,
-            )
-        )
+        self._photo_workflow.on_progress(update)
 
     def _on_photo_result(self, result):
-        product_results = _read(result, "product_results", default=()) or ()
-        product_dir = _read(result, "product_dir", default=None)
-        if not product_dir and len(product_results) == 1:
-            product_dir = _read(product_results[0], "product_dir", default=None)
-        if not product_dir:
-            product_dir = _read(result, "output_dir", default=None)
-        if product_dir:
-            self._photo_output_dir = Path(product_dir)
-        files = _read(result, "files", default=()) or ()
-        failures = _read(result, "failures", default=()) or ()
-        unavailable = _read(result, "unavailable", default=()) or ()
-        variants = int(_read(result, "variants", default=0) or 0)
-        products = int(_read(result, "products", default=1 if files else 0) or 0)
-        duplicates = int(_read(result, "duplicates", default=0) or 0)
-        duplicate_summary = (
-            self._t("orbea.photo.urls.duplicate.one", "1 duplicate ignored")
-            if duplicates == 1
-            else self._t(
-                "orbea.photo.urls.duplicate.many",
-                "{count:,} duplicates ignored",
-                count=duplicates,
-            )
-        )
-        cancelled = bool(_read(result, "cancelled", default=False))
-        if cancelled:
-            self._photo_status_label.setText(
-                self._t("orbea.photo.stopped", "Stopped — completed photos were kept")
-            )
-        elif failures:
-            self._photo_status_label.setText(
-                self._t("orbea.photo.partial", "Completed with some failed photos")
-            )
-            self._photo_progress.setValue(100)
-        else:
-            self._photo_status_label.setText(
-                self._t("orbea.photo.complete", "Photo download complete")
-            )
-            self._photo_progress.setValue(100)
-        self._photo_progress_label.setText(
-            self._t(
-                "orbea.photo.result",
-                "Products {products:,} • Colours {variants:,} • Photos saved {saved:,} • {duplicate_summary} • Unavailable {unavailable:,} • Failed {failed:,}",
-                products=products,
-                variants=variants,
-                saved=len(files),
-                duplicate_summary=duplicate_summary,
-                unavailable=len(unavailable),
-                failed=len(failures),
-            )
-        )
-        if failures and not cancelled:
-            self._warn(
-                self._t("orbea.photo.partial.title", "Some photos were not downloaded"),
-                self._t(
-                    "orbea.photo.partial.detail",
-                    "The successful photos were kept. Check the activity log for details.",
-                ),
-            )
+        self._photo_workflow.on_result(result)
 
     def _on_photo_error(self, message: str):
-        self._photo_status_label.setText(
-            self._t("orbea.photo.failed", "Photo download failed")
-        )
-        self._append_photo_log(message)
-        if not self._closing:
-            self._error(
-                self._t("orbea.photo.failed.title", "Photo download failed"),
-                message,
-            )
+        self._photo_workflow.on_error(message)
 
     def _photo_thread_finished(self):
-        self._photo_worker = None
-        self._set_photo_busy(False)
-        self._photo_open_btn.setEnabled(
-            bool(self._photo_output_dir and self._photo_output_dir.exists())
-        )
-        self._update_action_states()
+        self._photo_workflow.finished()
 
     def _set_photo_busy(self, busy: bool):
-        for widget in self._config_widgets:
-            widget.setEnabled(not busy)
-        for widget in self._description_config_widgets:
-            widget.setEnabled(not busy)
-        self._start_btn.setEnabled(not busy)
-        self._resume_btn.setEnabled(not busy)
-        self._retry_btn.setEnabled(not busy)
-        self._description_start_btn.setEnabled(not busy)
-        for widget in self._photo_config_widgets:
-            widget.setEnabled(not busy)
-        for widget in self._table_image_config_widgets:
-            widget.setEnabled(not busy)
-        self._table_image_start_btn.setEnabled(not busy)
-        if busy:
-            self._photo_start_btn.setText(self._t("orbea.photo.stop", "Stop"))
-            self._photo_start_btn.setIcon(FluentIcon.CLOSE)
-            self._photo_start_btn.setEnabled(True)
-            self._photo_status_label.setText(
-                self._t("orbea.photo.starting", "Reading product colours…")
-            )
-        else:
-            self._photo_start_btn.setText(
-                self._t("orbea.photo.download", "Download all colours")
-            )
-            self._photo_start_btn.setIcon(FluentIcon.DOWNLOAD)
+        self._photo_workflow.set_busy(busy)
 
     def _update_counts(self, counts: Any):
         aliases = {
@@ -2159,6 +1838,7 @@ class OrbeaScreen(ResponsiveWidget):
     # -------------------------------------------------------------- Results
 
     def _load_workbook_preview(self, path: Path):
+        self._report_details.show()
         rows: list[list[str]] = []
         total_rows = 0
         try:
@@ -2216,6 +1896,16 @@ class OrbeaScreen(ResponsiveWidget):
 
     def _load_paths(self):
         catalogue = str(self._setting_get(CATALOGUE_SETTING, "") or "").strip()
+        if catalogue:
+            try:
+                available = Path(catalogue).is_file()
+            except OSError:
+                available = False
+            if not available:
+                # The catalogue is optional. A stale saved path must not block
+                # a fresh Pimbo scan followed by public website lookup.
+                catalogue = ""
+                self._setting_set(CATALOGUE_SETTING, "")
         output = str(self._setting_get(OUTPUT_SETTING, "") or "").strip()
         description_output = str(
             self._setting_get(DESCRIPTION_OUTPUT_SETTING, "") or ""
@@ -2246,11 +1936,15 @@ class OrbeaScreen(ResponsiveWidget):
         self._table_product_photos_check.setChecked(
             self._setting_bool(DIRECT_PRODUCT_PHOTOS_SETTING, False)
         )
-        # Migrate older saved choices to the new explicit table-only flow.
-        self._table_images_check.setChecked(False)
-        self._product_photos_check.setChecked(False)
-        self._setting_set(TABLE_IMAGES_SETTING, False)
-        self._setting_set(PRODUCT_PHOTOS_SETTING, False)
+        choices = self._setting_get(COLLECTION_SETTING, {})
+        if isinstance(choices, str):
+            try:
+                choices = json.loads(choices)
+            except (ValueError, TypeError):
+                choices = {}
+        choices = choices if isinstance(choices, dict) else {}
+        for key, checkbox in self._collection_checkboxes().items():
+            checkbox.setChecked(bool(choices.get(key, True)))
         candidate = Path(description_output)
         self._description_output_dir = candidate if candidate.exists() else None
         photo_candidate = Path(photo_output)
@@ -2346,11 +2040,14 @@ class OrbeaScreen(ResponsiveWidget):
         self._update_action_states()
 
     def _download_options_changed(self, _state=None):
-        # Legacy hidden controls may still be changed by an older integration;
-        # keep catalogue scans image-free regardless of stale UI state.
-        self._setting_set(TABLE_IMAGES_SETTING, False)
-        self._setting_set(PRODUCT_PHOTOS_SETTING, False)
+        self._setting_set(COLLECTION_SETTING, json.dumps({key: checkbox.isChecked() for key, checkbox in self._collection_checkboxes().items()}))
+        self._setting_set(TABLE_IMAGES_SETTING, self._table_images_check.isChecked())
+        self._setting_set(PRODUCT_PHOTOS_SETTING, self._product_photos_check.isChecked())
         self._update_action_states()
+
+    def _collection_checkboxes(self):
+        return {"tables": self._table_images_check, "photos": self._product_photos_check,
+                "description": self._description_check, "specifications": self._specifications_check}
 
     def _save_paths(self):
         self._setting_set(CATALOGUE_SETTING, self._catalogue_edit.text().strip())
@@ -2373,7 +2070,7 @@ class OrbeaScreen(ResponsiveWidget):
 
     def _validate_inputs(self) -> bool:
         catalogue = Path(self._catalogue_edit.text().strip())
-        if not catalogue.is_file() or catalogue.suffix.lower() != ".xlsx":
+        if self._catalogue_edit.text().strip() and (not catalogue.is_file() or catalogue.suffix.lower() != ".xlsx"):
             self._warn(self._t("orbea.catalogue.invalid.title", "Catalogue required"), self._t("orbea.catalogue.invalid", "Choose the Orbea catalogue .xlsx file."))
             return False
         if not self._output_edit.text().strip():
@@ -2413,14 +2110,7 @@ class OrbeaScreen(ResponsiveWidget):
         self._owns_browser_lease = self.workflow_controller.owns_browser_lease
 
     def is_running(self) -> bool:
-        return bool(
-            (self._worker and self._worker.isRunning())
-            or (self._filter_worker and self._filter_worker.isRunning())
-            or (self._description_worker and self._description_worker.isRunning())
-            or (self._photo_worker and self._photo_worker.isRunning())
-            or (self._table_image_worker and self._table_image_worker.isRunning())
-            or (self._excel_sort_worker and self._excel_sort_worker.isRunning())
-        )
+        return current_activity(self).name != "idle"
 
     def shutdown(self, wait_ms: int = 5000) -> bool:
         """Request a checkpointed stop and wait briefly; never terminate threads."""
@@ -2434,6 +2124,7 @@ class OrbeaScreen(ResponsiveWidget):
                 self._photo_worker,
                 self._table_image_worker,
                 self._excel_sort_worker,
+                self._upload_panel.worker,
             )
             if worker and worker.isRunning()
         ]
@@ -2477,113 +2168,91 @@ class OrbeaScreen(ResponsiveWidget):
             pass
 
     def _update_action_states(self):
-        main_running = bool(self._worker and self._worker.isRunning())
-        filter_running = bool(self._filter_worker and self._filter_worker.isRunning())
-        excel_sort_running = self._excel_sort_worker is not None
-        description_running = bool(
-            self._description_worker and self._description_worker.isRunning()
-        )
-        photo_running = bool(self._photo_worker and self._photo_worker.isRunning())
-        table_running = bool(
-            self._table_image_worker and self._table_image_worker.isRunning()
-        )
-        if excel_sort_running:
-            for group in (
-                self._config_widgets,
-                self._description_config_widgets,
-                self._photo_config_widgets,
-                self._table_image_config_widgets,
-            ):
-                for widget in group:
-                    widget.setEnabled(False)
-            for button in (
-                self._start_btn,
-                self._resume_btn,
-                self._retry_btn,
-                self._description_start_btn,
-                self._photo_start_btn,
-                self._table_image_start_btn,
-            ):
-                button.setEnabled(False)
+        self._update_more_filters_title()
+        self._upload_panel.update_state()
+        activity = current_activity(self)
+        filter_running = activity.name == "filters"
+        if activity.name not in {"idle", "filters"}:
+            buttons = {
+                "collection": self._start_btn,
+                "description": self._description_start_btn,
+                "photos": self._photo_start_btn,
+                "tables": self._table_image_start_btn,
+            }
+            set_controls_locked(
+                self, True, active_button=buttons.get(activity.name),
+                stopping=activity.stopping, upload_active=activity.name == "upload",
+            )
+            self._progress_stop_btn.setEnabled(
+                activity.name == "collection" and not activity.stopping
+            )
             return
-        if main_running:
-            for group in (
-                self._description_config_widgets,
-                self._photo_config_widgets,
-                self._table_image_config_widgets,
-            ):
-                for widget in group:
-                    widget.setEnabled(False)
-            self._description_start_btn.setEnabled(False)
-            self._photo_start_btn.setEnabled(False)
-            self._table_image_start_btn.setEnabled(False)
-            return
-        if description_running:
-            for widget in self._config_widgets:
-                widget.setEnabled(False)
-            for widget in self._description_config_widgets:
-                widget.setEnabled(False)
-            for widget in self._photo_config_widgets:
-                widget.setEnabled(False)
-            for widget in self._table_image_config_widgets:
-                widget.setEnabled(False)
-            self._start_btn.setEnabled(False)
-            self._resume_btn.setEnabled(False)
-            self._retry_btn.setEnabled(False)
-            self._description_start_btn.setEnabled(True)
-            self._photo_start_btn.setEnabled(False)
-            self._table_image_start_btn.setEnabled(False)
-            return
-        if photo_running:
-            for group in (
-                self._config_widgets,
-                self._description_config_widgets,
-                self._photo_config_widgets,
-                self._table_image_config_widgets,
-            ):
-                for widget in group:
-                    widget.setEnabled(False)
-            self._start_btn.setEnabled(False)
-            self._resume_btn.setEnabled(False)
-            self._retry_btn.setEnabled(False)
-            self._description_start_btn.setEnabled(False)
-            self._photo_start_btn.setEnabled(True)
-            self._table_image_start_btn.setEnabled(False)
-            return
-        if table_running:
-            for group in (
-                self._config_widgets,
-                self._description_config_widgets,
-                self._photo_config_widgets,
-                self._table_image_config_widgets,
-            ):
-                for widget in group:
-                    widget.setEnabled(False)
-            self._start_btn.setEnabled(False)
-            self._resume_btn.setEnabled(False)
-            self._retry_btn.setEnabled(False)
-            self._description_start_btn.setEnabled(False)
-            self._photo_start_btn.setEnabled(False)
-            self._table_image_start_btn.setEnabled(True)
-            return
-
-        for widget in self._config_widgets:
-            widget.setEnabled(not filter_running)
-        for widget in self._description_config_widgets:
-            widget.setEnabled(not filter_running)
-        for widget in self._photo_config_widgets:
-            widget.setEnabled(not filter_running)
-        for widget in self._table_image_config_widgets:
-            widget.setEnabled(not filter_running)
+        set_controls_locked(self, filter_running)
+        catalogue = self._catalogue_edit.text().strip()
+        try:
+            catalogue_valid = not catalogue or (Path(catalogue).is_file() and Path(catalogue).suffix.lower() == ".xlsx")
+        except OSError:
+            catalogue_valid = False
         valid = bool(
             getattr(self.main, "driver", None) is not None
-            and Path(self._catalogue_edit.text().strip()).is_file()
+            and catalogue_valid
             and self._output_edit.text().strip()
             and not filter_running
         )
         self._start_btn.setEnabled(valid)
-        self._resume_btn.setEnabled(valid)
-        self._retry_btn.setEnabled(valid)
+        if valid:
+            self._start_btn.setToolTip("")
+        elif filter_running:
+            self._start_btn.setToolTip(self._t("orbea.filters.loading", "Loading Pimbo filters…"))
+        elif getattr(self.main, "driver", None) is None:
+            self._start_btn.setToolTip(self._t("batchdesc.no_session", "Log in to Pimbo first."))
+        elif not catalogue_valid:
+            self._start_btn.setToolTip(self._t("orbea.catalogue.invalid", "Choose a valid Orbea catalogue .xlsx file, or clear this field to search the website."))
+        else:
+            self._start_btn.setToolTip(self._t("orbea.output.invalid", "Choose an output folder."))
+        saved = self._saved_resume_config()
+        retry = self._saved_resume_config(retry_failed=True)
+        connected = getattr(self.main, "driver", None) is not None
+        can_resume = lambda config: bool(config and not filter_running and (connected or self._saved_scan_complete(config)))
+        self._resume_btn.setEnabled(can_resume(saved))
+        self._retry_btn.setEnabled(can_resume(retry))
+        matched = self._saved_resume_config(retry_matched=True)
+        self._retry_matched_btn.setEnabled(bool(matched and not filter_running))
+        self._retry_matched_btn.setToolTip(
+            self._t("orbea.retry_matched.ready", "Refresh the saved downloads for every matched product in run {run}, including successful downloads. Its download choices will be restored.", run=matched.resume_run_dir.name)
+            if matched else self._t("orbea.retry_matched.none", "No saved run with matched products was found in this output folder.")
+        )
+        self._load_collection_btn.setEnabled(not filter_running)
+        download_config = self._saved_download_config()
+        self._download_missing_btn.setEnabled(bool(download_config and not filter_running and
+            any(check.isChecked() for check in self._collection_checkboxes().values())))
+        self._download_missing_btn.setToolTip(self._t("orbea.saved_collection.download_tip",
+            "Use saved Orbea links and download only missing selected items. Completed files are kept."))
+        if download_config:
+            from tools.orbea_automation.saved_collection import collection_download_counts
+            try:
+                counts = collection_download_counts(download_config.resume_run_dir)
+                self._saved_download_hint.setText(self._t("orbea.saved_collection.summary",
+                    "Saved collection {run}: {total} matched products. Ready — photos {photos}, descriptions {description}, specifications {specifications}, tables {tables}.",
+                    run=download_config.resume_run_dir.name, **counts))
+            except (OSError, ValueError, TypeError):
+                self._saved_download_hint.setText("")
+        else:
+            self._saved_download_hint.setText(self._t("orbea.saved_collection.hint",
+                "Open a finished Orbea Excel report to add downloads using its saved product links."))
+        for button, config in ((self._resume_btn, saved), (self._retry_btn, retry)):
+            if can_resume(config):
+                message = self._t("orbea.resume.ready", "Continue saved run {run}. Its filters and download choices will be restored.", run=config.resume_run_dir.name)
+            elif config and not connected:
+                message = self._t("orbea.resume.login", "Log in to Pimbo to finish the saved product scan.")
+            elif filter_running:
+                message = self._t("orbea.filters.loading", "Loading Pimbo filters…")
+            else:
+                message = self._t("orbea.resume.none", "No saved incomplete run was found in this output folder.")
+            button.setToolTip(message)
+        self._resume_hint.setText(self._t("orbea.saved_collection.continue",
+            "Choose additional items above, then download missing items using the saved links. Pimbo login is not needed.")
+            if download_config else self._resume_btn.toolTip())
         self._description_start_btn.setEnabled(
             bool(
                 not filter_running
@@ -2662,7 +2331,6 @@ class OrbeaScreen(ResponsiveWidget):
         border = table["border_dark"] if dark else table["border_light"]
         text = COLORS["text_primary_dark"] if dark else COLORS["text_primary_light"]
         muted = COLORS["text_secondary_dark"] if dark else COLORS["text_secondary_light"]
-        disabled_text = COLORS["text_disabled_dark"] if dark else COLORS["text_disabled_light"]
         header_bg = table["header_bg_dark" if dark else "header_bg_light"]
         header_text = table["header_text_dark" if dark else "header_text_light"]
         accent_colors = get_accent_colors(dark)
@@ -2679,7 +2347,7 @@ class OrbeaScreen(ResponsiveWidget):
         self._section_tabs.setStyleSheet(f"""
             QTabBar::tab {{
                 background: transparent;
-                color: {disabled_text};
+                color: {muted};
                 padding: {PADDINGS['tab']};
                 border: none;
                 border-bottom: 3px solid transparent;
@@ -2702,7 +2370,10 @@ class OrbeaScreen(ResponsiveWidget):
                 color: {accent_text};
                 font-weight: 600;
                 border-radius: {RADII['md']}px;
+                padding: 8px 14px;
+                min-height: 20px;
             }}
+            PrimaryPushButton[hasIcon=true] {{ padding-left: 36px; }}
             PrimaryPushButton:hover {{
                 background-color: {accent_hover};
                 border-color: {accent_hover};
@@ -2741,6 +2412,9 @@ class OrbeaScreen(ResponsiveWidget):
             QTableWidget::item:selected {{ background: {get_selection_bg(dark)}; color: {text}; }}
             QHeaderView::section {{ background: {header_bg}; color: {header_text}; padding: {PADDINGS['table_header']}; border: none; font-weight: 600; font-size: {FONTS['size_body_sm']}; }}
         """)
+        if hasattr(self, "_upload_panel"):
+            self._upload_panel.table.setStyleSheet(self._table.styleSheet())
+            self._upload_panel.start.setStyleSheet(primary_style)
         self._style_filter_buttons()
 
     def _style_filter_buttons(self) -> None:
@@ -2758,6 +2432,8 @@ class OrbeaScreen(ResponsiveWidget):
                 border: 1px solid {outline};
                 color: {text};
                 border-radius: 14px;
+                padding: 6px 12px;
+                min-height: 16px;
             }}
             PillPushButton:hover {{ background: {hover}; }}
             PillPushButton:checked {{
@@ -2781,21 +2457,24 @@ class OrbeaScreen(ResponsiveWidget):
         self._subtitle.setText(
             self._t(
                 "orbea.subtitle",
-                "Match filtered Pimbo products and choose which Orbea images to download.",
+                "Read products from Pimbo, collect Orbea data, then upload the selected updates.",
             )
         )
-        self._section_tabs.setTabText(0, self._t("orbea.tab.setup", "Setup"))
-        self._section_tabs.setTabText(1, self._t("orbea.tab.progress", "Progress"))
-        self._section_tabs.setTabText(
-            2, self._t("orbea.tab.photos", "Image downloads")
-        )
-        self._section_tabs.setTabText(3, self._t("orbea.tab.descriptions", "Descriptions"))
-        self._section_tabs.setTabText(4, self._t("orbea.tab.results", "Results"))
-        self._paths_title.setText(self._t("orbea.paths", "Catalogue and output"))
-        self._catalogue_label.setText(self._t("orbea.catalogue", "Catalogue"))
+        self._section_tabs.setTabText(0, self._t("orbea.tab.automation", "Automation"))
+        self._section_tabs.setTabText(1, self._t("orbea.tab.tools", "Extra tools"))
+        self._collection_details.set_title(self._t("orbea.collection.log", "Collection details and log"))
+        self._report_details.set_title(self._t("orbea.collection.report", "Collection report"))
+        self._image_tool.set_title(self._t("orbea.tool.images", "Download images from a link"))
+        self._description_tool.set_title(self._t("orbea.tool.descriptions", "Extract descriptions from a link"))
+        self._excel_tool.set_title(self._t("orbea.tool.excel", "Sort an existing Excel report"))
+        self._tools_hint.setText(self._t("orbea.tools.hint", "Optional shortcuts for individual links and existing reports. The main automation already collects images, descriptions and specs."))
+        self._upload_panel.retranslate_ui()
+        self._paths_title.setText(self._t("orbea.paths", "1. Get products from Pimbo"))
+        self._catalogue_label.setText(self._t("orbea.catalogue", "Excel catalogue (optional)"))
+        self._catalogue_edit.setPlaceholderText(self._t("orbea.catalogue.optional", "Optional — search the website if omitted"))
         self._output_label.setText(self._t("orbea.output", "Output folder"))
         self._downloads_label.setText(
-            self._t("orbea.downloads", "Include in catalogue run")
+            self._t("orbea.downloads", "Orbea data to download")
         )
         self._table_images_check.setText(
             self._t(
@@ -2807,16 +2486,18 @@ class OrbeaScreen(ResponsiveWidget):
                 "orbea.downloads.photos", "Product photos (all colours)"
             )
         )
+        self._description_check.setText(self._t("orbea.downloads.description", "Source description"))
+        self._specifications_check.setText(self._t("orbea.downloads.specifications", "Source specifications"))
         self._downloads_hint.setText(
             self._t(
                 "orbea.downloads.hint",
-                "This option belongs to the Pimbo catalogue scan. For URLs you paste yourself, use Image downloads.",
+                "Reads codes and full titles directly from Pimbo's product list, finds all URLs by exact TTCC code across Orbea regions, then saves the selected files. Upload changes in step 3.",
             )
         )
         self._search_label.setText(self._t("orbea.search", "Fixed Pimbo search"))
         self._catalogue_btn.setText(self._t("common.browse", "Browse"))
         self._output_btn.setText(self._t("common.browse", "Browse"))
-        self._filters_title.setText(self._t("orbea.filters", "Pimbo filters"))
+        self._filters_title.setText(self._t("orbea.filters", "Choose Pimbo products"))
         self._refresh_btn.setText(self._t("orbea.filters.refresh", "Refresh filters"))
         self._status_label.setText(self._t("orbea.filters.status", "Status (select any)"))
         self._family_label.setText(self._t("orbea.filters.family", "Family"))
@@ -2824,20 +2505,35 @@ class OrbeaScreen(ResponsiveWidget):
         self._source_label.setText(self._t("orbea.filters.source", "Source"))
         self._locale_label.setText(self._t("orbea.filters.locale", "Completeness locale"))
         self._sort_label.setText(self._t("orbea.filters.sort", "Sort"))
+        prefix_label = self._t("orbea.filters.code_prefix", "Product code starts with")
+        prefix_hint = self._t(
+            "orbea.filters.code_prefix.hint",
+            "Uses the product code shown in the Pimbo list, ignoring letter case. Leave empty for all codes.",
+        )
+        self._code_prefix_label.setText(prefix_label)
+        self._code_prefix_edit.setAccessibleName(prefix_label)
+        self._code_prefix_edit.setAccessibleDescription(prefix_hint)
+        self._code_prefix_edit.setToolTip(prefix_hint)
+        self._code_prefix_edit.setPlaceholderText(
+            self._t("orbea.filters.code_prefix.placeholder", "e.g. U or U107")
+        )
         self._stock_label.setText(self._t("orbea.filters.stock", "Stock"))
         self._bucket_label.setText(self._t("orbea.filters.completeness", "Completeness"))
         self._actions_title.setText(
-            self._t("orbea.actions", "Pimbo catalogue scan")
+            self._t("orbea.actions", "Automatic product collection")
         )
         running = bool(self._worker and self._worker.isRunning())
         self._start_btn.setText(
             self._t("orbea.stop", "Stop")
             if running
-            else self._t("orbea.start", "Start Pimbo scan")
+            else self._t("orbea.start", "Scan Pimbo and collect Orbea data")
         )
         self._progress_stop_btn.setText(self._t("orbea.stop", "Stop"))
         self._resume_btn.setText(self._t("orbea.resume", "Resume latest"))
         self._retry_btn.setText(self._t("orbea.retry", "Retry failed"))
+        self._retry_matched_btn.setText(self._t("orbea.retry_matched", "Retry matched downloads"))
+        self._load_collection_btn.setText(self._t("orbea.saved_collection.open", "Open saved collection"))
+        self._download_missing_btn.setText(self._t("orbea.saved_collection.download", "Download selected missing items"))
         self._excel_sort_btn.setText(
             self._t("orbea.excel_sort", "Sort existing Excel")
         )
@@ -2961,16 +2657,16 @@ class OrbeaScreen(ResponsiveWidget):
         self._description_subtitle.setText(
             self._t(
                 "orbea.description.subtitle",
-                "Paste Orbea model URLs to save all visible, expanded, and carousel description text.",
+                "Open the product's Features dialog and save its introduction and all feature cards. Older Orbea model pages are also supported.",
             )
         )
         self._description_urls_label.setText(
-            self._t("orbea.description.urls", "Orbea model URLs")
+            self._t("orbea.description.urls", "Orbea product or model URLs")
         )
         self._description_urls_edit.setPlaceholderText(
             self._t(
                 "orbea.description.urls.placeholder",
-                "One URL per line, for example:\nhttps://cms.orbea.com/en-au/m/kemen-adv",
+                "One URL per line, for example:\nhttps://www.orbea.com/es-es/orca-m11eltd-pwr",
             )
         )
         self._description_output_label.setText(

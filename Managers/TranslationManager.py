@@ -1,5 +1,6 @@
 # Standard library
 import inspect
+import uuid
 from pathlib import Path
 
 # Local
@@ -12,9 +13,10 @@ class TranslationManager:
     def __init__(self, brandName, db_manager=None, logger=None):
         self.brandName = brandName
         self.logger = logger
-        base = get_data_dir()
-        self.ltPath = str(base / f"pabaigta{brandName}LT.txt")
-        self.enPath = str(base / f"pabaigta{brandName}ENG.txt")
+        self.work_dir = get_data_dir() / "product-runs" / uuid.uuid4().hex
+        self.work_dir.mkdir(parents=True, exist_ok=False)
+        self.ltPath = str(self.work_dir / "specifications-lt.txt")
+        self.enPath = str(self.work_dir / "specifications-en.txt")
         self.translation_handler = TranslationHandler(db_manager)
         self.file_handler = FileHandler()
         self.db = db_manager
@@ -36,38 +38,36 @@ class TranslationManager:
     def prepareTranslationFiles(self, scrape_func, url, **kwargs):
         self._log("Preparing translation files", brand=self.brandName, url=url)
     
-        args = {
-            "bicycleUrlOrCode": url,
-            "outputFile": self.ltPath,
-            'db_manager': self.db
-        }
-
-        # Get scraper's accepted parameters
         scraper_params = inspect.signature(scrape_func).parameters
-    
-        # Add kwargs that scraper accepts
+        identifier = next((name for name in ("bicycleUrlOrCode", "url", "target_code")
+                           if name in scraper_params), None)
+        if identifier is None:
+            raise TypeError("Scraper has no supported product identifier parameter")
+        args = {identifier: url, "outputFile": self.ltPath}
+        if "db_manager" in scraper_params:
+            args["db_manager"] = self.db
         for key, value in kwargs.items():
-            if key in scraper_params:
-                args[key] = value
-    
-        # Only add 'driver' if scraper supports it
-        if 'driver' in scraper_params:
-            args["driver"] = kwargs.get("driver")
-
-        
-
+            if key not in scraper_params:
+                raise TypeError(f"Scraper does not support option {key!r}")
+            args[key] = value
+        inspect.signature(scrape_func).bind(**args)
+        self.raw_source_text = ""
+        for path in (self.ltPath, self.enPath):
+            Path(path).unlink(missing_ok=True)
         try:
             scrape_func(**args)
-            self.raw_source_text = Path(self.ltPath).read_text(
-                encoding="utf-8",
-                errors="replace",
-            )
+            self.file_handler.read_translated_file(self.ltPath)
+            self.raw_source_text = Path(self.ltPath).read_text(encoding="utf-8")
             self._log("Scraping completed", output_file=self.ltPath)
 
             # Translate using database-powered translations (preferred)
             self.translation_handler.translate_to_english(self.ltPath, self.enPath)
+            self.file_handler.read_translated_file(self.enPath)
             self._log("Translation to English completed", output_file=self.enPath)
         except Exception as e:
+            self.raw_source_text = ""
+            for path in (self.ltPath, self.enPath):
+                Path(path).unlink(missing_ok=True)
             self._log_error("Translation preparation failed", exception=e, brand=self.brandName)
             ErrorManager.show_error("TRANSLATION_FAILED")
             raise
@@ -79,7 +79,10 @@ class TranslationManager:
         """
         self._log("Starting translation to English")
         try:
+            self.file_handler.read_translated_file(self.ltPath)
+            Path(self.enPath).unlink(missing_ok=True)
             self.translation_handler.translate_to_english(self.ltPath, self.enPath)
+            self.file_handler.read_translated_file(self.enPath)
             self._log("Translation completed successfully")
         except Exception as e:
             self._log_error("Translation failed", exception=e)
@@ -118,7 +121,7 @@ class TranslationManager:
         return self.file_handler.read_translated_file(self.enPath)
 
     def cleanup_generated_files(self) -> None:
-        """Delete generated pabaigta*.txt output files for this brand.
+        """Delete this run's generated specification files.
 
         Intended to be called after a successful run when the user enabled
         the corresponding setting.

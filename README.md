@@ -81,6 +81,12 @@ beside the live database, and the app restarts after a successful restore.
 
 Keep the backup password separately; neither the app nor the backup stores it.
 
+## Maintenance backlog
+
+Known defects, concurrency risks, and structural debt are tracked in the
+[technical debt backlog](docs/technical-debt-backlog.md), with priorities,
+evidence, and completion criteria.
+
 ## Tests
 
 ```powershell
@@ -131,3 +137,19 @@ together, then verify the hosted installer hash before publishing.
 
 Update checks can be enabled or disabled in Settings and can be run immediately
 with **Check now**. Downloads require HTTPS and a matching SHA-256 digest.
+
+
+### Product photos and upload results
+
+Before a product-photo upload, the app checks only the product gallery. It removes the exact Orbea `https://www.orbea.com/uploads/products/images/picture-coming-soon.webp` placeholder, accepts the image-removal confirmation, verifies that it disappeared, and then uploads replacements. Existing real photos cause a successful skip. If real photos and placeholders coexist, only placeholders are removed. A placeholder is kept when there are no replacement photos and no real photos. Geometry and size-table images do not count as product photos.
+
+Use **Export upload results to Excel** in the Orbea or KROSS upload section. The export includes loaded products with saved results and unprocessed products, plus a **Needs checking** sheet. Photo outcomes distinguish uploads, skips, placeholder removals, and whether changes were saved. Saved collection folders retain their latest upload result for export after reopening. For other upload routes, use **Full History → Export to Excel**, which includes the same detailed results and review list alongside the history sheet. Older results retain their original outcome; photo actions that were not recorded are labelled accordingly.
+
+
+### Orbea colour folders
+
+Collection photo downloads group distinct matched SKUs with the same TTCC model and Orbea link under `products/<TTCC>/<exact SKU>/photos`. For example, `products/U210TTCC` contains `U21005R6`, `U21007R8`, and `U21009R7`. Each SKU receives only the published colour matching its Pimbo product name; Matt/Gloss, punctuation, and spacing do not affect the comparison. For a Custom colour, the app selects **Your Design** and saves its untouched default gallery once per model, then shares those pictures with the Custom SKU folders. It waits for the initial configuration and all full-size default gallery layers to load, combines them into complete views, and keeps Spalva blank. The real **You design** checkbox is supported, including Custom names followed by category text (for example, `/ Custom / kalnų (MTB) dviratis`). A stalled Custom transition gets one fresh-page retry without changing the design. Missing or ambiguous named colours, unavailable design controls, and incomplete default galleries are flagged instead of receiving another colour's pictures.
+
+The model page and selected colours are processed once per link. Common image layers and saved renders remain shared. Additional published colours are not downloaded. The Collected Products Excel sheet records the assigned colour and colour code. Opening an older saved collection and selecting missing photos safely groups its folders, retains source text and upload results, and replaces the uploadable photo list with the assigned colour only. Completed photo sets are skipped on resume; a missing file causes only its colour to be restored. Standalone URL-only photo tools continue to save all published colours because they have no Pimbo SKU/name list.
+
+Earlier unassigned photo sets are retained in a `previous-photos` folder when replaced, so the current `photos` folder contains the matched colour set. Uploads use only the recorded matched files.

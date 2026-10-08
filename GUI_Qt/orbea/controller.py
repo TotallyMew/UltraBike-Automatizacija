@@ -83,7 +83,11 @@ class OrbeaWorkflowController:
             return _service_factory(
                 driver, self.image_driver_factory, self.make_photo_service
             )
-        if hasattr(factory, "run") and hasattr(factory, "discover_filter_options"):
+        if (
+            not inspect.isclass(factory)
+            and hasattr(factory, "run")
+            and hasattr(factory, "discover_filter_options")
+        ):
             return factory
         return factory(driver)
 
@@ -103,7 +107,10 @@ class OrbeaWorkflowController:
             from tools.orbea_automation import OrbeaPhotoService
 
             return OrbeaPhotoService()
-        if not inspect.isclass(factory) and hasattr(factory, "run"):
+        if not inspect.isclass(factory) and any(
+            callable(getattr(factory, method, None))
+            for method in ("run", "run_many", "run_from_html")
+        ):
             return factory
         return factory()
 

@@ -182,6 +182,8 @@ class CheckpointTests(unittest.TestCase):
             checkpoint.upsert_result(result_row("p1", "unmatched", title="Unknown"))
             checkpoint.mark_cancelled()
             checkpoint.data["compatibility"].pop("download_product_photos")
+            checkpoint.data["compatibility"].pop("product_code_prefix")
+            checkpoint.data["last_error"] = "IndexError: Pimbo product row 20 disappeared"
             checkpoint.save()
 
             self.assertEqual(find_latest_compatible_run(config), run_dir)
@@ -189,6 +191,8 @@ class CheckpointTests(unittest.TestCase):
             self.assertTrue(resumed.resumed)
             self.assertEqual(resumed.processed_row_keys(), {"p1"})
             self.assertFalse(resumed.data["cancelled"])
+            self.assertNotIn("last_error", resumed.data)
+            self.assertEqual(resumed.data["previous_error"], "IndexError: Pimbo product row 20 disappeared")
 
             changed = OrbeaRunConfig(
                 catalogue,
@@ -196,6 +200,13 @@ class CheckpointTests(unittest.TestCase):
                 filters=PimboFilterSpec(statuses=("Published",), stock="Any"),
             )
             self.assertIsNone(find_latest_compatible_run(changed))
+
+            prefixed = OrbeaRunConfig(
+                catalogue, config.output_root, product_code_prefix="U"
+            )
+            self.assertIsNone(find_latest_compatible_run(prefixed))
+            with self.assertRaisesRegex(ValueError, "different catalogue or Pimbo filter"):
+                RunCheckpoint.load(run_dir, prefixed)
 
             counts = resumed.counts()
             self.assertEqual(counts["review"], 1)
@@ -211,6 +222,28 @@ class CheckpointTests(unittest.TestCase):
             second = create_run_directory(Path(directory), moment)
             self.assertEqual(first.name, "20260805-123015")
             self.assertEqual(second.name, "20260805-123015-2")
+
+    def test_resuming_requires_the_same_normalized_code_prefix(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            catalogue = root / "catalogue.xlsx"
+            build_catalogue(catalogue)
+            config = OrbeaRunConfig(
+                catalogue, root / "runs", product_code_prefix=" u107 "
+            )
+            run_dir = create_run_directory(config.output_root)
+            checkpoint = RunCheckpoint.create(run_dir, config)
+            checkpoint.mark_cancelled()
+            equivalent = OrbeaRunConfig(
+                catalogue, config.output_root, product_code_prefix="U107"
+            )
+            self.assertEqual(find_latest_compatible_run(equivalent), run_dir)
+            self.assertTrue(RunCheckpoint.load(run_dir, equivalent).resumed)
+            for prefix in ("", "U", "T"):
+                different = OrbeaRunConfig(
+                    catalogue, config.output_root, product_code_prefix=prefix
+                )
+                self.assertIsNone(find_latest_compatible_run(different))
 
 
 class PimboFilterTests(unittest.TestCase):
@@ -287,7 +320,167 @@ class PimboFilterTests(unittest.TestCase):
         self.assertEqual(client.calls[-1], ("verify", spec))
 
 
+class PimboCodePrefixTests(unittest.TestCase):
+    class Client(PimboBrowserClient):
+        pages = (
+            ("T12309AA", "XU107", "u10707SV"),
+            ("", "U10708SV", "U99901AA"),
+        )
+
+        def __init__(self):
+            super().__init__(SimpleNamespace(current_url="https://pim.bo/dashboard/products"))
+            self.page = 1
+            self.opened = []
+
+        def apply_filters(self, spec):
+            self.page = 1
+
+        def _totals(self):
+            return sum(map(len, self.pages)), len(self.pages)
+
+        def go_to_page(self, page_number):
+            self.page = page_number
+
+        def _wait_for_rows(self, allow_empty=False):
+            return self.pages[self.page - 1]
+
+        def _page_list_snapshots(self):
+            return [{
+                "visible_code": code, "title": "Orbea ORCA M30i",
+                "row_href": f"https://pim.bo.ultrabike.lt/dashboard/products/{self.page}-{index}",
+            } for index, code in enumerate(self.pages[self.page - 1])]
+
+        def _extract_one_variant(self, row):
+            raise AssertionError("List scanning must not open product or Variants pages")
+
+    def test_prefix_filters_list_codes_across_pages_without_opening_products(self) -> None:
+        cases = (
+            (" u107 ", ["u10707SV", "U10708SV"]),
+            ("u", ["u10707SV", "U10708SV", "U99901AA"]),
+            ("", ["T12309AA", "XU107", "u10707SV", "", "U10708SV", "U99901AA"]),
+            ("Z", []),
+        )
+        for prefix, expected in cases:
+            with self.subTest(prefix=prefix), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                catalogue = root / "catalogue.xlsx"
+                build_catalogue(catalogue)
+                config = OrbeaRunConfig(
+                    catalogue, root / "runs", product_code_prefix=prefix
+                )
+                checkpoint = RunCheckpoint.create(create_run_directory(config.output_root), config)
+                client = self.Client()
+                progress = []
+                client.collect(
+                    CatalogueIndex.from_workbook(catalogue), checkpoint, config,
+                    row_progress=lambda current, total, message: progress.append((current, total)),
+                )
+                self.assertEqual(client.opened, [])
+                self.assertEqual([row["visible_code"] for row in checkpoint.results], expected)
+                self.assertTrue(checkpoint.data["scan_completed"])
+                self.assertEqual(progress, [(i, 6) for i in range(1, 7)])
+
+                workbook = load_workbook(write_report(checkpoint))
+                try:
+                    raw_codes = [row[3] or "" for row in workbook["Raw Scan"].iter_rows(min_row=2, values_only=True)]
+                    self.assertEqual(raw_codes, expected)
+                    summary = dict(workbook["Summary"].iter_rows(min_row=4, max_col=2, values_only=True))
+                    self.assertEqual(summary["Product code starts with"], prefix.strip().upper() or "Any")
+                finally:
+                    workbook.close()
+
+    def test_product_limit_and_resume_count_only_matching_products(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            catalogue = root / "catalogue.xlsx"
+            build_catalogue(catalogue)
+            config = OrbeaRunConfig(
+                catalogue, root / "runs", product_code_prefix="U107", max_products=1
+            )
+            run_dir = create_run_directory(config.output_root)
+            checkpoint = RunCheckpoint.create(run_dir, config)
+            index = CatalogueIndex.from_workbook(catalogue)
+            first = self.Client()
+            first.collect(index, checkpoint, config)
+            self.assertEqual(first.opened, [])
+            self.assertEqual([row["sku"] for row in checkpoint.results], ["U10707SV"])
+            self.assertFalse(checkpoint.data["scan_completed"])
+
+            resumed_config = OrbeaRunConfig(
+                catalogue, config.output_root, product_code_prefix="U107"
+            )
+            resumed = RunCheckpoint.load(run_dir, resumed_config)
+            second = self.Client()
+            progress = []
+            second.collect(
+                index, resumed, resumed_config,
+                row_progress=lambda current, total, message: progress.append((current, total)),
+            )
+            self.assertEqual(second.opened, [])
+            self.assertEqual([row["sku"] for row in resumed.results], ["U10707SV", "U10708SV"])
+            self.assertEqual(len(resumed.results), 2)
+            self.assertTrue(resumed.data["scan_completed"])
+            self.assertEqual(progress[-1], (6, 6))
+
+
 class ReportTests(unittest.TestCase):
+    def test_stale_full_row_count_on_short_last_page_does_not_fail_run(self):
+        class ShortLastPageClient(PimboCodePrefixTests.Client):
+            pages = (("U10701AA", "U10702AA"), ("U10703AA",))
+
+            def __init__(self):
+                super().__init__()
+                self.last_page_reads = 0
+
+            def _wait_for_rows(self, allow_empty=False):
+                if self.page == 2:
+                    self.last_page_reads += 1
+                    if self.last_page_reads == 1:
+                        return self.pages[0]  # Previous page still rendered.
+                return super()._wait_for_rows(allow_empty=allow_empty)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            catalogue = root / "catalogue.xlsx"
+            build_catalogue(catalogue)
+            config = OrbeaRunConfig(catalogue, root / "runs", product_code_prefix="U")
+            checkpoint = RunCheckpoint.create(create_run_directory(config.output_root), config)
+            client = ShortLastPageClient()
+            client.collect(CatalogueIndex.from_workbook(catalogue), checkpoint, config)
+            self.assertTrue(checkpoint.data["scan_completed"])
+            self.assertEqual(client.opened, [])
+            self.assertEqual([row["sku"] for row in checkpoint.results], ["U10701AA", "U10702AA", "U10703AA"])
+            self.assertEqual(len(checkpoint.results), 3)
+
+    def test_scanner_uses_updated_page_limit_after_filters_finish_loading(self):
+        class FilteredPagesClient(PimboCodePrefixTests.Client):
+            pages = (("U10701AA",), ("U10702AA",))
+
+            def __init__(self):
+                super().__init__()
+                self.total_reads = 0
+
+            def _totals(self):
+                self.total_reads += 1
+                return (100, 76) if self.total_reads == 1 else (2, 2)
+
+            def go_to_page(self, page_number):
+                assert page_number <= 2, "must not navigate beyond the filtered page limit"
+                super().go_to_page(page_number)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            catalogue = root / "catalogue.xlsx"
+            build_catalogue(catalogue)
+            config = OrbeaRunConfig(catalogue, root / "runs")
+            checkpoint = RunCheckpoint.create(create_run_directory(config.output_root), config)
+            client = FilteredPagesClient()
+            client.collect(CatalogueIndex.from_workbook(catalogue), checkpoint, config)
+            self.assertTrue(checkpoint.data["scan_completed"])
+            self.assertEqual(client.opened, [])
+            self.assertEqual([row["sku"] for row in checkpoint.results], ["U10701AA", "U10702AA"])
+            self.assertEqual(checkpoint.data["totals"], {"products": 2, "pages": 2})
+
     def test_fallback_row_key_keeps_duplicate_looking_rows_distinct(self) -> None:
         snapshot = {"title": "Orbea Custom", "visible_code": "CUSTOM", "row_href": ""}
         first = PimboBrowserClient._row_key(snapshot, 1, 1)

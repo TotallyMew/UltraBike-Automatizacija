@@ -1,5 +1,6 @@
 import requests
 from bs4 import BeautifulSoup
+from Utilities.ProductDataSafety import SpecificationMap
 from Utilities.TranslationHandler import TranslationHandler
 
 def scrapeAndTranslateToFileOctaneOne(url, outputFile, db_manager=None):
@@ -26,7 +27,7 @@ def scrapeAndTranslateToFileOctaneOne(url, outputFile, db_manager=None):
         if not specItems:
             raise ValueError("Octane One puslapio struktūra pasikeitė, atnaujinkite programą.")
 
-        tableData = {}
+        tableData = SpecificationMap()
         for item in specItems:
             keyElem = item.find("div", class_="tb-spec-type")
             valueElem = item.find("div", class_="tb-spec-text")
@@ -37,16 +38,7 @@ def scrapeAndTranslateToFileOctaneOne(url, outputFile, db_manager=None):
             value = valueElem.get_text(strip=True)
 
             if key == "DERAILLEURS":
-                frontKey = "FRONT DERAILLEUR"
-                rearKey = "REAR DERAILLEUR"
-                frontTranslated = keyTranslations.get(frontKey, "Priekinis pavarų perjungėjas")
-                rearTranslated = keyTranslations.get(rearKey, "Galinis pavarų perjungejas")
-                translatedValue = translation_handler.translate_first_word(value, valueTranslations)
-
-                tableData[frontTranslated] = translatedValue
-                tableData[rearTranslated] = translatedValue
-                uniqueKeys.update([frontTranslated, rearTranslated])
-                continue
+                raise ValueError("Octane lists DERAILLEURS together; verify front and rear components separately before uploading")
 
             if key == "LEVERS/SHIFTERS":
                 leversKey = "LEVERS"
@@ -77,6 +69,6 @@ def scrapeAndTranslateToFileOctaneOne(url, outputFile, db_manager=None):
         return f"Total unique keys: {len(uniqueKeys)}"
 
     except requests.HTTPError as e:
-        return f"HTTP klaida: {e}"
+        raise RuntimeError(f"Octane HTTP error: {e}") from e
     except Exception as e:
-        return f"Klaida apdorojant Octane One duomenis: {e}"
+        raise RuntimeError(f"Octane scraping failed: {e}") from e

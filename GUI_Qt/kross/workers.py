@@ -162,6 +162,8 @@ class KrossDiscoveryWorker(QThread):
 
 
 class KrossUploadWorker(QThread):
+    options_type = KrossWorkflowOptions
+    result_type = KrossUploadResult
     progress_changed = Signal(str)
     item_finished = Signal(object)
     completed = Signal()
@@ -178,8 +180,10 @@ class KrossUploadWorker(QThread):
         self.service_factory = service_factory
         self.matches = tuple(matches)
         self.output_root = Path(output_root) if output_root is not None else None
-        self.options = options or KrossWorkflowOptions()
+        self.options = options or self.options_type()
         self._stop_requested = False
+        self.results = []
+        self._batch_error = ""
 
     def request_stop(self) -> None:
         self._stop_requested = True
@@ -192,6 +196,9 @@ class KrossUploadWorker(QThread):
                     "A run without Save can target only one PIMBO product at a time"
                 )
             service = self.service_factory()
+            prepare_batch = getattr(service, "prepare_upload_batch", None)
+            if callable(prepare_batch):
+                prepare_batch(self.matches, progress=self.progress_changed.emit)
             for index, match in enumerate(self.matches, start=1):
                 if self._stop_requested:
                     break
@@ -199,12 +206,7 @@ class KrossUploadWorker(QThread):
                     f"{index}/{len(self.matches)} — running selected stages for {match.sku}"
                 )
                 try:
-                    result = service.upload_and_save(
-                        match,
-                        self.output_root,
-                        options=self.options,
-                        progress=self.progress_changed.emit,
-                    )
+                    result = self._upload_one(service, match)
                 except Exception as error:
                     preparation = PimPreparationResult(
                         product_code=match.sku,
@@ -213,7 +215,8 @@ class KrossUploadWorker(QThread):
                         final_url=match.pimbo_product_url,
                         error=str(error),
                     )
-                    result = KrossUploadResult(match, preparation)
+                    result = self.result_type(match, preparation, options=self.options)
+                self.results.append(result)
                 self.item_finished.emit(result)
                 if (
                     not result.succeeded
@@ -223,6 +226,7 @@ class KrossUploadWorker(QThread):
                     self.progress_changed.emit(
                         f"{result.match.sku} failed; resetting PIMBO before the next product"
                     )
+                    recovery_detail = "The open PIMBO product is not the verified failed product"
                     try:
                         recovered = service.recover_after_failed_upload(
                             result.match,
@@ -230,18 +234,28 @@ class KrossUploadWorker(QThread):
                         )
                     except Exception as recovery_error:
                         recovered = False
+                        recovery_detail = str(recovery_error)
                         self.progress_changed.emit(
                             f"Recovery after {result.match.sku} failed: {recovery_error}"
                         )
                     if not recovered:
-                        self.failed.emit(
-                            f"Batch stopped after {result.match.sku} so its browser state "
-                            "cannot cause false failures for the remaining products. "
-                            "The unprocessed rows can be run again after checking this product."
+                        self._batch_error = (
+                            f"Batch stopped after {result.match.sku}: {recovery_detail}. "
+                            f"Product error: {result.preparation.error or 'The selected steps did not complete'}. "
+                            "Remaining products were not processed and can be retried."
                         )
+                        self.failed.emit(self._batch_error)
                         break
         except Exception as error:
+            self._batch_error = str(error)
             if not self._stop_requested:
                 self.failed.emit(str(error))
         finally:
-            self.completed.emit()
+            self._emit_completed()
+
+    def _upload_one(self, service, match):
+        return service.upload_and_save(match, self.output_root,
+                                       options=self.options, progress=self.progress_changed.emit)
+
+    def _emit_completed(self):
+        self.completed.emit()

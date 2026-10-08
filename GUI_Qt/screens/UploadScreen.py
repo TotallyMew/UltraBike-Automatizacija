@@ -22,6 +22,8 @@ from GUI_Qt.dialogs.AttributeOptionsDialog import (
 from uploaderFactory import getUploaderClass
 from Managers.DescriptionManager import DescriptionManager
 from Managers.PimboProductEditor import PimboProductEditor, PimPreparationResult, PimPreparationStatus
+from Utilities.ProductHistory import record_review_status
+from GUI_Qt.services.product_work import acquire_product_browser, release_product_browser
 from GUI_Qt.widgets.ResponsiveWidget import ResponsiveWidget
 from GUI_Qt.components.validation import RequiredValidator, URLValidator
 from GUI_Qt.components.accessibility import KeyboardNavigationMixin
@@ -86,12 +88,6 @@ class UploadWorker(QThread):
             self.uploader.set_retry_callback(self._request_retry)
             self.uploader.set_progress_callback(self.progress.emit)
             result = self.uploader.run()
-            if self._cancel_requested:
-                result = PimPreparationResult(
-                    product_code=str(getattr(self.uploader, "ultraBikeCode", "") or ""),
-                    status=PimPreparationStatus.DISCARDED,
-                    error=self.tr("upload.cancel.content"),
-                )
             if not isinstance(result, PimPreparationResult):
                 result = PimPreparationResult(
                     product_code=str(getattr(self.uploader, "ultraBikeCode", "") or ""),
@@ -129,6 +125,9 @@ class UploadWorker(QThread):
     def request_stop(self) -> None:
         """Request a safe stop without force-terminating Python or Selenium."""
         self._cancel_requested = True
+        stopper = getattr(self.uploader, "request_stop", None)
+        if stopper:
+            stopper()
         self.requestInterruption()
         self._retry_result = False
         self._waiting_for_retry = False
@@ -974,7 +973,7 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
                         )
                         return
                 except Exception:
-                    pass
+                    raise
 
             # Collect attribute selections from UI
             attribute_values = self._get_attribute_values()
@@ -1011,10 +1010,15 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
             return
 
         # Start upload in background
+        if not acquire_product_browser(self.main, self, self.upload_worker):
+            InfoBar.warning(title=self.main.i18n.tr("common.warning"),
+                content=self.main.i18n.tr("kross.browser.busy"), parent=self)
+            return
         self.upload_worker = UploadWorker(uploader, self.main.i18n.tr)
         self.upload_worker.progress.connect(self._on_upload_progress)
         self.upload_worker.completed.connect(self._on_upload_finished)
         self.upload_worker.retry_request.connect(self._on_retry_request)
+        self.upload_worker.finished.connect(self._release_product_browser)
 
         # UI updates
         self.upload_button.setEnabled(False)
@@ -1085,8 +1089,8 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
         self.clear_button.setEnabled(True)
         self._check_form_valid()
 
-        if self.upload_worker is not None and self.upload_worker._cancel_requested:
-            message = self.main.i18n.tr("upload.cancel.content")
+        if self.upload_worker is not None and self.upload_worker._cancel_requested and result.status == PimPreparationStatus.FAILED:
+            message = result.error or self.main.i18n.tr("upload.cancel.content")
             self.status_label.setText(message)
             self.status_label.setStyleSheet(
                 f"color: {get_status_text_color('warning', isDarkTheme())}; "
@@ -1176,27 +1180,7 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
                 )
                 return
 
-            row = self.main.db.conn.execute(
-                """
-                SELECT id, details_json FROM processing_history
-                WHERE product_code=? AND status='ready_for_review'
-                ORDER BY id DESC LIMIT 1
-                """,
-                (result.product_code,),
-            ).fetchone()
-            history_id = None
-            if row is not None:
-                history_id = int(row["id"])
-                try:
-                    details = json.loads(row["details_json"] or "{}") or {}
-                except Exception:
-                    details = {}
-                details["pim_preparation"] = verified.to_dict()
-                self.main.db.conn.execute(
-                    "UPDATE processing_history SET status='saved_manually', details_json=? WHERE id=?",
-                    (json.dumps(details, ensure_ascii=False), history_id),
-                )
-                self.main.db.conn.commit()
+            history_id = record_review_status(self.main.db, verified)
 
             self.status_label.setText(self.main.i18n.tr("upload.save_verify.saved"))
             self.status_label.setStyleSheet(
@@ -1205,19 +1189,20 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
             )
             product_type = (
                 "frameset"
-                if self.brand_combo.currentText() == "Pinarello" and self.frameset_checkbox.isChecked()
+                if self.upload_worker.uploader.brandName == "Pinarello" and self.upload_worker.uploader.brand_options.get("frameset_only")
                 else "bicycle"
             )
             self.main.prompt_earning_items(
                 [{
                     "sku": result.product_code,
-                    "brand": self.brand_combo.currentText(),
+                    "brand": self.upload_worker.uploader.brandName,
                     "product_type": product_type,
                     "source": "regular_upload",
                     "processing_history_id": history_id,
                 }],
                 parent=self,
             )
+            self._release_product_browser()
         except Exception as error:
             InfoBar.error(
                 title=self.main.i18n.tr("upload.save_verify.error.title"),
@@ -1228,6 +1213,16 @@ class UploadScreen(ResponsiveWidget, KeyboardNavigationMixin):
             )
 
     # -- Attribute helpers ------------------------------------------------------
+
+    def _release_product_browser(self):
+        return release_product_browser(self.main, self, self.upload_worker)
+
+    def request_navigation_away(self):
+        if self._release_product_browser():
+            return True
+        InfoBar.warning(title=self.main.i18n.tr("common.warning"),
+            content=self.main.i18n.tr("upload.cancel.content"), parent=self)
+        return False
 
     def _load_attr_combo_options(self, attr_name: str, combo: ComboBox):
         """Populate a combo box with saved options from the database."""

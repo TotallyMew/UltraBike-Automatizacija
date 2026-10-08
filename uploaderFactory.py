@@ -12,7 +12,7 @@ def getUploaderClass(brandName):
     name = brandName.strip().lower().replace(" ", "")
     return {
         "kross": KROSS,
-        "le grand": KROSS,  # Alias handled here
+        "legrand": KROSS,
         "rondo": Rondo,
         "pinarello": Pinarello,
         "octane": Octane,

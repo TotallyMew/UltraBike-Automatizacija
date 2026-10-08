@@ -8,6 +8,7 @@ from typing import List, Dict, Tuple, Optional
 
 # Local
 from uploaderFactory import getUploaderClass
+from Utilities.ProductDataSafety import normalize_brand_options, validate_unique_products
 
 class BatchProcessor:
     """
@@ -49,7 +50,7 @@ class BatchProcessor:
     # Function: add_to_queue
 
     def add_to_queue(self, brand, product_code, url_or_code, brand_options=None):
-        brand_options = brand_options or {}
+        brand_options = normalize_brand_options(brand_options)
 
         # --- NORMALIZE DESCRIPTION ---
         description_name = brand_options.get("description_name")
@@ -142,7 +143,6 @@ class BatchProcessor:
         self._log("Starting batch", batch_id=self.batch_id, items=total)
 
         self.is_processing = True
-        self.should_stop = False
         self.current_index = 0
         self.results = []
 
@@ -172,7 +172,9 @@ class BatchProcessor:
                     self.batch_id,
                     item.get('brand_options', {})
                 )
-
+                self._active_uploader = uploader
+                if self.should_stop and hasattr(uploader, "request_stop"):
+                    uploader.request_stop()
                 preparation = uploader.run()
 
                 duration_seconds = time.perf_counter() - started
@@ -229,7 +231,8 @@ class BatchProcessor:
                     error=error_msg,
                 )
 
-        self.current_index = len(self.queue)
+        self._active_uploader = None
+        self.current_index = len(self.results)
         self.is_processing = False
 
         success_count = sum(1 for r in self.results if r['status'] == 'saved_manually')
@@ -256,6 +259,9 @@ class BatchProcessor:
             'failed': failed_count,
             'blocked_non_draft': blocked_count,
             'discarded': discarded_count,
+            'cancelled': self.should_stop,
+            'processed': len(self.results),
+            'remaining': len(self.queue) - len(self.results),
             'results': self.results
         }
 
@@ -263,6 +269,9 @@ class BatchProcessor:
     def stop_batch(self):
         """Request to stop batch processing after current item"""
         self.should_stop = True
+        uploader = getattr(self, "_active_uploader", None)
+        if uploader is not None and hasattr(uploader, "request_stop"):
+            uploader.request_stop()
         self._log("Stop requested")
 
     def process_batch(self, items, master_password=None):
@@ -273,14 +282,12 @@ class BatchProcessor:
             master_password: Optional master password (used to decrypt external brand credentials).
         """
         self.clear_queue()
+        validate_unique_products(items)
 
         for it in items:
-            brand_options = {
-                "description_name": it.get("description_name") or None,
-                "frameset_only": bool(it.get("frameset_only")) if it.get("frameset_only") is not None else False,
-                "append_disclaimer": bool(it.get("append_disclaimer")) if it.get("append_disclaimer") is not None else False,
-                "attribute_values": it.get("attribute_values") or [],
-            }
+            brand_options = dict(it.get("brand_options") or {})
+            brand_options.update({key: value for key, value in it.items()
+                if key not in {"brand", "code", "url", "brand_options", "table_row"}})
             self.add_to_queue(it.get("brand"), it.get("code"), it.get("url"), brand_options=brand_options)
 
         # Add project root to path if not already there (for uploaderFactory import)
@@ -290,6 +297,8 @@ class BatchProcessor:
 
         def uploader_factory(driver, brand, code, url_or_code, db, batch_id, brand_options):
             uploader_class = getUploaderClass(brand)
+            if uploader_class is None:
+                raise ValueError(f"Unsupported upload brand: {brand}")
             uploader = uploader_class(
                 driver=driver,
                 brand_name=brand,

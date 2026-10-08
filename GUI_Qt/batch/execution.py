@@ -105,6 +105,8 @@ from GUI_Qt.dialogs.AttributeOptionsDialog import (
 )
 from Managers.DescriptionManager import DescriptionManager
 from Utilities.ExcelHandler import ExcelHandler
+from GUI_Qt.services.product_work import acquire_product_browser, release_product_browser
+from Utilities.ProductDataSafety import validate_unique_products
 
 _SETTINGS_KEY_COLUMNS = "batch_visible_columns"
 
@@ -118,6 +120,8 @@ _COMBO_TYPES = (ComboBox, FilterableComboBox)
 
 class BatchExecutionController:
     def _start_batch(self):
+        if self.worker is not None and self.worker.isRunning():
+            return
         # Show status/error columns for batch progress
         self._show_status_cols = True
         self._apply_column_config()
@@ -134,6 +138,12 @@ class BatchExecutionController:
 
         items = strategy.collect_items(self, valid_rows)
         if not items:
+            return
+
+        try:
+            validate_unique_products(items)
+        except ValueError as error:
+            InfoBar.error(title=self.main.i18n.tr("common.error"), content=str(error), parent=self)
             return
 
         if isinstance(strategy, type(STRATEGIES["upload"])):
@@ -221,6 +231,10 @@ class BatchExecutionController:
             session_mgr = self.session_manager if self.session_manager and self.session_manager.is_ready() else None
 
         # Create worker
+        if not acquire_product_browser(self.main, self, self.worker, self.session_manager):
+            InfoBar.warning(title=self.main.i18n.tr("common.warning"),
+                content=self.main.i18n.tr("kross.browser.busy"), parent=self)
+            return
         self.worker = strategy.create_worker(
             self, items, valid_rows,
             multi_session=bool(session_mgr),
@@ -230,6 +244,7 @@ class BatchExecutionController:
         # Connect signals
         self.worker.row_update.connect(self._on_row_update)
         self.worker.done.connect(self._on_done)
+        self.worker.finished.connect(self._release_product_browser)
         if hasattr(self.worker, "progress_update"):
             self.worker.progress_update.connect(self._on_progress_update)
         if hasattr(self.worker, "log"):
@@ -470,6 +485,8 @@ class BatchExecutionController:
 
     # ---------------------------------------------------------- Retry
     def _retry_failed(self):
+        if self.worker is not None and self.worker.isRunning():
+            return
         strategy = self._infer_strategy()
         failed_rows = []
         for row in range(self.table.rowCount()):
@@ -483,6 +500,11 @@ class BatchExecutionController:
 
         items = strategy.collect_items(self, failed_rows)
         if not items:
+            return
+        try:
+            validate_unique_products(items)
+        except ValueError as error:
+            InfoBar.error(title=self.main.i18n.tr("common.error"), content=str(error), parent=self)
             return
 
         if isinstance(strategy, type(STRATEGIES["upload"])):
@@ -511,6 +533,10 @@ class BatchExecutionController:
             multi_session and self.session_manager and self.session_manager.is_ready()
         ) else None
 
+        if not acquire_product_browser(self.main, self, self.worker, self.session_manager):
+            InfoBar.warning(title=self.main.i18n.tr("common.warning"),
+                content=self.main.i18n.tr("kross.browser.busy"), parent=self)
+            return
         self.worker = strategy.create_worker(
             self, items, failed_rows,
             multi_session=bool(session_mgr),
@@ -518,6 +544,8 @@ class BatchExecutionController:
         )
         self.worker.row_update.connect(self._on_row_update)
         self.worker.done.connect(self._on_done)
+        self.worker.finished.connect(self._release_product_browser)
+
         if hasattr(self.worker, "progress_update"):
             self.worker.progress_update.connect(self._on_progress_update)
         if hasattr(self.worker, "log"):

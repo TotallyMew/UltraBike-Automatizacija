@@ -363,7 +363,8 @@ def build_kross_specification_plan(
 ) -> KrossSpecificationPlan:
     """Build authoritative PIMBO values and a value-translated MagicAI source."""
 
-    direct_values: dict[str, str] = {}
+    from Utilities.ProductDataSafety import SpecificationMap
+    direct_values: dict[str, str] = SpecificationMap()
     magic_ai_rows: list[str] = []
     for label, source_value in parse_kross_specification_rows(specification_text):
         target = _translated_label(label, translator)
@@ -380,12 +381,15 @@ def build_kross_specification_plan(
     parsed_name = parse_kross_product_name(product_name)
     # These five fields are authoritative whenever this opt-in stage is run.
     # Empty extracted values intentionally clear stale PIMBO values.
-    direct_values.update({
+    name_values = {
         "Modelis": parsed_name.model,
         "Spalva": parsed_name.color,
         "Lako užbaigimas": parsed_name.finish,
         "Ratų dydis": parsed_name.wheel_size,
-    })
+    }
+    for name, value in name_values.items():
+        if name not in direct_values:
+            direct_values[name] = value
     sorted_sizes = sort_kross_frame_sizes(variant_sizes)
     if sorted_sizes:
         # Do not silently erase this field when a changed PIMBO Variants layout

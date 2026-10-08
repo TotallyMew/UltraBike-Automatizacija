@@ -175,7 +175,7 @@ class BrowserSessionManager:
         # Find an available session
         with self.session_lock:
             for session in self.sessions:
-                if not session.is_busy:
+                if not session.is_busy and session.driver is not None:
                     session.is_busy = True
                     session.last_used = time.time()
                     self._log(f"Acquired session {session.session_id}", session_id=session.session_id)
@@ -197,6 +197,8 @@ class BrowserSessionManager:
             return
 
         with self.session_lock:
+            if not any(item is session for item in self.sessions) or not session.is_busy:
+                return
             session.is_busy = False
             self.semaphore.release()
             self._log(f"Released session {session.session_id}", session_id=session.session_id)
@@ -230,6 +232,11 @@ class BrowserSessionManager:
         """
         try:
             self._log(f"Resetting session {session.session_id}", session_id=session.session_id)
+            if session.driver and "/dashboard/products/" in str(getattr(session.driver, "current_url", "") or ""):
+                from Managers.PimboProductEditor import PimboProductEditor
+                if PimboProductEditor(session.driver).is_dirty():
+                    self._log("Cannot reset a session with unsaved product changes", session_id=session.session_id)
+                    return False
 
             # Close old driver
             if session.driver:
@@ -276,6 +283,7 @@ class BrowserSessionManager:
 
             self.sessions.clear()
             self._initialized = False
+            self.semaphore = Semaphore(self.pool_size)
 
         self._log("All browser sessions shut down")
 

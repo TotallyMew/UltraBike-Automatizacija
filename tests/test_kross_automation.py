@@ -1343,13 +1343,14 @@ class KrossAutomationTests(unittest.TestCase):
                 progress=progress.append,
             )
 
-        self.assertTrue(result.succeeded)
+        self.assertFalse(result.succeeded)
+        self.assertEqual(PimPreparationStatus.FAILED, result.preparation.status)
         self.assertEqual(
             ["begin", "size_table_images:1", "geometry_images:1", "brand:KROSS", "finish"],
             editor.calls,
         )
         self.assertEqual(("size_tables", "geometry", "brand"), result.completed_stages)
-        self.assertEqual(3, len(result.preparation.warnings))
+        self.assertEqual(4, len(result.preparation.warnings))
         self.assertTrue(any("No product photos" in warning for warning in progress))
         self.assertTrue(any("no saved KROSS description" in warning for warning in progress))
         self.assertTrue(any("no saved KROSS specifications" in warning for warning in progress))
@@ -1853,3 +1854,35 @@ class KrossAutomationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_kross_upload_result_persists_for_reopened_folder(tmp_path):
+    import json
+    from unittest.mock import patch
+    from tools.supplier_upload import SupplierUploadWorkflow
+    from Utilities.UploadResultsReport import read_supplier_result
+    from tools.kross_automation import KrossUploadResult
+    folder = tmp_path / "SKU"
+    folder.mkdir()
+    match = KrossMatch("SKU", "local_ready", pimbo_product_id="p1", local_folder=str(folder))
+    options = KrossWorkflowOptions.only("product_photos", "save")
+    expected = KrossUploadResult(match, PimPreparationResult("SKU", "p1", status=PimPreparationStatus.SAVED_AUTOMATICALLY,
+        photo_upload={"action": "uploaded", "uploaded_photos": 2}), options=options, completed_stages=("product_photos", "save"))
+    service = KrossAutomationService(object())
+    with patch.object(SupplierUploadWorkflow, "upload_and_save", return_value=expected):
+        assert service.upload_and_save(match, options=options) == expected
+    saved = read_supplier_result(match, "kross")
+    assert saved["preparation"]["photo_upload"]["uploaded_photos"] == 2
+    other_folder = tmp_path / "OTHER"
+    other_folder.mkdir()
+    other = KrossMatch("OTHER", "local_ready", local_folder=str(other_folder))
+    with patch.object(SupplierUploadWorkflow, "upload_and_save", side_effect=ValueError("Not ready")):
+        try:
+            service.upload_and_save(other, options=options)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("Original exception must propagate")
+    failed = json.loads((other_folder / "kross-upload-result.json").read_text())
+    assert failed["preparation"]["product_code"] == "OTHER"
+    assert failed["preparation"]["error"] == "Not ready"

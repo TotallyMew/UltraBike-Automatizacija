@@ -1,8 +1,12 @@
 import requests
 from bs4 import BeautifulSoup
+from Utilities.ProductDataSafety import SpecificationMap
 from Utilities.TranslationHandler import TranslationHandler
 
 def scrapeAndTranslateToFileRascal(url, outputFile, variant_index=None, db_manager=None):
+    if variant_index is not None and (isinstance(variant_index, bool)
+            or not isinstance(variant_index, int) or variant_index < 0):
+        raise ValueError("Select a non-negative Rascal variant index")
     translation_handler = TranslationHandler(db_manager)
     
     # Component names (keys)
@@ -28,7 +32,7 @@ def scrapeAndTranslateToFileRascal(url, outputFile, variant_index=None, db_manag
         if not productParams:
             raise ValueError("Rascal puslapio struktūra pasikeitė, atnaujinkite programą.")
 
-        tableData = {}
+        tableData = SpecificationMap()
 
         for li in productParams.find_all("li"):
             keySpan = li.find("span")
@@ -42,6 +46,8 @@ def scrapeAndTranslateToFileRascal(url, outputFile, variant_index=None, db_manag
             # Handle multiple variants - GUI must supply variant_index
             if len(valueSpans) > 1 and variant_index is None:
                 raise ValueError("Multiple variants found on Rascal product page; GUI must provide 'variant_index'.")
+            if len(valueSpans) > 1 and variant_index >= len(valueSpans):
+                raise ValueError("The selected Rascal variant does not exist")
 
             selectedValue = (
                 valueSpans[variant_index].get_text(strip=True)
@@ -73,6 +79,6 @@ def scrapeAndTranslateToFileRascal(url, outputFile, variant_index=None, db_manag
         return f"Total unique keys: {len(uniqueKeys)}"
 
     except requests.HTTPError as e:
-        return f"HTTP klaida: {e}"
+        raise RuntimeError(f"Rascal HTTP error: {e}") from e
     except Exception as e:
-        return f"Klaida apdorojant Rascal duomenis: {e}"
+        raise RuntimeError(f"Rascal scraping failed: {e}") from e

@@ -326,8 +326,10 @@ def _summary_sheet(workbook: Workbook, checkpoint: RunCheckpoint) -> Any:
     summary_rows: list[tuple[str, Any]] = [
         ("Generated (UTC)", utc_now()),
         ("Run", checkpoint.data.get("run_id", checkpoint.run_dir.name)),
+        ("Collection folder", str(checkpoint.run_dir.resolve())),
         ("Run status", "Completed" if checkpoint.data.get("completed") else "Partial"),
         ("Search", compatibility.get("search", "orbea")),
+        ("Product code starts with", compatibility.get("product_code_prefix", "") or "Any"),
         ("Status filters", ", ".join(filters.get("statuses", [])) or "Any"),
         ("Stock", filters.get("stock", "Any")),
         ("Family ID", filters.get("family_id", "") or "All families"),
@@ -404,6 +406,20 @@ def write_report(checkpoint: RunCheckpoint) -> Path:
     _add_web_links(raw, ("Pimbo URL", "Orbea URL"))
     _add_status_formatting(review, "Status")
     _add_status_formatting(raw, "Result Status")
+    if checkpoint.data.get("compatibility", {}).get("collect_product_data"):
+        collected = _make_data_sheet(
+            workbook, "Collected Products",
+            ("Variant SKU", "Pimbo Product", "Orbea URL", "Local Folder", "Status", "Description", "Specifications", "Photos", "Tables", "Notes", "Photo colour", "Photo colour code"),
+            ((row.get("sku", ""), row.get("title", ""), row.get("catalogue_url", ""), row.get("local_folder", ""),
+              row.get("collection_status", "not_collected"),
+              *(row.get("collection_stages", {}).get(stage, {}).get("status", "pending") for stage in ("description", "specifications", "photos", "tables")),
+              " | ".join(row.get("collection_errors", []) or [row.get("note", "")]),
+              row.get("collection_stages", {}).get("photos", {}).get("colour", ""),
+              row.get("collection_stages", {}).get("photos", {}).get("colour_code", "")) for row in checkpoint.results),
+            (18, 40, 50, 40, 24, 20, 20, 20, 20, 70, 42, 20),
+        )
+        _add_web_links(collected, ("Orbea URL",))
+        _add_file_links(collected, ("Local Folder",), checkpoint.run_dir)
     workbook.active = workbook.index(matches)
 
     destination = checkpoint.workbook_path

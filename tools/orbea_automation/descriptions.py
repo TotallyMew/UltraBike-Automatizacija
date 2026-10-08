@@ -77,7 +77,7 @@ BrowserFactory = Callable[..., Any]
 
 
 class OrbeaDescriptionService:
-    """Extract all visible and expanded copy from Orbea ``/m/`` pages.
+    """Extract product Features descriptions and expanded legacy model copy.
 
     A browser supplied by ``browser_factory`` is considered created for and
     owned by this service, just like the default browser.  It is always closed

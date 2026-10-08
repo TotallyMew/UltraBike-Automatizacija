@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import html
 import json
+import os
 import tempfile
 import unittest
 from io import BytesIO
@@ -107,6 +108,51 @@ class _Session:
 
 
 class OrbeaPhotoDownloaderTests(unittest.TestCase):
+    def test_saved_renders_are_shared_across_skus_and_runs_without_downloading_layers(self):
+        manifest = {"hash": ASSET_HASH, "base": {view: ["base"] for view in ("side", "front", "back")}}
+        responses = {f"{ASSET_ROOT}/manifest.json": json.dumps(manifest).encode()}
+        responses.update({f"{ASSET_ROOT}/{view}/base/XL/base.webp": _image_bytes((10, 20, 30, 255))
+                          for view in ("side", "front", "back")})
+        first_session = _Session(responses)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            store = root / ".orbea-assets"
+            first = OrbeaPhotoService(first_session).run_from_html(
+                PRODUCT_URL, _page_html(), root / "run1/products/SKU1", product_folder="photos", asset_root=store)
+            self.assertEqual(len(first.files), 9)
+            self.assertEqual(len(list((store / "images").glob("*.png"))), 1)
+            # A new service and a new run can use the persistent render cache.
+            second_session = _Session({f"{ASSET_ROOT}/manifest.json": responses[f"{ASSET_ROOT}/manifest.json"]})
+            second = OrbeaPhotoService(second_session).run_from_html(
+                CURRENT_PRODUCT_URL, _page_html(), root / "run2/products/SKU2", product_folder="photos", asset_root=store)
+            self.assertFalse(second.failures)
+            self.assertEqual(len(second.files), 9)
+            self.assertEqual(second_session.calls, [f"{ASSET_ROOT}/manifest.json"])
+            self.assertTrue(all(os.path.samefile(first.files[0], p) for p in (*first.files, *second.files)))
+            first.files[0].unlink()
+            self.assertTrue(second.files[0].is_file())
+
+    def test_corrupt_cached_render_is_downloaded_again(self):
+        manifest = {"hash": ASSET_HASH, "base": {view: ["base"] for view in ("side", "front", "back")}}
+        responses = {f"{ASSET_ROOT}/manifest.json": json.dumps(manifest).encode()}
+        responses.update({f"{ASSET_ROOT}/{view}/base/XL/base.webp": _image_bytes((10, 20, 30, 255))
+                          for view in ("side", "front", "back")})
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            first = OrbeaPhotoService(_Session(responses)).run_from_html(PRODUCT_URL, _page_html(), root)
+            cached = next((root / ".orbea-assets/images").glob("*.png"))
+            # Replace, rather than edit, to leave existing product images intact.
+            bad = root / "corrupt.png"
+            bad.write_bytes(b"broken")
+            os.replace(bad, cached)
+            session = _Session(responses)
+            second = OrbeaPhotoService(session).run_from_html(PRODUCT_URL, _page_html(), root, product_folder="second")
+            self.assertFalse(second.failures)
+            self.assertTrue(any(url.endswith(".webp") for url in session.calls))
+            with Image.open(second.files[0]) as image:
+                self.assertEqual(image.size, (8, 5))
+            self.assertEqual(first.files[0].read_bytes(), second.files[0].read_bytes())
+
     def test_canonical_duplicate_urls_are_detected(self):
         second = "https://cms.orbea.com/en-au/terra-h30"
         unique, duplicates = unique_orbea_product_urls(

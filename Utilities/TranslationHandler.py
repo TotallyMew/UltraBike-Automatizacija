@@ -1,3 +1,6 @@
+from Database.ConnectionAccess import with_database_lock
+
+
 class TranslationHandler:
     """
     Handle translations using database instead of text files
@@ -20,6 +23,7 @@ class TranslationHandler:
         self._cache = {}  # Cache translations in memory for speed
         print(f"[TranslationHandler] Using DB: {self.db.db_path}")
     
+    @with_database_lock
     def get_translation(self, source_term: str, source_lang: str = "EN", 
                        target_lang: str = "LT") -> str:
         """
@@ -57,6 +61,7 @@ class TranslationHandler:
         # Not found - return original
         return source_term
     
+    @with_database_lock
     def get_all_translations(self, source_lang: str = "EN", 
                            target_lang: str = "LT") -> dict:
         """
@@ -74,7 +79,8 @@ class TranslationHandler:
         
         return {row['source_term']: row['target_term'] for row in results}
     
-    def translate_first_word(self, value: str, value_translations: dict = None) -> str:
+    def translate_first_word(self, value: str, value_translations: dict = None,
+                             source_lang: str = "EN", target_lang: str = "LT") -> str:
         """
         Translate only the first word of a value
         Database-first, dictionary fallback for backward compatibility
@@ -89,12 +95,12 @@ class TranslationHandler:
         first_word = value_parts[0].upper()
     
         # Try database first (EN and PL sources)
-        translation = self.get_translation(first_word, "EN", "LT")
+        translation = self.get_translation(first_word, source_lang, target_lang)
         if translation != first_word:
             value_parts[0] = translation
             return " ".join(value_parts)
     
-        translation = self.get_translation(first_word, "PL", "LT")
+        translation = self.get_translation(first_word, "PL", "LT") if target_lang == "LT" else first_word
         if translation != first_word:
             value_parts[0] = translation
             return " ".join(value_parts)
@@ -137,11 +143,11 @@ class TranslationHandler:
                             english_value = lithuanian_value
                         
                         # Also translate first word if it's a material/color
-                        english_value = self.translate_first_word(english_value)
+                        english_value = self.translate_first_word(english_value, source_lang="LT", target_lang="EN")
                         
                         outfile.write(f"{key}: {english_value}\n")
-                    except:
-                        outfile.write(line)
+                    except (ValueError, KeyError) as error:
+                        raise ValueError(f"Could not translate specification line: {line.strip()}") from error
                 else:
                     outfile.write("\n")
     
@@ -161,11 +167,11 @@ class TranslationHandler:
                             lithuanian_value.upper(), lithuanian_value
                         )
                         english_value = self.translate_first_word(
-                            english_value, translation_dict
+                            english_value, translation_dict, source_lang="LT", target_lang="EN"
                         )
                         outfile.write(f"{key}: {english_value}\n")
-                    except:
-                        outfile.write(line)
+                    except (ValueError, KeyError) as error:
+                        raise ValueError(f"Could not translate specification line: {line.strip()}") from error
                 else:
                     outfile.write("\n")
     
@@ -176,6 +182,7 @@ class TranslationHandler:
         if hasattr(self, 'own_db') and self.own_db and hasattr(self, 'db'):
             self.db.close()
 
+    @with_database_lock
     def get_translations_by_category(self, source_lang: str = "EN", 
                                      target_lang: str = "LT", 
                                      category: str = None) -> dict:

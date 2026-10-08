@@ -1,0 +1,17 @@
+<label class="bg-surface-sunken group inline-flex relative rounded-[6.25rem] self-baseline cursor-pointer body-m font-medium p-050" id="toggle-inside-frame-options" x-data='toggle({ checked: false, eventName: "frame" })'>
+<span class="sr-only">Frame Options</span>
+<input :disabled="false" @change="if (eventName) { $dispatch(`toggle-${eventName}-changed`, { checked }); }" class="absolute appearance-none inset-0 rounded-[6.25rem] peer cursor-pointer" id="frame-options" type="checkbox" x-model="checked"/>
+<span class="group-[.animate-pulse]:opacity-0 pointer-events-none relative rounded-[5.625rem] transition-colors peer-disabled:text-disabled py-3 px-0 flex items-center bg-surface-button-primary text-text-button-primary peer-checked:bg-transparent peer-checked:text-text-default peer-disabled:bg-surface-disabled" inert="" x-ref="option-unchecked">
+<span class="block w-8 shrink"></span>
+<span class="shrink-0">Our selection</span>
+<span class="block w-8 shrink"></span>
+</span>
+<span class="group-[.animate-pulse]:opacity-0 pointer-events-none relative rounded-[5.625rem] transition-colors peer-disabled:text-disabled py-3 px-0 flex items-center text-text-default peer-checked:bg-surface-button-primary peer-checked:text-text-button-primary" inert="" x-ref="option-checked">
+<span class="block w-8 shrink"></span>
+<span class="flex gap-[calc(var(--s-025)*4)] items-center shrink-0 text-center justify-center">
+<img alt="" src="https://www.orbea.com/img/icon-gradient.svg" width="12"/>
+                        You design
+        </span>
+<span class="block w-8 shrink"></span>
+</span>
+</label>

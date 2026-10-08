@@ -6,6 +6,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, StaleElementReferenceException
 from bs4 import BeautifulSoup
 import re
+from Utilities.ProductDataSafety import SpecificationMap
 from Utilities.TranslationHandler import TranslationHandler
 
 internalCounter = 0
@@ -102,7 +103,7 @@ def scrapeAndTranslateToFileBasso(bicycleUrlOrCode, outputFile, driver, db_manag
                 continue
         
         if not target_bike:
-            return f"[ERROR] Bicycle with code {bicycleUrlOrCode} not found"
+            raise ValueError(f"Basso bicycle with code {bicycleUrlOrCode} not found")
         
         # Open bike details
         dropdown_trigger = target_bike.find_element(By.CLASS_NAME, "dropdown-configurationSaved-trigger")
@@ -132,7 +133,7 @@ def scrapeAndTranslateToFileBasso(bicycleUrlOrCode, outputFile, driver, db_manag
         }
 
         for section in sections:
-            tableData = {}
+            tableData = SpecificationMap()
             rawTable = {}
             entries = section.select(".ant-col")
 
@@ -190,7 +191,7 @@ def scrapeAndTranslateToFileBasso(bicycleUrlOrCode, outputFile, driver, db_manag
         return f"✔ Successfully scraped bike with code {bicycleUrlOrCode}. Total unique keys: {len(uniqueKeys)}"
     
     except Exception as e:
-        return f"[ERROR] {e}"
+        raise RuntimeError(f"Basso scraping failed: {e}") from e
     
     finally:
         driver.close()

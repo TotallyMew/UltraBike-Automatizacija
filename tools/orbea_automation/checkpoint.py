@@ -3,11 +3,12 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
-from .models import OrbeaRunConfig
+from .models import OrbeaRunConfig, PimboFilterSpec
 
 
 CHECKPOINT_VERSION = 2
@@ -35,20 +36,33 @@ def atomic_write_json(path: Path, data: dict[str, Any]) -> None:
     temporary.write_text(
         json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
-    os.replace(temporary, path)
+    for attempt in range(8):
+        try:
+            os.replace(temporary, path)
+            break
+        except PermissionError:
+            # Windows readers can briefly hold the checkpoint while the GUI
+            # updates progress. Retry the atomic replacement without changing ACLs.
+            if os.name != "nt" or attempt == 7:
+                raise
+            time.sleep(0.05 * (attempt + 1))
 
 
 def compatibility_for(config: OrbeaRunConfig) -> dict[str, Any]:
-    return config.compatibility_dict(file_sha256(config.catalogue_path))
+    return config.compatibility_dict(file_sha256(config.catalogue_path) if config.catalogue_path else "")
 
 
 def _compatibility_matches(actual: Any, expected: dict[str, Any]) -> bool:
-    """Compare checkpoints while keeping pre-photo-option runs resumable."""
+    """Keep older runs resumable when newly added options are left empty."""
 
     if not isinstance(actual, dict):
         return False
     normalized = dict(actual)
     normalized.setdefault("download_product_photos", False)
+    normalized.setdefault("product_code_prefix", "")
+    normalized.setdefault("collect_product_data", False)
+    normalized.setdefault("download_description", False)
+    normalized.setdefault("download_specifications", False)
     return normalized == expected
 
 
@@ -73,7 +87,21 @@ def create_run_directory(
 
 
 def _has_retryable_images(data: dict[str, Any]) -> bool:
-    return any(
+    from .features import DESCRIPTION_CAPTURE_VERSION
+    from .website import SPECIFICATIONS_CAPTURE_VERSION
+
+    if data.get("compatibility", {}).get("download_description") and any(
+        row.get("status") == "code_match" and row.get("collection_stages", {}).get("description", {}).get("capture_version") != DESCRIPTION_CAPTURE_VERSION
+        for row in data.get("results", [])
+    ):
+        return True
+    if data.get("compatibility", {}).get("download_specifications") and any(
+        row.get("status") == "code_match" and row.get("collection_stages", {}).get("specifications", {}).get("capture_version") != SPECIFICATIONS_CAPTURE_VERSION
+        for row in data.get("results", [])
+    ):
+        return True
+    return any(row.get("collection_status") == "partial" or row.get("website_lookup_status") == "error"
+               for row in data.get("results", [])) or any(
         record.get("retryable")
         or record.get("geometry_status") == "transient_error"
         or record.get("size_guide_status") == "transient_error"
@@ -81,8 +109,13 @@ def _has_retryable_images(data: dict[str, Any]) -> bool:
     )
 
 
+def _has_matched_products(data: dict[str, Any]) -> bool:
+    return any(row.get("status") == "code_match" and row.get("catalogue_url")
+               for row in data.get("results", []))
+
+
 def find_latest_compatible_run(
-    config: OrbeaRunConfig, *, include_completed_errors: bool = False
+    config: OrbeaRunConfig, *, include_completed_errors: bool = False, matched_only: bool = False
 ) -> Path | None:
     """Find the newest compatible run without altering any checkpoint."""
 
@@ -98,7 +131,9 @@ def find_latest_compatible_run(
                 continue
             if not _compatibility_matches(data.get("compatibility"), expected):
                 continue
-            if data.get("completed") and not (
+            if matched_only and not _has_matched_products(data):
+                continue
+            if data.get("completed") and not matched_only and not (
                 include_completed_errors and _has_retryable_images(data)
             ):
                 continue
@@ -106,6 +141,53 @@ def find_latest_compatible_run(
         except (OSError, json.JSONDecodeError):
             continue
     return max(candidates, default=(0.0, None), key=lambda item: item[0])[1]
+
+
+def find_latest_saved_run(output_root: Path, *, include_completed_errors: bool = False, matched_only: bool = False) -> Path | None:
+    """Find saved work independently of the current fresh-scan controls."""
+    candidates = []
+    for path in Path(output_root).glob(f"*/{CHECKPOINT_NAME}"):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if data.get("version") != CHECKPOINT_VERSION or not isinstance(data.get("compatibility"), dict):
+                continue
+            if matched_only and not _has_matched_products(data):
+                continue
+            if data.get("completed") and not matched_only and not (include_completed_errors and _has_retryable_images(data)):
+                continue
+            candidates.append((path.stat().st_mtime, path.parent))
+        except (OSError, ValueError, TypeError):
+            continue
+    return max(candidates, default=(0.0, None), key=lambda item: item[0])[1]
+
+
+def saved_run_config(run_dir: Path, *, browser_name: str | None = None) -> OrbeaRunConfig:
+    """Restore the selected run's settings and pin Resume to that checkpoint."""
+    run_dir = Path(run_dir).resolve()
+    data = json.loads((run_dir / CHECKPOINT_NAME).read_text(encoding="utf-8"))
+    if data.get("version") != CHECKPOINT_VERSION:
+        raise ValueError("The saved Orbea run was created by an incompatible version")
+    saved = data["compatibility"]
+    settings = data.get("settings", {})
+    filters = saved.get("filters", {})
+    filter_names = PimboFilterSpec.__dataclass_fields__
+    options = {name: saved[name] for name in (
+        "all_products", "download_images", "download_product_photos", "product_code_prefix",
+        "collect_product_data", "download_description", "download_specifications",
+    ) if name in saved}
+    options.update({name: settings[name] for name in (
+        "max_products", "navigation_timeout", "control_discovery_timeout", "table_render_timeout",
+        "selector_timeout", "image_retry_limit",
+    ) if name in settings})
+    return OrbeaRunConfig(
+        Path(saved["catalogue_path"]) if saved.get("catalogue_path") else None,
+        run_dir.parent,
+        filters=PimboFilterSpec(**{key: value for key, value in filters.items() if key in filter_names}),
+        browser_name=browser_name or settings.get("browser_name", "chrome"),
+        resume_run_dir=run_dir,
+        downloads_only=bool(data.get("saved_downloads_only")),
+        **options,
+    )
 
 
 class RunCheckpoint:
@@ -146,15 +228,28 @@ class RunCheckpoint:
         return checkpoint
 
     @classmethod
-    def load(cls, run_dir: Path, config: OrbeaRunConfig) -> "RunCheckpoint":
+    def load(cls, run_dir: Path, config: OrbeaRunConfig, *, matched_only: bool = False, download_missing: bool = False) -> "RunCheckpoint":
         path = Path(run_dir) / CHECKPOINT_NAME
         data = json.loads(path.read_text(encoding="utf-8"))
         if data.get("version") != CHECKPOINT_VERSION:
             raise ValueError("The run checkpoint was created by an incompatible version")
-        if not _compatibility_matches(
-            data.get("compatibility"), compatibility_for(config)
-        ):
+        # A completed scan contains the resolved catalogue fields already. An
+        # explicitly selected Resume does not re-read a moved/changed workbook.
+        pinned_scan = matched_only or download_missing or (config.resume_run_dir == Path(run_dir).resolve() and data.get("scan_completed"))
+        expected = config.compatibility_dict(data["compatibility"].get("catalogue_sha256", "")) if pinned_scan else compatibility_for(config)
+        actual = data.get("compatibility", {})
+        if download_missing:
+            download_fields = {"download_images", "download_product_photos", "download_description",
+                               "download_specifications", "collect_product_data"}
+            actual = {**actual, **{key: expected[key] for key in download_fields}}
+        if not _compatibility_matches(actual, expected):
             raise ValueError("The run uses a different catalogue or Pimbo filter set")
+        if download_missing:
+            data["compatibility"] = actual
+            data["saved_downloads_only"] = True
+        previous_error = data.pop("last_error", None)
+        if previous_error:
+            data["previous_error"] = previous_error
         data["resumed_at"] = utc_now()
         data["cancelled"] = False
         checkpoint = cls(path, data, resumed=True)
@@ -259,10 +354,14 @@ class RunCheckpoint:
         counts["images"] = counts.get("images_downloaded", 0)
         photo_summary = self.data.get("product_photos", {})
         counts["product_photos"] = int(photo_summary.get("files", 0) or 0)
+        if self.data.get("compatibility", {}).get("collect_product_data"):
+            counts["product_photos"] = sum(len(row.get("collection_stages", {}).get("photos", {}).get("files", [])) for row in self.results)
+            counts["collected"] = sum(row.get("collection_status") in {"collected", "collected_with_warnings"} for row in self.results)
         counts["unavailable"] = counts.get("images_not_available", 0)
         counts["errors"] = counts.get("error", 0) + counts.get(
             "images_transient_error", 0
         ) + len(photo_summary.get("failures", ()) or ())
+        counts["errors"] += sum(len(row.get("collection_errors", [])) + int(row.get("website_lookup_status") == "error") for row in self.results)
         return counts
 
     def pending_retryable_images(self) -> Iterable[tuple[str, dict[str, Any]]]:
@@ -283,12 +382,14 @@ def open_or_create_checkpoint(
     *,
     resume: bool,
     retry_failed: bool,
+    retry_matched: bool = False,
+    download_missing: bool = False,
 ) -> RunCheckpoint:
     run_dir = None
     if resume:
-        run_dir = find_latest_compatible_run(
-            config, include_completed_errors=retry_failed
-        )
+        run_dir = config.resume_run_dir or find_latest_compatible_run(config, include_completed_errors=retry_failed, matched_only=retry_matched)
     if run_dir is not None:
-        return RunCheckpoint.load(run_dir, config)
+        return RunCheckpoint.load(run_dir, config, matched_only=retry_matched, download_missing=download_missing)
+    if retry_matched or download_missing:
+        raise ValueError("No saved matched Orbea products were found in this output folder")
     return RunCheckpoint.create(create_run_directory(config.output_root), config)

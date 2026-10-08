@@ -5,6 +5,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, StaleElementReferenceException
 from bs4 import BeautifulSoup
+from Utilities.ProductDataSafety import SpecificationMap
 from Utilities.TranslationHandler import TranslationHandler
 
 def scrapeAndTranslateToFileLeeCougan(target_code, outputFile, driver, db_manager=None, credentials=None):
@@ -82,7 +83,7 @@ def scrapeAndTranslateToFileLeeCougan(target_code, outputFile, driver, db_manage
                 continue
 
         if not target_bike:
-            return f"[ERROR] Bicycle with code {target_code} not found"
+            raise ValueError(f"Lee Cougan bicycle with code {target_code} not found")
 
         # STEP 7: Open dropdown and click "Details"
         action_dropdown = target_bike.find_element(By.XPATH, ".//a[@class='ant-dropdown-link']")
@@ -113,7 +114,7 @@ def scrapeAndTranslateToFileLeeCougan(target_code, outputFile, driver, db_manage
         }
 
         for section in sections:
-            tableData = {}
+            tableData = SpecificationMap()
             rawTable = {}
             entries = section.select(".ant-col")
 
@@ -169,7 +170,7 @@ def scrapeAndTranslateToFileLeeCougan(target_code, outputFile, driver, db_manage
         return f"✔ Successfully scraped bike with code {target_code}. Total unique keys: {len(uniqueKeys)}"
 
     except Exception as e:
-        return f"[ERROR] {e}"
+        raise RuntimeError(f"Lee Cougan scraping failed: {e}") from e
 
     finally:
         driver.close()

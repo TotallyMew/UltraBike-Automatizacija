@@ -10,13 +10,12 @@ is used.
 
 from __future__ import annotations
 
-import hashlib
 import html as html_module
 import json
 import os
 import re
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
@@ -29,6 +28,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from .models import CancellationToken
+from .image_store import OrbeaImageStore
 
 
 ORBEA_HOST = "cms.orbea.com"
@@ -84,6 +84,7 @@ class OrbeaPhotoRunResult:
     failures: tuple[str, ...]
     cancelled: bool
     unavailable: tuple[str, ...] = ()
+    variant_files: Mapping[str, tuple[Path, ...]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -552,6 +553,8 @@ class OrbeaPhotoService:
         cancellation: Any = None,
         page_html: str | None = None,
         product_folder: str | None = None,
+        asset_root: str | Path | None = None,
+        variant_codes: Iterable[str] | None = None,
     ) -> OrbeaPhotoRunResult:
         """Download all colour variants and views, retaining successful files."""
 
@@ -567,6 +570,11 @@ class OrbeaPhotoService:
         failures: list[str] = []
         unavailable: list[str] = []
         layer_cache: dict[str, Image.Image] = {}
+        image_store = OrbeaImageStore(
+            Path(asset_root) if asset_root is not None else output_root / ".orbea-assets",
+            log=lambda message: self._callback(log, message),
+        )
+        file_digests: dict[str, str] = {}
 
         try:
             self._callback(log, f"Loading Orbea product: {source_url}")
@@ -582,6 +590,12 @@ class OrbeaPhotoService:
             else:
                 product_html = str(page_html)
             product = parse_orbea_photo_product(product_html, source_url)
+            if variant_codes is not None:
+                selected_codes = {str(code) for code in variant_codes}
+                available_codes = {variant.code for variant in product.variants}
+                if not selected_codes or selected_codes - available_codes:
+                    raise ValueError("The selected photo colours are not published for this model")
+                product = replace(product, variants=tuple(variant for variant in product.variants if variant.code in selected_codes))
             manifest_bytes = self._get_bytes(
                 session,
                 self._manifest_url(product),
@@ -631,9 +645,26 @@ class OrbeaPhotoService:
                         layer_specs = self._manifest_layers(manifest, product, variant, view)
                         if not layer_specs:
                             raise ValueError("No official image layers are available")
+                        destination = variant_folder / _safe_filename(
+                            f"{variant.code}_{view}.png", f"{variant.code}.png"
+                        )
+                        layer_urls = [self._layer_url(product, view, group, layer)
+                                      for group, layer in layer_specs]
+                        recipe = image_store.recipe_key(layer_urls)
+                        digest = image_store.reuse(recipe, destination)
+                        if digest is not None:
+                            files.append(destination)
+                            file_digests[str(destination.relative_to(product_dir))] = digest
+                            completed += 1
+                            message = f"Reused {destination.relative_to(product_dir)}"
+                            self._callback(log, message)
+                            self._callback(progress, OrbeaPhotoProgress(
+                                current=completed, total=total, status="saved", message=message,
+                                variant=variant.code, view=view, succeeded=len(files), failed=len(failures),
+                            ))
+                            continue
                         images: list[Image.Image] = []
-                        for group, layer in layer_specs:
-                            layer_url = self._layer_url(product, view, group, layer)
+                        for layer_url in layer_urls:
                             cached = layer_cache.get(layer_url)
                             if cached is None:
                                 payload = self._get_bytes(
@@ -655,6 +686,7 @@ class OrbeaPhotoService:
                             images.append(cached)
                         composite = self._compose(images)
                         if not self._has_visible_pixels(composite):
+                            composite.close()
                             status = "unavailable"
                             message = f"Skipped {label}: Orbea does not provide an image for this view"
                             unavailable.append(label)
@@ -674,10 +706,13 @@ class OrbeaPhotoService:
                                 ),
                             )
                             continue
-                        destination = variant_folder / _safe_filename(
-                            f"{variant.code}_{view}.png", f"{variant.code}.png"
-                        )
-                        self._atomic_save(composite, destination)
+                        try:
+                            self._atomic_save(composite, destination)
+                        finally:
+                            composite.close()
+                        digest = image_store.intern(destination)
+                        image_store.remember(recipe, digest)
+                        file_digests[str(destination.relative_to(product_dir))] = digest
                         files.append(destination)
                         status = "saved"
                         message = f"Saved {destination.relative_to(product_dir)}"
@@ -715,10 +750,7 @@ class OrbeaPhotoService:
                 "failures": failures,
                 "unavailable": unavailable,
                 "cancelled": cancelled,
-                "sha256": {
-                    str(path.relative_to(product_dir)): hashlib.sha256(path.read_bytes()).hexdigest()
-                    for path in files
-                },
+                "sha256": file_digests,
             }
             metadata_path = product_dir / "download_manifest.json"
             temporary_metadata = metadata_path.with_suffix(".json.tmp")
@@ -742,6 +774,8 @@ class OrbeaPhotoService:
                 failures=tuple(failures),
                 cancelled=cancelled,
                 unavailable=tuple(unavailable),
+                variant_files={variant.code: tuple(path for path in files if path.parent.name == _safe_filename(
+                    f"{variant.code}_{variant.name}", variant.code)) for variant in product.variants},
             )
         finally:
             for image in layer_cache.values():
@@ -759,9 +793,11 @@ class OrbeaPhotoService:
         output_dir: str | Path,
         *,
         product_folder: str = "product-photos",
+        variant_codes: Iterable[str] | None = None,
         progress: ProgressCallback | None = None,
         log: LogCallback | None = None,
         cancellation: Any = None,
+        asset_root: str | Path | None = None,
     ) -> OrbeaPhotoRunResult:
         """Download official photos using HTML already loaded by Selenium."""
 
@@ -773,6 +809,8 @@ class OrbeaPhotoService:
             cancellation=cancellation,
             page_html=page_html,
             product_folder=product_folder,
+            asset_root=asset_root,
+            variant_codes=variant_codes,
         )
 
     def run_many(
@@ -783,6 +821,7 @@ class OrbeaPhotoService:
         progress: ProgressCallback | None = None,
         log: LogCallback | None = None,
         cancellation: Any = None,
+        asset_root: str | Path | None = None,
     ) -> OrbeaPhotoBatchResult:
         """Download several products, ignoring canonical duplicate URLs."""
 
@@ -838,12 +877,14 @@ class OrbeaPhotoService:
                 )
 
             try:
+                storage_options = {"asset_root": asset_root} if asset_root is not None else {}
                 result = self.run(
                     url,
                     output_root,
                     progress=batch_progress,
                     log=log,
                     cancellation=cancellation,
+                    **storage_options,
                 )
             except Exception as error:
                 message = f"{url}: {type(error).__name__}: {error}"

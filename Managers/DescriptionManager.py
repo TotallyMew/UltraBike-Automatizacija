@@ -7,6 +7,7 @@ Handles saved description CRUD and reusable description content preparation.
 from datetime import datetime
 
 from Utilities.ErrorManager import ErrorManager
+from Database.ConnectionAccess import with_database_lock
 
 
 class DescriptionManager:
@@ -77,6 +78,7 @@ class DescriptionManager:
 
         return lt_html, en_html, lv_html
 
+    @with_database_lock
     def save_description(
         self,
         name: str,
@@ -176,6 +178,7 @@ class DescriptionManager:
             self._log_error("Failed to save description", exception=e, name=name)
             return False
 
+    @with_database_lock
     def list_folders(self) -> list[str]:
         """Return all saved description folders sorted by name."""
         try:
@@ -192,6 +195,7 @@ class DescriptionManager:
             self._log_error("Failed to list folders", exception=e)
             return []
 
+    @with_database_lock
     def create_folder(self, folder_name: str) -> bool:
         """Create a reusable folder for grouping descriptions."""
         name = (folder_name or "").strip()
@@ -213,6 +217,7 @@ class DescriptionManager:
             self._log_error("Failed to create folder", exception=e, folder_name=name)
             return False
 
+    @with_database_lock
     def load_description(self, name: str) -> dict | None:
         """Load description from database"""
         self._log("Loading description", name=name)
@@ -246,6 +251,7 @@ class DescriptionManager:
             self._log_error("Failed to load description", exception=e, name=name)
             return None
 
+    @with_database_lock
     def list_descriptions(self) -> list:
         """Get list of all description names"""
         try:
@@ -271,6 +277,7 @@ class DescriptionManager:
             self._log_error("Failed to list descriptions", exception=e)
             return []
 
+    @with_database_lock
     def delete_description(self, name: str) -> bool:
         """Delete description from database"""
         self._log("Deleting description", name=name)
