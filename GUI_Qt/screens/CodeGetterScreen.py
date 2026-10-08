@@ -452,7 +452,7 @@ class CodeGetterScreen(ResponsiveWidget):
         self._worker.done.connect(self._on_done)
         self._worker.log.connect(lambda msg: print(f"[CodeGetter] {msg}"))
         if hasattr(self.main, "track_worker"):
-            self.main.track_worker(self._worker, "code_scanner", "code_getter")
+            self.main.track_worker(self._worker, "code_scanner", "product_lookup")
         self._worker.start()
 
     def _on_row_found(self, index: int, code: str, title: str, page: str, status: str):

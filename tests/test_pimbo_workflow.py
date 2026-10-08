@@ -853,10 +853,9 @@ class PimboWorkflowTests(unittest.TestCase):
     def test_active_workflows_do_not_call_legacy_save_or_pywinauto(self):
         root = Path(__file__).resolve().parents[1]
         active_files = [
-            root / "Uploaders" / "BaseUploader.py",
-            root / "Utilities" / "BatchProcessor.py",
-            root / "GUI_Qt" / "workers" / "batch_workers.py",
-            root / "Utilities" / "ImageHandler.py",
+            root / "tools" / "supplier_upload.py",
+            root / "tools" / "orbea_automation" / "upload.py",
+            root / "tools" / "kross_automation" / "service.py",
         ]
         source = "\n".join(path.read_text(encoding="utf-8") for path in active_files)
         self.assertNotIn(".save_information(", source)

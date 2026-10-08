@@ -4,6 +4,12 @@ Reviewed: **8 October 2026**. All items are open unless their checkbox is marked
 
 This records the findings from the code assessment, including the current uncommitted supplier workflow changes. It is a backlog of known problems and follow-up investigations, not a claim that every possible bug has been discovered. Line numbers describe the review snapshot and may move.
 
+The Single Upload, Unified Batch, Descriptions, Folder Creator, and old Analytics
+screens were retired on 8 October 2026. References to those UI files below are
+historical review evidence. Supplier adapters and translation code remain for
+future dedicated bulk workflows. TD-022 and TD-023 were retired with their UI;
+shared database, browser, and supplier-library debt remains relevant.
+
 ## How to use this backlog
 
 - **P1:** Fix before relying on the affected workflow or expanding it. Includes data accuracy, broken functionality, and concurrency risks.
@@ -191,19 +197,23 @@ Keep the ID when fixing an item. Mark it complete only after its acceptance cond
 
   **Progress / remaining work (7 October 2026):** KROSS/TREK HTTP requests now have timeouts and failures propagate. Stop is observed at uploader boundaries; finer request cancellation/retry policy remains pending. See [product safety regressions](../tests/test_product_data_safety.py) and [supplier upload regressions](../tests/test_orbea_upload.py).
 
-- [ ] **TD-022 — P2 · Risk: browser work and waits block the GUI thread.**
+- [x] **TD-022 — P2 · Risk: browser work and waits block the GUI thread.**
 
   **Evidence:** [UploadScreen._confirm_regular_save](../GUI_Qt/screens/UploadScreen.py#L1153) calls Selenium verification directly from the GUI; [verify_manual_save](../Managers/PimboProductEditor.py#L1939) can perform two waits. [Batch execution](../GUI_Qt/batch/execution.py#L190) synchronously creates and logs in a browser pool before starting its worker.
 
   **Done when:** Move browser startup/login and save verification into workers with progress, bounded cancellation, and error results. The GUI must remain responsive during slow or failed browser operations.
 
-- [ ] **TD-023 — P2 · Risk: manual save confirmation updates history by latest SKU instead of operation identity.**
+  **Retired (8 October 2026):** Removed the Single Upload and Unified Batch UI paths that contained this behavior.
+
+- [x] **TD-023 — P2 · Risk: manual save confirmation updates history by latest SKU instead of operation identity.**
 
   **Evidence:** [UploadScreen.py:1179](../GUI_Qt/screens/UploadScreen.py#L1179) selects the latest `ready_for_review` history row using only `product_code`. The preparation result is not tied to the exact history row being updated.
 
   **Done when:** Carry the history/operation ID through preparation and save confirmation. Repeated or concurrent runs for the same SKU must update the correct record and earnings association.
 
   **Progress / remaining work (7 October 2026):** Preparation carries history_id; standard Save and batch review status updates use that exact row and verify its product identity. Batch earning-candidate lookup still queries recent rows by SKU and should carry IDs end to end. See [product safety regressions](../tests/test_product_data_safety.py) and [supplier upload regressions](../tests/test_orbea_upload.py).
+
+  **Retired (8 October 2026):** Removed the Single Upload and Unified Batch UI paths that contained this behavior.
 
 ## Architecture and extension cost
 

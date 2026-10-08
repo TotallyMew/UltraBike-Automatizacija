@@ -834,7 +834,7 @@ class NameGetterScreen(ResponsiveWidget):
         self._worker.log.connect(lambda msg: print(f"[NameGetter] {msg}"))
         if hasattr(self.main, "track_worker"):
             self.main.track_worker(
-                self._worker, "name_scanner", "name_getter", total=len(self._codes)
+                self._worker, "name_scanner", "product_lookup", total=len(self._codes)
             )
         self._worker.start()
 

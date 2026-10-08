@@ -29,7 +29,7 @@ class TranslationResourceTests(unittest.TestCase):
                 "nav.name_getter": "Names by code",
                 "nav.code_getter": "Export product codes",
                 "nav.product_name_getter": "Export product names",
-                "nav.folders": "Build folder structure",
+                "nav.product_lookup": "Product lookup and export",
                 "nav.spec_checker": "Check specifications",
             },
             "lt": {
@@ -38,7 +38,7 @@ class TranslationResourceTests(unittest.TestCase):
                 "nav.name_getter": "Pavadinimai pagal kodus",
                 "nav.code_getter": "Eksportuoti produktų kodus",
                 "nav.product_name_getter": "Eksportuoti produktų pavadinimus",
-                "nav.folders": "Sukurti aplankų struktūrą",
+                "nav.product_lookup": "Produktų paieška ir eksportas",
                 "nav.spec_checker": "Tikrinti specifikacijas",
             },
         }
@@ -47,7 +47,6 @@ class TranslationResourceTests(unittest.TestCase):
             "nav.name_getter": "namegetter.title",
             "nav.code_getter": "codegetter.title",
             "nav.product_name_getter": "productnamegetter.title",
-            "nav.folders": "folders.title",
             "nav.spec_checker": "speccheck.title",
         }
 
@@ -57,7 +56,6 @@ class TranslationResourceTests(unittest.TestCase):
                 self.assertEqual(catalog[key], value)
             for nav_key, title_key in page_title_keys.items():
                 self.assertEqual(catalog[nav_key], catalog[title_key])
-            self.assertEqual(catalog["nav.folders"], catalog["info.folders.title"])
 
     def test_spotify_copy_is_session_only(self):
         obsolete_account_wide_keys = {

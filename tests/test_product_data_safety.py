@@ -443,19 +443,6 @@ def test_stop_after_partial_edit_preserves_result_and_skips_later_stages(uploade
     uploader.pim_editor.generate_description.assert_not_called()
 
 
-def test_upload_worker_never_claims_an_unverified_discard():
-    from GUI_Qt.screens.UploadScreen import UploadWorker
-    result = PimPreparationResult("SKU", "p-1", status=PimPreparationStatus.FAILED,
-                                  changed_fields=("description_lt",), error="Stopped after description")
-    uploader = Mock(ultraBikeCode="SKU")
-    uploader.run.return_value = result
-    worker = UploadWorker(uploader, lambda key, **kwargs: key)
-    received = []
-    worker.completed.connect(received.append)
-    worker.request_stop()
-    worker.run()
-    uploader.request_stop.assert_called_once()
-    assert received == [result]
 
 
 def test_orbea_stop_before_service_creation_survives_token_replacement():

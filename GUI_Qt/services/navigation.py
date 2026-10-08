@@ -10,7 +10,8 @@ class NavigationService:
 
     def open(self, route_key: str) -> bool:
         main = self.main
-        route_key = str(route_key or "")
+        from GUI_Qt.routes import resolve_route_key
+        route_key = resolve_route_key(route_key)
         if route_key not in main.ROUTES:
             return False
         if not self.can_leave_current():

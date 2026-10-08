@@ -49,30 +49,18 @@ def _lazy(module_name: str, class_name: str, attribute: str):
 
 
 ROUTES = (
-    RouteSpec("upload", "nav.upload", "operations", FluentIcon.CLOUD_DOWNLOAD,
-              _lazy("GUI_Qt.screens.UploadScreen", "UploadScreen", "upload_screen")),
-    RouteSpec("batch", "nav.batch", "operations", FluentIcon.SYNC,
-              _lazy("GUI_Qt.screens.UnifiedBatchScreen", "UnifiedBatchScreen", "unified_batch_screen")),
-    RouteSpec("descriptions", "nav.descriptions", "operations", FluentIcon.EDIT,
-              _lazy("GUI_Qt.screens.DescriptionsScreen", "DescriptionsScreen", "descriptions_screen")),
-    RouteSpec("folders", "nav.folders", "operations", FluentIcon.FOLDER_ADD,
-              _lazy("GUI_Qt.screens.FolderCreatorScreen", "FolderCreatorScreen", "folder_creator_screen")),
-    RouteSpec("translations", "nav.translations", "operations", FluentIcon.LANGUAGE,
+    RouteSpec("product_lookup", "nav.product_lookup", "product_tools", FluentIcon.SEARCH,
+              _lazy("GUI_Qt.screens.ProductLookupScreen", "ProductLookupScreen", "product_lookup_screen")),
+    RouteSpec("history", "nav.history", "insights", FluentIcon.HISTORY,
+              _lazy("GUI_Qt.screens.FullHistoryScreen", "FullHistoryScreen", "full_history_screen")),
+    RouteSpec("translations", "nav.translations", "product_tools", FluentIcon.LANGUAGE,
               _lazy("GUI_Qt.screens.TranslationsScreen", "TranslationsScreen", "translations_screen")),
-    RouteSpec("history", "nav.analytics", "insights", FluentIcon.PIE_SINGLE,
-              _lazy("GUI_Qt.screens.AnalyticsScreen", "AnalyticsScreen", "history_screen")),
     RouteSpec("earnings", "nav.earnings", "insights", FluentIcon.STOP_WATCH,
               _lazy("GUI_Qt.screens.EarningsScreen", "EarningsScreen", "earnings_screen")),
     RouteSpec("spotify", "nav.spotify", "insights", FluentIcon.CONNECT,
               _lazy("GUI_Qt.screens.SpotifyScreen", "SpotifyScreen", "spotify_screen")),
     RouteSpec("activity", "nav.activity", "insights", FluentIcon.HISTORY,
               _lazy("GUI_Qt.screens.ActivityScreen", "ActivityScreen", "activity_screen")),
-    RouteSpec("name_getter", "nav.name_getter", "product_tools", FluentIcon.SEARCH,
-              _lazy("GUI_Qt.screens.NameGetterScreen", "NameGetterScreen", "name_getter_screen")),
-    RouteSpec("code_getter", "nav.code_getter", "product_tools", FluentIcon.CODE,
-              _lazy("GUI_Qt.screens.CodeGetterScreen", "CodeGetterScreen", "code_getter_screen")),
-    RouteSpec("product_name_getter", "nav.product_name_getter", "product_tools", FluentIcon.DOCUMENT,
-              _lazy("GUI_Qt.screens.ProductNameGetterScreen", "ProductNameGetterScreen", "product_name_getter_screen")),
     RouteSpec("spec_checker", "nav.spec_checker", "product_tools", FluentIcon.CHECKBOX,
               _lazy("GUI_Qt.screens.SpecCheckerScreen", "SpecCheckerScreen", "spec_checker_screen")),
     RouteSpec("basso_images", "nav.basso_images", "brand_tools", FluentIcon.IMAGE_EXPORT,
@@ -87,9 +75,9 @@ ROUTES = (
               _lazy("GUI_Qt.screens.AbusUrlGetterScreen", "AbusUrlGetterScreen", "abus_url_getter_screen")),
     RouteSpec("oakley_url_getter", "nav.oakley_url_getter", "brand_tools", FluentIcon.LINK,
               _lazy("GUI_Qt.screens.OakleyUrlGetterScreen", "OakleyUrlGetterScreen", "oakley_url_getter_screen")),
-    RouteSpec("orbea", "nav.orbea", "brand_tools", FluentIcon.ROBOT,
+    RouteSpec("orbea", "nav.orbea", "operations", FluentIcon.ROBOT,
               _lazy("GUI_Qt.screens.OrbeaScreen", "OrbeaScreen", "orbea_screen")),
-    RouteSpec("kross", "nav.kross", "brand_tools", FluentIcon.ROBOT,
+    RouteSpec("kross", "nav.kross", "operations", FluentIcon.ROBOT,
               _lazy("GUI_Qt.screens.KrossScreen", "KrossScreen", "kross_screen")),
     RouteSpec("account", "nav.account", "system", FluentIcon.PEOPLE,
               _lazy("GUI_Qt.screens.AccountScreen", "AccountScreen", "account_screen")),
@@ -100,3 +88,13 @@ ROUTES = (
 )
 
 ROUTE_REGISTRY = {route.key: route for route in ROUTES}
+
+DEFAULT_ROUTE = "earnings"
+ROUTE_ALIASES = {
+    "name_getter": "product_lookup",
+    "code_getter": "product_lookup",
+    "product_name_getter": "product_lookup",
+}
+
+def resolve_route_key(key: str) -> str:
+    return ROUTE_ALIASES.get(str(key or ""), str(key or ""))

@@ -13,18 +13,29 @@ upload workflow.
 
 ## Product automation
 
-The Upload and Unified Batch pages locate products in Pimbo and apply the
-selected changes. Pimbo MagicAI can generate or update:
+Bulk uploads run through dedicated **Orbea** and **KROSS** screens. Choose the
+products and stages in the relevant supplier workflow, then review its saved
+results before retrying. Pimbo MagicAI titles, source descriptions, category
+suggestions, translations, and specifications remain available where supported.
+Title and description MagicAI template names are configurable in Settings.
 
-- product titles;
-- descriptions;
-- category suggestions;
-- translated product copy; and
-- specifications.
+The single Upload, Unified Batch, description-template editor, Folder Creator,
+and old Analytics screens have been retired. Existing history, stored templates,
+and translation dictionaries are preserved. Future bulk workflows belong in
+separate product or supplier screens.
 
-MagicAI template names are configurable in Settings so they can follow changes
-made in the Pimbo account. This automation is distinct from manual LT, EN, and
-LV description-template editing on the Descriptions page.
+**Product lookup and export** brings names by code, code export, and name export
+together as three modes. **History** opens the detailed searchable records
+directly and can export historical upload results to Excel. **Earnings** retains
+its earnings analysis, goals, and manually recorded work.
+
+## KROSS
+
+Collect KROSS source data or open a saved collection, select products and upload
+stages, then run the selected updates. The workflow records saved results and
+supports Excel export. Keep translation dictionaries available for KROSS source
+processing; the retired description-template editor does not affect supplier
+description collection or Pimbo MagicAI.
 
 ## Orbea
 

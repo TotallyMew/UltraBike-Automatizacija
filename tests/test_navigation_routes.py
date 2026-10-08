@@ -146,9 +146,9 @@ class NavigationRouteTests(unittest.TestCase):
 
     def test_sidebar_group_membership_and_order(self):
         expected = {
-            "operations": ["upload", "batch", "descriptions", "folders", "translations"],
+            "operations": ["orbea", "kross"],
             "insights": ["history", "earnings", "spotify", "activity"],
-            "product_tools": ["name_getter", "code_getter", "product_name_getter", "spec_checker"],
+            "product_tools": ["product_lookup", "translations", "spec_checker"],
             "brand_tools": [
                 "basso_images",
                 "pinarello_images",
@@ -156,8 +156,6 @@ class NavigationRouteTests(unittest.TestCase):
                 "castelli_images",
                 "abus_url_getter",
                 "oakley_url_getter",
-                "orbea",
-                "kross",
             ],
             "system": ["account", "settings", "info"],
         }
@@ -196,8 +194,7 @@ class NavigationRouteTests(unittest.TestCase):
         self.assertEqual(route_icons["earnings"], FluentIcon.STOP_WATCH)
         self.assertEqual(route_icons["spotify"], FluentIcon.CONNECT)
         self.assertEqual(route_icons["activity"], FluentIcon.HISTORY)
-        self.assertEqual(route_icons["folders"], FluentIcon.FOLDER_ADD)
-        self.assertEqual(route_icons["code_getter"], FluentIcon.CODE)
+        self.assertEqual(route_icons["product_lookup"], FluentIcon.SEARCH)
         self.assertEqual(route_icons["orbea"], FluentIcon.ROBOT)
         self.assertEqual(route_icons["kross"], FluentIcon.ROBOT)
         for key in ("castelli_url_getter", "abus_url_getter", "oakley_url_getter"):
@@ -227,8 +224,8 @@ class NavigationRouteTests(unittest.TestCase):
         MainWindow._retranslate_navigation(window, "lt")
         self.assertEqual(window._nav_items["nav_group_insights"].text(), "Įžvalgos")
         self.assertEqual(
-            window._nav_items["product_name_getter"].text(),
-            "Eksportuoti produktų pavadinimus",
+            window._nav_items["product_lookup"].text(),
+            "Produktų paieška ir eksportas",
         )
 
     def test_long_labels_elide_but_keep_full_tooltip_and_accessible_name(self):

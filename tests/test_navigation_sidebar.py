@@ -55,10 +55,13 @@ def test_navigation_stays_hidden_during_startup_loading(tmp_path, monkeypatch) -
 
         window._set_authenticated_shell_visible = record_shell_visibility
         window.current_user = "navigation-sidebar-test"
+        window.settings.set("last_authenticated_route", "orbea")
         window.show_main()
         window.cancel_screen_preload()
         _pump(app)
 
+        assert window._current_route == "earnings"
+        assert window.content_stack.currentWidget() is window.earnings_screen
         assert shell_visibility_transitions == [(window._main_container, True)]
         assert window.navigationInterface.isVisible()
         assert window._loading_widget.isHidden()
@@ -142,7 +145,7 @@ def test_navigation_tree_stays_aligned_after_rapid_duplicate_click(tmp_path, mon
             (child.height(), child.sizeHint().height(), child.geometry().top())
             for child in product_children
         ]
-        leaf = window._nav_items["name_getter"]
+        leaf = window._nav_items["product_lookup"]
         QTest.mouseClick(leaf.itemWidget, Qt.MouseButton.LeftButton)
         QTest.mouseClick(leaf.itemWidget, Qt.MouseButton.LeftButton)
         QTest.qWait(180)

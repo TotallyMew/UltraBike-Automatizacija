@@ -19,7 +19,7 @@ def smoke_test() -> int:
     from Managers.OperationTracker import OperationKind, OperationTracker
 
     validate_translation_catalogs(TRANSLATIONS)
-    if not {"upload", "activity", "spotify"} <= set(ROUTE_REGISTRY):
+    if not {"orbea", "kross", "product_lookup", "history", "activity", "spotify"} <= set(ROUTE_REGISTRY):
         raise RuntimeError("Required application routes are missing")
     with tempfile.TemporaryDirectory(prefix="ultrabike-smoke-") as temp_dir:
         database = DatabaseManager(Path(temp_dir) / "smoke.db")

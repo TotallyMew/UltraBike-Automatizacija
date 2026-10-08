@@ -34,11 +34,20 @@ def test_settings_save_skips_redundant_global_refreshes(tmp_path, monkeypatch) -
         _pump(app)
         screen = window.settings_screen
 
+        # Retired global upload toggles remain stored for retained adapters;
+        # saving current settings must not silently reset them.
+        retired_keys = ('download_images', 'auto_delete_pabaigta_files',
+                        'multi_session_enabled', 'browser_count')
+        stored_legacy = {key: window.settings.get(key) for key in retired_keys}
+        assert hasattr(screen, 'kross_path_field')
+        assert hasattr(screen, 'repo_path_field')
+
         writes: list[dict] = []
         original_set_many = window.settings.set_many
 
         def record_set_many(values: dict) -> None:
-            writes.append(dict(values))
+            if 'browser_choice' in values:
+                writes.append(dict(values))
             original_set_many(values)
 
         language_calls: list[tuple[str, bool]] = []
@@ -101,6 +110,7 @@ def test_settings_save_skips_redundant_global_refreshes(tmp_path, monkeypatch) -
         _pump(app)
 
         assert len(writes) == 2
+        assert all(window.settings.get(key) == value for key, value in stored_legacy.items())
         assert theme_calls == []
         assert language_calls == [(target_language, False)]
         assert window.settings.get("language") in ("English", "Lithuanian")

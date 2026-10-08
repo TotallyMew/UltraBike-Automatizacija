@@ -59,14 +59,11 @@ a = Analysis(
     datas=_datas,
     hiddenimports=[
         # Authenticated screens are registered by module name and imported lazily.
-        "GUI_Qt.screens.UploadScreen",
-        "GUI_Qt.screens.UnifiedBatchScreen",
-        "GUI_Qt.screens.DescriptionsScreen",
-        "GUI_Qt.screens.FolderCreatorScreen",
         "GUI_Qt.screens.TranslationsScreen",
-        "GUI_Qt.screens.AnalyticsScreen",
         "GUI_Qt.screens.EarningsScreen",
         "GUI_Qt.screens.SpotifyScreen",
+        "GUI_Qt.screens.ProductLookupScreen",
+        "GUI_Qt.screens.FullHistoryScreen",
         "GUI_Qt.screens.ActivityScreen",
         "GUI_Qt.screens.SpecCheckerScreen",
         "GUI_Qt.screens.NameGetterScreen",

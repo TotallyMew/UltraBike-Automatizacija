@@ -136,7 +136,8 @@ class ActivityScreen(ResponsiveWidget):
         self.cancel_button.setEnabled(
             bool(record and record.status not in TERMINAL_STATUSES)
         )
-        self.open_workflow_button.setEnabled(bool(record and record.source_route))
+        from GUI_Qt.routes import ROUTE_REGISTRY, resolve_route_key
+        self.open_workflow_button.setEnabled(bool(record and resolve_route_key(record.source_route) in ROUTE_REGISTRY))
         self.open_output_button.setEnabled(
             bool(record and record.output_path and Path(record.output_path).exists())
         )

@@ -68,7 +68,7 @@ from Utilities.ProductNavigationHandler import ProductNavigationHandler
 
 
 # ---------------------------------------------------------------------------
-# Drop zone (reused pattern from BatchDescriptionsScreen)
+# Drop zone for specification inputs
 # ---------------------------------------------------------------------------
 
 class DropZoneWidget(QWidget):

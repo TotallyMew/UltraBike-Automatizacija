@@ -6,12 +6,10 @@ from qfluentwidgets import MessageBox
 
 class ShutdownService:
     SCREEN_ATTRIBUTES = (
-        "upload_screen", "unified_batch_screen", "descriptions_screen",
-        "folder_creator_screen", "basso_images_screen", "pinarello_images_screen",
-        "spec_checker_screen", "name_getter_screen", "code_getter_screen",
-        "castelli_url_getter_screen", "castelli_image_downloader_screen",
-        "abus_url_getter_screen", "oakley_url_getter_screen",
-        "product_name_getter_screen", "orbea_screen", "kross_screen",
+        "product_lookup_screen", "basso_images_screen", "pinarello_images_screen",
+        "spec_checker_screen", "castelli_url_getter_screen",
+        "castelli_image_downloader_screen", "abus_url_getter_screen",
+        "oakley_url_getter_screen", "orbea_screen", "kross_screen",
     )
 
     def __init__(self, main_window):

@@ -2,7 +2,7 @@
 
 UltraBike Automatizacija is a Windows desktop application for maintaining
 product data in Pimbo. It combines an authenticated Selenium browser with
-guided upload, batch-editing, review, brand-tool, Orbea, and earnings workflows.
+dedicated Orbea and KROSS bulk workflows, product lookup, image tools, and earnings.
 
 Pimbo is the supported product-management system. Pimbo MagicAI title,
 description, category, translation, and specification actions remain supported,
@@ -12,8 +12,8 @@ and the title and description template names can be changed in Settings.
 
 For normal use, install the Windows release and launch **UltraBike
 Automatizacija**. On first use, create a master password, save the administrator
-credentials on Account, and sign in. The app opens and owns the authenticated
-Pimbo browser used by automation jobs.
+credentials on Account, and sign in. The app opens on Earnings and owns the
+authenticated Pimbo browser used by automation jobs.
 
 For development:
 
@@ -28,20 +28,17 @@ browser workflows.
 
 ## Workflows
 
-- **Upload** prepares one product in Pimbo and records the result.
-- **Unified Batch** applies supported title, description, variant, and product
-  actions to a reviewed table of products.
-- **Descriptions** stores manually maintained LT, EN, and LV templates.
-- **Folders and scanners** create output folders and collect specifications,
-  names, codes, and brand URLs.
-- **Image tools** download and organize supported brand assets.
-- **Orbea** matches catalogue and Pimbo records, downloads selected images and
-  descriptions, writes a review workbook, and resumes from checkpoints.
-- **Analytics, history, and earnings** combine app activity with manually
-  recorded work, showing earnings, brands, product types, sources, automation
-  reliability, and completed products without double-counting imports. Money
-  goals also accept goal-only progress that does not inflate earnings, products,
-  Analytics, or hourly rates.
+- **Orbea** matches catalogue and Pimbo records, collects source data and images,
+  writes review workbooks, and uploads selected products with saved retry progress.
+- **KROSS** collects supplier products and uploads selected data to Pimbo.
+- **Product lookup and export** finds names by code, exports product codes, and
+  exports product names from one screen.
+- **Translations and specification checking** maintain the dictionary used by
+  supplier tools and inspect product specifications.
+- **Image and URL tools** collect supported brand assets and product links.
+- **History and earnings** retain saved product results, Excel export, manually
+  recorded work, earnings, goals, and automation reliability. Goal-only progress
+  does not inflate earnings, products, or hourly rates.
 - **Activity** shows queued, running, stopping, completed, partial, failed,
   cancelled, and interrupted jobs. It can cancel supported jobs, reopen their
   workflow/output, and copy diagnostics.
@@ -143,7 +140,7 @@ with **Check now**. Downloads require HTTPS and a matching SHA-256 digest.
 
 Before a product-photo upload, the app checks only the product gallery. It removes the exact Orbea `https://www.orbea.com/uploads/products/images/picture-coming-soon.webp` placeholder, accepts the image-removal confirmation, verifies that it disappeared, and then uploads replacements. Existing real photos cause a successful skip. If real photos and placeholders coexist, only placeholders are removed. A placeholder is kept when there are no replacement photos and no real photos. Geometry and size-table images do not count as product photos.
 
-Use **Export upload results to Excel** in the Orbea or KROSS upload section. The export includes loaded products with saved results and unprocessed products, plus a **Needs checking** sheet. Photo outcomes distinguish uploads, skips, placeholder removals, and whether changes were saved. Saved collection folders retain their latest upload result for export after reopening. For other upload routes, use **Full History → Export to Excel**, which includes the same detailed results and review list alongside the history sheet. Older results retain their original outcome; photo actions that were not recorded are labelled accordingly.
+Use **Export upload results to Excel** in the Orbea or KROSS upload section. The export includes loaded products with saved results and unprocessed products, plus a **Needs checking** sheet. Photo outcomes distinguish uploads, skips, placeholder removals, and whether changes were saved. Saved collection folders retain their latest upload result for export after reopening. For historical results, use **History → Export to Excel**, which includes the same detailed results and review list alongside the history sheet. Older results retain their original outcome; photo actions that were not recorded are labelled accordingly.
 
 
 ### Orbea colour folders

@@ -7,6 +7,16 @@ are generated from the installer and are not a substitute for this history.
 
 ### Changed
 
+- Retired Single Upload, Unified Batch, Descriptions, Folder Creator, and the old
+  Analytics screen, including their navigation, UI helpers, and packaging entries.
+  Removed the write-only recent-product cache update and obsolete upload settings.
+- Combined names-by-code, code export, and name export into Product lookup and
+  export. History now opens the detailed records directly. The app opens
+  Earnings after sign-in, while old lookup links open the combined tool.
+  Orbea/KROSS bulk workflows, supplier descriptions, translations, earnings,
+  and existing stored records remain available.
+
+
 - Split Orbea's standalone description, photo and table-image workflows into
   separate controllers with shared job ownership, cancellation and control locking.
   Failed description URLs now show partial completion. Service factories construct

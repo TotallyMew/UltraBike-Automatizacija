@@ -1,4 +1,4 @@
-﻿# Standard library
+# Standard library
 import json
 import re
 import time
@@ -226,8 +226,6 @@ class ProductUploader(ABC):
             # Record the reviewable (not saved) result in database.
             self._record_success(duration)
 
-            # Add to recent products cache
-            self._cache_recent_product()
 
             # Generated files are kept until the human Save is confirmed.
             self._log("Product ready for manual review", duration=f"{duration:.2f}s")
@@ -346,35 +344,6 @@ class ProductUploader(ABC):
         self.db.conn.commit()
         self._log("Failure recorded in database")
 
-    @with_database_lock
-    def _cache_recent_product(self):
-        """Add product to recent products cache"""
-        cursor = self.db.conn.cursor()
-
-        # Check if already exists
-        existing = cursor.execute("""
-            SELECT id, use_count FROM recent_products 
-            WHERE brand = ? AND product_code = ?
-        """, (self.brandName, self.ultraBikeCode)).fetchone()
-
-        if existing:
-            # Update existing
-            cursor.execute("""
-                UPDATE recent_products
-                SET last_used = ?,
-                    use_count = ?,
-                    url_or_code = ?
-                WHERE id = ?
-            """, (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), existing['use_count'] + 1, self.bicycleUrlOrCode, existing['id']))
-        else:
-            # Insert new
-            cursor.execute("""
-                INSERT INTO recent_products
-                (brand, product_code, url_or_code, last_used, use_count)
-                VALUES (?, ?, ?, ?, 1)
-            """, (self.brandName, self.ultraBikeCode, self.bicycleUrlOrCode, datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
-
-        self.db.conn.commit()
 
     @abstractmethod
     def scrape(self):

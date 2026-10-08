@@ -1,6 +1,6 @@
 """
 Full History Screen - Comprehensive detailed view
-Complements Analytics dashboard with searchable, sortable record table
+Searchable, sortable records with upload-result export
 """
 
 from PySide6.QtWidgets import (
@@ -109,16 +109,9 @@ class FullHistoryScreen(ResponsiveWidget):
         # === HEADER ===
         header_layout = QHBoxLayout()
 
-        # Back button
-        self.back_btn = TransparentToolButton(FluentIcon.RETURN, self)
-        self.back_btn.setFixedSize(SIZES['icon_lg'], SIZES['icon_lg'])
-        self.back_btn.clicked.connect(self._go_back_to_analytics)
-
         self.title_label = TitleLabel("")
         self.title_label.setStyleSheet(f"color: {get_text_color(isDarkTheme())}; font-weight: 600;")
 
-        header_layout.addWidget(self.back_btn)
-        header_layout.addSpacing(SPACING['md'])
         header_layout.addWidget(self.title_label)
         header_layout.addStretch()
 
@@ -297,6 +290,7 @@ class FullHistoryScreen(ResponsiveWidget):
             self._apply_column_sizing()
         except Exception:
             pass
+        self.refresh_history()
         super().showEvent(event)
 
     def _apply_column_sizing(self) -> None:
@@ -555,7 +549,7 @@ class FullHistoryScreen(ResponsiveWidget):
         apply_screen_theme(self, "FullHistoryScreen", transparent_labels=True)
         enforce_transparent_labels(self)
 
-        # Card theme to match AnalyticsScreen-style subtle tint
+        # Subtle card tint for the detailed history page
         is_dark = isDarkTheme()
         card_bg = rgba_from_hex(COLORS['text_white'], 0.03) if is_dark else rgba_from_hex(COLORS['space_indigo'], 0.03)
         card_border = COLORS['border_dark'] if is_dark else COLORS['border_light']
@@ -898,19 +892,14 @@ class FullHistoryScreen(ResponsiveWidget):
                 position=InfoBarPosition.TOP
             )
 
-    def _go_back_to_analytics(self):
-        """Navigate back to Analytics screen"""
-        # Navigate to Analytics screen
-        from GUI_Qt.screens.AnalyticsScreen import AnalyticsScreen
-
-        # Show analytics screen (which is stored as history_screen in MainWindow)
-        if hasattr(self.main, 'history_screen') and isinstance(self.main.history_screen, AnalyticsScreen):
-            self.main._show_screen(self.main.history_screen)
 
     def _on_theme_changed(self):
         """Handle theme change"""
         self._apply_theme()
         self._apply_table_theme()
+
+    def retranslate_ui(self):
+        self.update_translations()
 
     def update_translations(self):
         """Update UI text for current language"""
@@ -918,7 +907,6 @@ class FullHistoryScreen(ResponsiveWidget):
 
         # Header
         self.title_label.setText(tr("history.full.title", default="Full Upload History"))
-        self.back_btn.setToolTip(tr("history.full.back", default="Back to Analytics"))
 
         # Search and filters
         self.search_label.setText(tr("history.full.search", default="Search:"))

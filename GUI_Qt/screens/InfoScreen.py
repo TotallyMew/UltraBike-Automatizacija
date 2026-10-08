@@ -188,20 +188,6 @@ class InfoScreen(ResponsiveWidget):
         ll.insertWidget(1, self.login_text)
         content_layout.addWidget(self.login_card)
 
-        self.upload_card, ul = _make_card()
-        self.upload_title, self.upload_toggle_btn, self.upload_details_card, self.upload_details = _add_dropdown(ul, "upload")
-        self.upload_text = BodyLabel("")
-        self.upload_text.setWordWrap(True)
-        ul.insertWidget(1, self.upload_text)
-        content_layout.addWidget(self.upload_card)
-
-        self.batch_card, bl = _make_card()
-        self.batch_title, self.batch_toggle_btn, self.batch_details_card, self.batch_details = _add_dropdown(bl, "batch")
-        self.batch_text = BodyLabel("")
-        self.batch_text.setWordWrap(True)
-        bl.insertWidget(1, self.batch_text)
-        content_layout.addWidget(self.batch_card)
-
         self.history_card, hl = _make_card()
         self.history_title, self.history_toggle_btn, self.history_details_card, self.history_details = _add_dropdown(hl, "history")
         self.history_text = BodyLabel("")
@@ -215,20 +201,6 @@ class InfoScreen(ResponsiveWidget):
         self.translations_text.setWordWrap(True)
         tl.insertWidget(1, self.translations_text)
         content_layout.addWidget(self.translations_card)
-
-        self.descriptions_card, dl = _make_card()
-        self.descriptions_title, self.descriptions_toggle_btn, self.descriptions_details_card, self.descriptions_details = _add_dropdown(dl, "descriptions")
-        self.descriptions_text = BodyLabel("")
-        self.descriptions_text.setWordWrap(True)
-        dl.insertWidget(1, self.descriptions_text)
-        content_layout.addWidget(self.descriptions_card)
-
-        self.folders_card, fl = _make_card()
-        self.folders_title, self.folders_toggle_btn, self.folders_details_card, self.folders_details = _add_dropdown(fl, "folders")
-        self.folders_text = BodyLabel("")
-        self.folders_text.setWordWrap(True)
-        fl.insertWidget(1, self.folders_text)
-        content_layout.addWidget(self.folders_card)
 
         self.settings_card, sl = _make_card()
         self.settings_title, self.settings_toggle_btn, self.settings_details_card, self.settings_details = _add_dropdown(sl, "settings")
@@ -314,16 +286,6 @@ class InfoScreen(ResponsiveWidget):
         self.login_details.setText(tr("info.login.details"))
         self.login_toggle_btn.setToolTip(tr("info.more.tooltip"))
 
-        self.upload_title.setText(tr("info.upload.title"))
-        self.upload_text.setText(tr("info.upload.text"))
-        self.upload_details.setText(tr("info.upload.details"))
-        self.upload_toggle_btn.setToolTip(tr("info.more.tooltip"))
-
-        self.batch_title.setText(tr("info.batch.title"))
-        self.batch_text.setText(tr("info.batch.text"))
-        self.batch_details.setText(tr("info.batch.details"))
-        self.batch_toggle_btn.setToolTip(tr("info.more.tooltip"))
-
         self.history_title.setText(tr("info.history.title"))
         self.history_text.setText(tr("info.history.text"))
         self.history_details.setText(tr("info.history.details"))
@@ -333,16 +295,6 @@ class InfoScreen(ResponsiveWidget):
         self.translations_text.setText(tr("info.translations.text"))
         self.translations_details.setText(tr("info.translations.details"))
         self.translations_toggle_btn.setToolTip(tr("info.more.tooltip"))
-
-        self.descriptions_title.setText(tr("info.descriptions.title"))
-        self.descriptions_text.setText(tr("info.descriptions.text"))
-        self.descriptions_details.setText(tr("info.descriptions.details"))
-        self.descriptions_toggle_btn.setToolTip(tr("info.more.tooltip"))
-
-        self.folders_title.setText(tr("info.folders.title"))
-        self.folders_text.setText(tr("info.folders.text"))
-        self.folders_details.setText(tr("info.folders.details"))
-        self.folders_toggle_btn.setToolTip(tr("info.more.tooltip"))
 
         self.settings_title.setText(tr("info.settings.title"))
         self.settings_text.setText(tr("info.settings.text"))

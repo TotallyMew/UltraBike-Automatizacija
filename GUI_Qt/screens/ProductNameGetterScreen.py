@@ -132,7 +132,7 @@ class ProductNameGetterScreen(CodeGetterScreen):
         self._worker.log.connect(lambda msg: print(f"[ProductNameGetter] {msg}"))
         if hasattr(self.main, "track_worker"):
             self.main.track_worker(
-                self._worker, "name_scanner", "product_name_getter"
+                self._worker, "name_scanner", "product_lookup"
             )
         self._worker.start()
 

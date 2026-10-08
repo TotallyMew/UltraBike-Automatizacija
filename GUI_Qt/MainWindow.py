@@ -35,7 +35,7 @@ from GUI_Qt.styles.screen_theme import (
 )
 from GUI_Qt.components.accessibility import apply_accessibility_defaults
 from GUI_Qt.i18n import I18nManager, translate
-from GUI_Qt.routes import NAV_GROUPS, ROUTES, ROUTE_REGISTRY
+from GUI_Qt.routes import DEFAULT_ROUTE, NAV_GROUPS, ROUTES, ROUTE_REGISTRY
 from GUI_Qt.services import (
     ErrorPresentationService,
     NavigationService,
@@ -126,25 +126,18 @@ class MainWindow(FluentWindow):
 
         # Cached for current run after master unlock/setup
         self._unlocked_master_password = None
-        self.upload_screen = None
-        self.unified_batch_screen = None
-        self.history_screen = None
+        self.full_history_screen = None
+        self.product_lookup_screen = None
         self.earnings_screen = None
         self.spotify_screen = None
         self.activity_screen = None
-        self._full_history_screen = None  # Full detailed history view (accessed from Analytics)
         self.translations_screen = None
-        self.descriptions_screen = None
-        self.folder_creator_screen = None
         self.basso_images_screen = None
         self.pinarello_images_screen = None
         self.account_screen = None
         self.settings_screen = None
         self.info_screen = None
         self.spec_checker_screen = None
-        self.name_getter_screen = None
-        self.code_getter_screen = None
-        self.product_name_getter_screen = None
         self.castelli_url_getter_screen = None
         self.castelli_image_downloader_screen = None
         self.abus_url_getter_screen = None
@@ -226,10 +219,8 @@ class MainWindow(FluentWindow):
         # Only the heavy ones that typically lag on first visit.
         self._screen_preload_queue = [
             "orbea",
-            "batch",
             "history",
             "translations",
-            "descriptions",
             "activity",
             "spotify",
         ]
@@ -268,24 +259,18 @@ class MainWindow(FluentWindow):
                 return
 
             mapping = [
-                (getattr(self, 'upload_screen', None), "nav.upload"),
-                (getattr(self, 'unified_batch_screen', None), "nav.batch"),
-                (getattr(self, 'history_screen', None), "nav.analytics"),
+                (getattr(self, 'full_history_screen', None), "nav.history"),
+                (getattr(self, 'product_lookup_screen', None), "nav.product_lookup"),
                 (getattr(self, 'earnings_screen', None), "nav.earnings"),
                 (getattr(self, 'spotify_screen', None), "nav.spotify"),
                 (getattr(self, 'activity_screen', None), "nav.activity"),
                 (getattr(self, 'translations_screen', None), "nav.translations"),
-                (getattr(self, 'descriptions_screen', None), "nav.descriptions"),
-                (getattr(self, 'folder_creator_screen', None), "nav.folders"),
                 (getattr(self, 'basso_images_screen', None), "nav.basso_images"),
                 (getattr(self, 'pinarello_images_screen', None), "nav.pinarello_images"),
                 (getattr(self, 'account_screen', None), "nav.account"),
                 (getattr(self, 'settings_screen', None), "nav.settings"),
                 (getattr(self, 'info_screen', None), "nav.info"),
                 (getattr(self, 'spec_checker_screen', None), "nav.spec_checker"),
-                (getattr(self, 'name_getter_screen', None), "nav.name_getter"),
-                (getattr(self, 'code_getter_screen', None), "nav.code_getter"),
-                (getattr(self, 'product_name_getter_screen', None), "nav.product_name_getter"),
                 (getattr(self, 'castelli_url_getter_screen', None), "nav.castelli_url_getter"),
                 (getattr(self, 'castelli_image_downloader_screen', None), "nav.castelli_images"),
                 (getattr(self, 'abus_url_getter_screen', None), "nav.abus_url_getter"),
@@ -370,7 +355,7 @@ class MainWindow(FluentWindow):
                 "window_height": geometry.height(),
                 "window_maximized": self.isMaximized(),
                 "navigation_compact": bool(self._last_navigation_compact),
-                "last_authenticated_route": self._current_route or "upload",
+                "last_authenticated_route": self._current_route or DEFAULT_ROUTE,
             }
         )
 
@@ -787,24 +772,18 @@ class MainWindow(FluentWindow):
             # Notify screens if they implement live retranslation
             for screen in (
                 getattr(self, "top_bar", None),
-                getattr(self, "upload_screen", None),
-                getattr(self, "unified_batch_screen", None),
-                getattr(self, "history_screen", None),
+                getattr(self, "full_history_screen", None),
+                getattr(self, "product_lookup_screen", None),
                 getattr(self, "earnings_screen", None),
                 getattr(self, "spotify_screen", None),
                 getattr(self, "activity_screen", None),
                 getattr(self, "translations_screen", None),
-                getattr(self, "descriptions_screen", None),
-                getattr(self, "folder_creator_screen", None),
                 getattr(self, "basso_images_screen", None),
                 getattr(self, "pinarello_images_screen", None),
                 getattr(self, "account_screen", None),
                 getattr(self, "settings_screen", None),
                 getattr(self, "info_screen", None),
                 getattr(self, "spec_checker_screen", None),
-                getattr(self, "name_getter_screen", None),
-                getattr(self, "code_getter_screen", None),
-                getattr(self, "product_name_getter_screen", None),
                 getattr(self, "castelli_url_getter_screen", None),
                 getattr(self, "castelli_image_downloader_screen", None),
                 getattr(self, "abus_url_getter_screen", None),
@@ -1393,10 +1372,9 @@ class MainWindow(FluentWindow):
         # If any screens were pre-constructed before content_stack existed, add them now.
         self._add_created_screens_to_stack()
 
-        # Restore the last authenticated route when it is still registered.
+        # Earnings is the landing page after sign-in, regardless of the last page.
         self._current_route = None
-        saved_route = str(self.settings.get("last_authenticated_route", "upload") or "upload")
-        self.open_route(saved_route if saved_route in self.ROUTES else "upload")
+        self.open_route(DEFAULT_ROUTE)
         self._sync_navigation_for_width(force=True)
         apply_accessibility_defaults(self._main_container)
 
@@ -1723,19 +1701,6 @@ class MainWindow(FluentWindow):
                 pass
             return 0
 
-    def start_batch_processing(self, items):
-        """
-        Start batch processing with collected items
-
-        Args:
-            items: List of {brand, code, url} dicts
-        """
-        # Switch to upload screen
-        self.open_route("upload")
-
-        # Trigger batch processing in upload screen
-        if self.upload_screen:
-            self.upload_screen.show_batch_processing(items)
 
     def _apply_saved_theme(self):
         """Apply saved theme from settings"""

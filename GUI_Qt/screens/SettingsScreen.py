@@ -421,24 +421,6 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
         features_header.addStretch()
         features_layout.addLayout(features_header)
 
-        # Download images toggle
-        download_images_layout = QHBoxLayout()
-        download_images_info = QVBoxLayout()
-        download_images_label = BodyLabel(translate(self._preview_lang_code, "settings.features.download.title"))
-        self._ui["download_images_label"] = download_images_label
-        download_images_label.setStyleSheet("font-weight: 500;")
-        download_images_sublabel = CaptionLabel(translate(self._preview_lang_code, "settings.features.download.desc"))
-        self._ui["download_images_sublabel"] = download_images_sublabel
-        download_images_info.addWidget(download_images_label)
-        download_images_info.addWidget(download_images_sublabel)
-
-        self.download_images_switch = SwitchButton()
-
-        download_images_layout.addLayout(download_images_info)
-        download_images_layout.addStretch()
-        download_images_layout.addWidget(self.download_images_switch)
-        features_layout.addLayout(download_images_layout)
-
         # Product-page MagicAI templates are configurable here.  The desktop
         # app never opens or changes PIMBO's template administration page.
         magic_title_layout = QHBoxLayout()
@@ -472,67 +454,6 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
         magic_description_layout.addStretch()
         magic_description_layout.addWidget(self.magic_description_template_field)
         features_layout.addLayout(magic_description_layout)
-
-        # Auto-delete pabaigta*.txt toggle
-        auto_delete_layout = QHBoxLayout()
-        auto_delete_info = QVBoxLayout()
-        auto_delete_label = BodyLabel(translate(self._preview_lang_code, "settings.features.auto_delete_pabaigta.title"))
-        self._ui["auto_delete_label"] = auto_delete_label
-        auto_delete_label.setStyleSheet("font-weight: 500;")
-        auto_delete_sublabel = CaptionLabel(translate(self._preview_lang_code, "settings.features.auto_delete_pabaigta.desc"))
-        self._ui["auto_delete_sublabel"] = auto_delete_sublabel
-        auto_delete_info.addWidget(auto_delete_label)
-        auto_delete_info.addWidget(auto_delete_sublabel)
-
-        self.auto_delete_pabaigta_switch = SwitchButton()
-
-        auto_delete_layout.addLayout(auto_delete_info)
-        auto_delete_layout.addStretch()
-        auto_delete_layout.addWidget(self.auto_delete_pabaigta_switch)
-        features_layout.addLayout(auto_delete_layout)
-
-        # Multi-session toggle
-        multi_session_layout = QHBoxLayout()
-        multi_session_info = QVBoxLayout()
-        multi_session_label = BodyLabel(translate(self._preview_lang_code, "settings.features.multi_session.title"))
-        self._ui["multi_session_label"] = multi_session_label
-        multi_session_label.setStyleSheet("font-weight: 500;")
-        multi_session_sublabel = CaptionLabel(translate(self._preview_lang_code, "settings.features.multi_session.desc"))
-        self._ui["multi_session_sublabel"] = multi_session_sublabel
-        multi_session_info.addWidget(multi_session_label)
-        multi_session_info.addWidget(multi_session_sublabel)
-
-        self.multi_session_switch = SwitchButton()
-        try:
-            self.multi_session_switch.checkedChanged.connect(self._on_multi_session_change)
-        except Exception:
-            pass
-
-        multi_session_layout.addLayout(multi_session_info)
-        multi_session_layout.addStretch()
-        multi_session_layout.addWidget(self.multi_session_switch)
-        features_layout.addLayout(multi_session_layout)
-
-        # Browser count (used when multi-session is enabled)
-        browser_count_layout = QHBoxLayout()
-        browser_count_info = QVBoxLayout()
-        browser_count_label = BodyLabel(translate(self._preview_lang_code, "settings.features.browser_count.label"))
-        self._ui["browser_count_label"] = browser_count_label
-        browser_count_label.setStyleSheet("font-weight: 500;")
-        browser_count_caption = CaptionLabel(translate(self._preview_lang_code, "settings.features.browser_count.caption"))
-        self._ui["browser_count_caption"] = browser_count_caption
-        browser_count_info.addWidget(browser_count_label)
-        browser_count_info.addWidget(browser_count_caption)
-
-        self.browser_count_combo = ComboBox()
-        self.browser_count_combo.addItems(["2", "3", "4"])
-        self.browser_count_combo.setMinimumWidth(SIZES['field_min_width_md'])
-        self.browser_count_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-
-        browser_count_layout.addLayout(browser_count_info)
-        browser_count_layout.addStretch()
-        browser_count_layout.addWidget(self.browser_count_combo)
-        features_layout.addLayout(browser_count_layout)
 
         layout.addWidget(features_card)
 
@@ -817,14 +738,8 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
 
         # ComboBoxes
         self.browser_combo.currentTextChanged.connect(lambda: self._mark_dirty())
-        if hasattr(self, 'browser_count_combo'):
-            self.browser_count_combo.currentTextChanged.connect(lambda: self._mark_dirty())
 
         # Switches
-        self.download_images_switch.checkedChanged.connect(lambda: self._mark_dirty())
-        self.auto_delete_pabaigta_switch.checkedChanged.connect(lambda: self._mark_dirty())
-        if hasattr(self, 'multi_session_switch'):
-            self.multi_session_switch.checkedChanged.connect(lambda: self._mark_dirty())
         self.update_check_switch.checkedChanged.connect(lambda: self._mark_dirty())
         # Text fields
         self.kross_path_field.textChanged.connect(lambda: self._mark_dirty())
@@ -850,30 +765,12 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
             self.browser_combo.setCurrentIndex(index)
 
         # Load feature toggles
-        self.download_images_switch.setChecked(self.main.settings.get('download_images', False))
-        self.auto_delete_pabaigta_switch.setChecked(self.main.settings.get('auto_delete_pabaigta_files', False))
         self.magic_title_template_field.setText(
             self.main.settings.get('magicai_title_template', 'Prekės pavadinimas')
         )
         self.magic_description_template_field.setText(
             self.main.settings.get('magicai_description_template', 'Aprašymas LT')
         )
-
-        # Load multi-session + browser count
-        if hasattr(self, 'multi_session_switch'):
-            self.multi_session_switch.setChecked(self.main.settings.get('multi_session_enabled', False))
-        if hasattr(self, 'browser_count_combo'):
-            try:
-                bc = int(self.main.settings.get('browser_count', 2))
-            except Exception:
-                bc = 2
-            if bc < 2:
-                bc = 2
-            if bc > 4:
-                bc = 4
-            self.browser_count_combo.setCurrentText(str(bc))
-
-        self._update_multi_session_enabled_state()
 
         # Load theme
         theme = self.main.settings.get('theme', 'light')
@@ -970,10 +867,6 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
 
         if "features_title" in self._ui:
             self._ui["features_title"].setText(tr("settings.features.title"))
-        if "download_images_label" in self._ui:
-            self._ui["download_images_label"].setText(tr("settings.features.download.title"))
-        if "download_images_sublabel" in self._ui:
-            self._ui["download_images_sublabel"].setText(tr("settings.features.download.desc"))
         if "magic_title_label" in self._ui:
             self._ui["magic_title_label"].setText(tr("settings.features.magic_title.title"))
         if "magic_title_caption" in self._ui:
@@ -982,19 +875,7 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
             self._ui["magic_description_label"].setText(tr("settings.features.magic_description.title"))
         if "magic_description_caption" in self._ui:
             self._ui["magic_description_caption"].setText(tr("settings.features.magic_description.desc"))
-        if "auto_delete_label" in self._ui:
-            self._ui["auto_delete_label"].setText(tr("settings.features.auto_delete_pabaigta.title"))
-        if "auto_delete_sublabel" in self._ui:
-            self._ui["auto_delete_sublabel"].setText(tr("settings.features.auto_delete_pabaigta.desc"))
 
-        if "multi_session_label" in self._ui:
-            self._ui["multi_session_label"].setText(tr("settings.features.multi_session.title"))
-        if "multi_session_sublabel" in self._ui:
-            self._ui["multi_session_sublabel"].setText(tr("settings.features.multi_session.desc"))
-        if "browser_count_label" in self._ui:
-            self._ui["browser_count_label"].setText(tr("settings.features.browser_count.label"))
-        if "browser_count_caption" in self._ui:
-            self._ui["browser_count_caption"].setText(tr("settings.features.browser_count.caption"))
 
         if "theme_title" in self._ui:
             self._ui["theme_title"].setText(tr("settings.appearance.title"))
@@ -1215,17 +1096,10 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
             )
             language_code = normalize_language(language, current_language)
             browser = self.browser_combo.currentText()
-            download_images = self.download_images_switch.isChecked()
-            auto_delete_pabaigta = self.auto_delete_pabaigta_switch.isChecked()
             magic_title_template = self.magic_title_template_field.text().strip()
             magic_description_template = self.magic_description_template_field.text().strip()
             if not magic_title_template or not magic_description_template:
                 raise ValueError("MagicAI template names cannot be empty")
-            multi_session_enabled = self.multi_session_switch.isChecked() if hasattr(self, 'multi_session_switch') else False
-            try:
-                browser_count = int(self.browser_count_combo.currentText().strip()) if hasattr(self, 'browser_count_combo') else 2
-            except Exception:
-                browser_count = 2
             theme_is_dark = self.theme_switch.isChecked()
             theme_name = 'dark' if theme_is_dark else 'light'
             kross_path = self.kross_path_field.text()
@@ -1237,12 +1111,8 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
             new_settings = {
                 'language': Language(language_code).display,
                 'browser_choice': browser,
-                'download_images': download_images,
-                'auto_delete_pabaigta_files': auto_delete_pabaigta,
                 'magicai_title_template': magic_title_template,
                 'magicai_description_template': magic_description_template,
-                'multi_session_enabled': bool(multi_session_enabled),
-                'browser_count': int(browser_count),
                 'theme': theme_name,
                 'update_check_enabled': bool(update_check_enabled),
             }
@@ -1369,7 +1239,6 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
         for name in (
             "language_combo",
             "browser_combo",
-            "browser_count_combo",
             "magic_title_template_field",
             "magic_description_template_field",
         ):
@@ -1419,19 +1288,3 @@ class SettingsScreen(ResponsiveWidget, KeyboardNavigationMixin):
 
         # Settings should NOT show text background bars.
         enforce_transparent_labels(self)
-
-    def _on_multi_session_change(self, checked) -> None:
-        if self._loading:
-            return
-        self._update_multi_session_enabled_state()
-
-    def _update_multi_session_enabled_state(self) -> None:
-        try:
-            enabled = bool(self.multi_session_switch.isChecked())
-        except Exception:
-            enabled = False
-
-        try:
-            self.browser_count_combo.setEnabled(enabled)
-        except Exception:
-            pass

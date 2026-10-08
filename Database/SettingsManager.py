@@ -98,8 +98,8 @@ class SettingsManager:
             ('navigation_compact', 'true', 'bool', 'ui',
              'Last navigation rail state', 'true'),
 
-            ('last_authenticated_route', 'upload', 'string', 'ui',
-             'Last authenticated page route', 'upload'),
+            ('last_authenticated_route', 'earnings', 'string', 'ui',
+             'Last authenticated page route', 'earnings'),
 
             ('theme', 'light', 'string', 'ui',
              'UI theme (light/dark)', 'light'),

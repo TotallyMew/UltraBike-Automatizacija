@@ -1,9 +1,9 @@
 # Brand options reference
 
-These options apply to the standard [Upload](../GUI_Qt/screens/UploadScreen.py) and
-[Unified Batch](../GUI_Qt/screens/UnifiedBatchScreen.py) workflows. KROSS and Orbea's
-supplier pages use separate stage-selection objects described in
-[pimbo-workflow.md](pimbo-workflow.md).
+This reference describes the retained supplier adapter library. The standalone
+Upload and Unified Batch screens have been retired; these adapters are kept for
+future dedicated bulk screens. KROSS and Orbea use separate stage-selection
+objects described in [pimbo-workflow.md](pimbo-workflow.md).
 
 ## Supported options
 
@@ -17,8 +17,8 @@ supplier pages use separate stage-selection objects described in
 | `preferred_size` | TREK | Exact supplier size label. Required when specifications differ by size; an unavailable size fails. |
 
 `append_order_note=True` is rejected because order-note upload is not implemented.
-The standard GUI has a Pinarello frameset checkbox. Rascal/TREK selection controls
-are still pending; ambiguous pages stop safely instead of selecting a variant.
+Future dedicated screens must supply Pinarello, Rascal, and TREK selections
+explicitly; ambiguous source pages stop instead of selecting a variant.
 
 ## Normalization and batch forwarding
 
@@ -30,12 +30,11 @@ spaces. Empty values default to `False`; invalid boolean text raises an error.
 Description names are trimmed; empty names become `None`.
 
 Batch processor items can carry options at the top level or under `brand_options`.
-Top-level values take precedence. Workers preserve the options when forwarding an
-item. Unknown keys are carried through for future adapters; they do not imply an
+Top-level values take precedence. The processor preserves these options when forwarding an item. Unknown keys are carried through for future adapters; they do not imply an
 implemented behavior. Only options listed above are supported today.
 
 ```python
-# Options for constructing a Pinarello uploader in the existing app context:
+# Options for a future dedicated Pinarello workflow:
 from Uploaders.Pinarello import Pinarello
 
 uploader = Pinarello(

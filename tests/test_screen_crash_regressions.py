@@ -17,7 +17,7 @@ def _pump(app: QApplication, cycles: int = 4) -> None:
         app.processEvents()
 
 
-def test_batch_resize_and_info_retheme_do_not_reenter_qt(tmp_path, monkeypatch) -> None:
+def test_lookup_resize_and_info_retheme_do_not_reenter_qt(tmp_path, monkeypatch) -> None:
     """Exercise the two native access-violation paths found in the UI audit."""
     monkeypatch.setenv("ULTRABIKE_DATA_DIR", str(tmp_path))
     app = QApplication.instance() or QApplication([])
@@ -33,12 +33,12 @@ def test_batch_resize_and_info_retheme_do_not_reenter_qt(tmp_path, monkeypatch) 
         window.cancel_screen_preload()
         _pump(app)
 
-        assert window.open_route("batch")
+        assert window.open_route("product_lookup")
         _pump(app)
         for width, height in ((920, 700), (1440, 960), (760, 680), (1280, 820)):
             window.resize(width, height)
             _pump(app)
-            assert window.content_stack.currentWidget() is window.unified_batch_screen
+            assert window.content_stack.currentWidget() is window.product_lookup_screen
 
         assert window.open_route("info")
         _pump(app)
