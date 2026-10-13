@@ -1,2 +1,0 @@
-"""UltraBike automated tests."""
-

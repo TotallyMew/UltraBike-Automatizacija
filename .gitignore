@@ -16,6 +16,7 @@ htmlcov/
 dist/
 build/
 *.whl
+/tests/
 
 # ==========================================
 # PyInstaller
@@ -28,7 +29,8 @@ build/
 *.pyz
 warn-*.txt
 xref-*.html
-
+*.zip
+*.json
 # ==========================================
 # Virtual Environments
 # ==========================================
@@ -173,3 +175,5 @@ tools/count_loc.py
 *.cmd
 *.docx
 *.csv
+*.html
+*.htmlcov
