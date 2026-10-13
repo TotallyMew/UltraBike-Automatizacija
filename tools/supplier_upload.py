@@ -29,6 +29,8 @@ class SupplierUploadWorkflow:
     size_table_name = "size-height-table.png"
     required_specification_fields = ("Modelis", "Spalva", "Lako užbaigimas", "Ratų dydis")
     requires_source_specifications = False
+    replace_geometry_images = False
+    replace_size_table_images = False
     specification_value_migrations = (('Svoris', 'Dviračio svoris (kg)'),)
 
     def specification_ai_exclusions(self, match, product):
@@ -239,6 +241,9 @@ class SupplierUploadWorkflow:
                 add_warning('Geometry', f'No dimensions table was found in {image_root}')
             if selected.size_tables and size_chart_image is None and not size_tables_unavailable:
                 add_warning('Size tables', f'No SIZE/HEIGHT table was found in {image_root}')
+        table_preflight_failed = (self.replace_geometry_images or self.replace_size_table_images) and (
+            (selected.geometry and dimensions_image is None and not geometry_unavailable)
+            or (selected.size_tables and size_chart_image is None and not size_tables_unavailable))
         table_paths = self.table_upload_paths(dimensions_image, size_chart_image)
         downloaded_image_paths = photo_paths + table_paths
         if using_local_package and progress:
@@ -256,7 +261,7 @@ class SupplierUploadWorkflow:
         family_ready: Any = None
         description_ready: Any = None
         description_unavailable = bool(product and getattr(product, 'description_unavailable', False))
-        unsafe_phase_one = False
+        unsafe_phase_one = bool(table_preflight_failed)
         raw_specification_source = product.specification_text if (selected.specifications_prefill or selected.specifications_magic_ai) and product else ''
         missing_required_source = bool((selected.specifications_magic_ai or
             (self.requires_source_specifications and selected.specifications_prefill)) and not raw_specification_source.strip())
@@ -307,6 +312,11 @@ class SupplierUploadWorkflow:
                 return replace(preparation, status=PimPreparationStatus.FAILED,
                     warnings=tuple(warnings), error='Selected stages did not complete: ' + '; '.join(warnings))
             if preparation.status == PimPreparationStatus.FAILED and preparation.error == 'PIMBO form has no reviewable unsaved changes':
+                replacements = ((self.replace_geometry_images and 'geometry_images' in preparation.changed_fields)
+                                or (self.replace_size_table_images and 'size_table_images' in preparation.changed_fields))
+                if replacements:
+                    return replace(preparation, failed_stage='save',
+                                   error='Table attachment persistence was not verified; retry the table upload')
                 return replace(preparation, status=PimPreparationStatus.NO_CHANGES, error='', warnings=tuple(warnings))
             return replace(preparation, warnings=tuple(warnings))
 
@@ -354,13 +364,14 @@ class SupplierUploadWorkflow:
                 inspect_photos = getattr(editor, 'prepare_product_photo_upload', None)
                 should_upload = inspect_photos(has_replacements=bool(photo_paths)) if callable(inspect_photos) else bool(photo_paths)
                 photo_upload = dict(getattr(editor, 'photo_upload', {}) or {})
-                if photo_upload.get('placeholders_removed'):
+                if photo_upload.get('photos_removed') or photo_upload.get('placeholders_removed'):
                     changed_fields.append('images')
-                if photo_upload.get('action') == 'skipped_existing':
-                    if progress:
-                        progress('Product photos skipped because PIMBO already has real photos')
-                elif not photo_paths:
+                if not photo_paths:
                     raise PimAutomationError(f'No product photos were found in {image_root}' if using_local_package else f'No {self.supplier_label} product photos could be downloaded')
+                if not should_upload:
+                    raise PimAutomationError('The product-photo gallery was not prepared for replacement')
+                if photo_upload.get('photos_removed') and progress:
+                    progress(f'Removed {photo_upload["photos_removed"]} existing product photo(s); uploading downloaded replacements')
                 total_photos = len(photo_paths) if should_upload else 0
                 batches = tuple((photo_paths[index:index + PRODUCT_PHOTO_UPLOAD_BATCH_SIZE] for index in range(0, total_photos, PRODUCT_PHOTO_UPLOAD_BATCH_SIZE)))
                 for batch_index, batch in enumerate(batches):
@@ -383,27 +394,58 @@ class SupplierUploadWorkflow:
                 observed = dict(getattr(editor, 'photo_upload', {}) or {})
                 photo_upload = {**observed, **photo_upload} if photo_upload.get('action') == 'failed' else observed
                 photo_upload.setdefault('action', 'uploaded' if uploaded_photo_count else 'missing_photos')
-                photo_upload['uploaded_photos'] = uploaded_photo_count
-                if (uploaded_photo_count or photo_upload.get('placeholders_removed')) and 'images' not in changed_fields:
+                photo_upload['uploaded_photos'] = max(uploaded_photo_count, int(observed.get('uploaded_photos', 0)))
+                if (photo_upload.get('uploaded_photos') or photo_upload.get('photos_removed') or photo_upload.get('placeholders_removed')) and 'images' not in changed_fields:
                     changed_fields.append('images')
-        if size_chart_image is not None:
+        # Orbea can arrange already-uploaded photos independently. New uploads
+        # also receive this order after all media attachments are confirmed.
+        arrange_photos = getattr(self, 'arrange_product_photos', None)
+        if callable(arrange_photos) and (getattr(selected, 'photo_order', False) or
+                                        (photo_upload.get('uploaded_photos', 0) > 0 and
+                                         self.can_arrange_product_photos(image_root))):
+            try:
+                if photo_upload.get('action') == 'failed':
+                    raise PimAutomationError('Finish the failed photo upload before arranging its gallery')
+                if progress:
+                    progress('Arranging Orbea photos: side → front → back')
+                if arrange_photos(editor, image_root) and 'images' not in changed_fields:
+                    changed_fields.append('images')
+                if getattr(selected, 'photo_order', False):
+                    completed_stages.append('photo_order')
+            except Exception as error:
+                add_warning('Product photo order', error)
+                editor.photo_upload = dict(getattr(editor, 'photo_upload', {}) or {})
+                editor.photo_upload.update(order_action='failed', order_error=str(error))
+            finally:
+                photo_upload = dict(getattr(editor, 'photo_upload', {}) or photo_upload)
+        if size_chart_image is not None and not table_preflight_failed:
             try:
                 if progress:
                     progress(f'Uploading the {self.supplier_label} SIZE/HEIGHT crop to Size tables')
-                if editor.upload_size_table_images((size_chart_image,), skip_if_present=False):
+                size_kwargs = {"skip_if_present": False}
+                if self.replace_size_table_images:
+                    size_kwargs["replace_existing"] = True
+                if editor.upload_size_table_images((size_chart_image,), **size_kwargs):
                     changed_fields.append('size_table_images')
                 completed_stages.append('size_tables')
             except Exception as error:
                 add_warning('Size tables', error)
-        if dimensions_image is not None:
+                if self.replace_size_table_images:
+                    unsafe_phase_one = True
+        if dimensions_image is not None and not table_preflight_failed:
             try:
                 if progress:
-                    progress(f'Uploading the full {self.supplier_label} table to Geometry')
-                if editor.upload_geometry_images(self.geometry_upload_paths(dimensions_image), skip_if_present=False):
+                    progress(f'{"Replacing" if self.replace_geometry_images else "Uploading"} the {self.supplier_label} Geometry images')
+                geometry_kwargs = {"skip_if_present": False}
+                if self.replace_geometry_images:
+                    geometry_kwargs["replace_existing"] = True
+                if editor.upload_geometry_images(self.geometry_upload_paths(dimensions_image), **geometry_kwargs):
                     changed_fields.append('geometry_images')
                 completed_stages.append('geometry')
             except Exception as error:
                 add_warning('Geometry', error)
+                if self.replace_geometry_images:
+                    unsafe_phase_one = True
         for stage, unavailable in (("geometry", geometry_unavailable), ("size_tables", size_tables_unavailable)):
             if getattr(selected, stage) and unavailable:
                 completed_stages.append(stage)
@@ -547,6 +589,10 @@ class SupplierUploadWorkflow:
         prepared = normalize_preparation(editor.finish(base, changed_fields=changed_fields, ai_steps=ai_steps, warnings=warnings))
         if not selected.save:
             return make_result(prepared)
+        if prepared.status == PimPreparationStatus.SAVED_AUTOMATICALLY:
+            completed_stages.append('save')  # Attachments persisted and were verified without form Save.
+            if progress and set(prepared.changed_fields) & {'geometry_images', 'size_table_images'}:
+                progress('Table attachments saved immediately and verified after reload; no form Save was needed')
         if unsafe_phase_one:
             prepared = replace(prepared, status=PimPreparationStatus.FAILED, warnings=tuple(warnings), error='Automatic Save was blocked because a required stage failed; the product was left unsaved. ' + prepared.error)
             return make_result(prepared)

@@ -64,6 +64,17 @@ class TimerSnapshot:
     expired: bool = False
 
 
+@dataclass(frozen=True)
+class BulkEarningResult:
+    entry_ids: tuple[int, ...]
+    skipped_skus: tuple[str, ...]
+    payout_cents: int
+
+    @property
+    def count(self) -> int:
+        return len(self.entry_ids)
+
+
 def utc_now() -> datetime:
     return datetime.now(UTC)
 
@@ -474,6 +485,88 @@ class EarningsManager:
         self.db.conn.commit()
         self.complete_goal_if_reached(now=stamp_dt)
         return int(cursor.lastrowid)
+
+    def preview_bulk_entries(
+        self, entries: Iterable[dict[str, Any]], *, allow_duplicates: bool = False
+    ) -> list[dict[str, Any]]:
+        """Validate pasted products and show which rows would be added.
+
+        Repeated SKUs in the input and existing earnings are skipped by
+        default. Explicitly allowing duplicates matches single-entry adding.
+        """
+        preview = []
+        seen: set[str] = set()
+        existing: dict[str, bool] = {}
+        for index, entry in enumerate(entries, 1):
+            sku = str(entry.get("sku") or "").strip()
+            if not sku:
+                raise ValueError(f"SKU is required on row {index}")
+            key = sku.casefold()
+            if key not in existing:
+                existing[key] = bool(self.duplicate_sku_count(sku))
+            duplicate = key in seen or existing[key]
+            preview.append({
+                "sku": sku,
+                "product_name": self._optional(entry.get("product_name")),
+                "duplicate": duplicate,
+                "include": allow_duplicates or not duplicate,
+            })
+            seen.add(key)
+        if not preview:
+            raise ValueError("Enter at least one SKU")
+        return preview
+
+    def bulk_create_entries(
+        self,
+        entries: Iterable[dict[str, Any]],
+        product_type: str | ProductType,
+        *,
+        brand_id: int | None = None,
+        earned_at: datetime | str | None = None,
+        allow_duplicates: bool = False,
+        now: datetime | None = None,
+    ) -> BulkEarningResult:
+        """Add manual earnings atomically, using one rate and timer snapshot."""
+        entries = list(entries)
+        stamp_dt = now or utc_now()
+        stamp = to_utc_iso(stamp_dt)
+        earned_stamp = self._normalize_user_datetime(earned_at, stamp_dt)
+        ptype = self._product_type(product_type)
+        with self.db.write_lock:
+            if brand_id is not None:
+                if not self._brand(brand_id)["is_active"]:
+                    raise ValueError("Archived brands cannot be used for new entries")
+            # Validate before changing timer state or starting any entry writes.
+            preview = self.preview_bulk_entries(entries, allow_duplicates=allow_duplicates)
+            self.sync_timer(now=stamp_dt)
+            active = self._unfinished_session()
+            session_id = (
+                int(active["id"])
+                if active and active["status"] == SessionStatus.RUNNING.value
+                else None
+            )
+            payout = self.get_rate_cents(ptype)
+            ids = []
+            with self.db.conn:
+                for row in preview:
+                    if not row["include"]:
+                        continue
+                    cursor = self.db.conn.execute(
+                        """INSERT INTO earning_entries
+                        (sku, product_name, brand_id, product_type, payout_cents,
+                         earned_at, source, session_id, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, 'manual', ?, ?, ?)""",
+                        (row["sku"], row["product_name"], brand_id, ptype, payout,
+                         earned_stamp, session_id, stamp, stamp),
+                    )
+                    ids.append(int(cursor.lastrowid))
+                if ids:
+                    self._complete_goal_if_reached(now=stamp_dt)
+            return BulkEarningResult(
+                tuple(ids),
+                tuple(row["sku"] for row in preview if not row["include"]),
+                len(ids) * payout,
+            )
 
     def update_entry(
         self,
@@ -1259,6 +1352,13 @@ class EarningsManager:
         self.db.conn.commit()
 
     def complete_goal_if_reached(self, now: datetime | None = None) -> bool:
+        completed = self._complete_goal_if_reached(now=now)
+        if completed:
+            self.db.conn.commit()
+        return completed
+
+    def _complete_goal_if_reached(self, now: datetime | None = None) -> bool:
+        """Update goal state without committing an enclosing entry transaction."""
         goal = self.active_goal()
         if not goal:
             return False
@@ -1278,7 +1378,6 @@ class EarningsManager:
                 progress["tracked_seconds"], stamp, goal["id"],
             ),
         )
-        self.db.conn.commit()
         return True
 
     def goal_progress(self, goal_id: int, now: datetime | None = None) -> dict[str, Any]:

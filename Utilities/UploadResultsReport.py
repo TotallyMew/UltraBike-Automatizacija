@@ -13,7 +13,7 @@ STATUS_LABELS = {
     "discarded": "Discarded", "unprocessed": "Unprocessed", "not_ready": "Not ready",
 }
 PHOTO_LABELS = {
-    "uploaded": "Uploaded", "skipped_existing": "Skipped: real photos already present",
+    "uploaded": "Uploaded", "reordered": "Photos arranged: side → front → back", "already_ordered": "Photos already in order", "skipped_existing": "Skipped: real photos already present",
     "missing_photos": "No replacement photos available", "failed": "Failed",
     "ready": "Checked; upload not completed", "checking": "Inspection not completed",
 }
@@ -42,12 +42,24 @@ def upload_result_row(match, record=None, *, brand=""):
     selected = record.get("selected_stages") or []
     completed = record.get("completed_stages") or []
     missing = set(selected) - set(completed)
-    if status == "no_changes":
+    table_unverified = status == "no_changes" and bool(set(preparation.get("changed_fields") or ()) & {"geometry_images", "size_table_images"})
+    if status == "no_changes" and not table_unverified:
         missing.discard("save")
     warnings = list(preparation.get("warnings") or [])
     error = preparation.get("error") or ""
     photo_failed = photo.get("action") in {"failed", "missing_photos", "checking", "ready"}
+    photo_unverified = status == "no_changes" and photo.get("action") == "uploaded" and not photo.get("persisted")
+    photo_skipped = "product_photos" in selected and photo.get("action") == "skipped_existing"
     reasons = [error, *warnings]
+    order_failed = photo.get("order_action") == "failed"
+    if order_failed:
+        reasons.append(photo.get("order_error") or "Photo ordering failed")
+    if photo_unverified:
+        reasons.append("Photo attachment was not verified; retry the photo step")
+    if table_unverified:
+        reasons.append("Table attachments were not verified after reload; retry the table step")
+    if photo_skipped:
+        reasons.append("Photos were skipped by the old rule; retry to replace the existing gallery")
     if photo_failed:
         reasons.append(photo.get("error") or PHOTO_LABELS.get(photo.get("action"), "Photo step did not complete"))
     if missing:
@@ -56,16 +68,22 @@ def upload_result_row(match, record=None, *, brand=""):
         reasons.append(STATUS_LABELS.get(status, status))
     if not preparation and getattr(match, "note", ""):
         reasons.append(match.note)
-    needs_check = status not in SUCCESS_STATUSES or bool(error or warnings or missing or photo_failed)
-    photo_changed = bool(photo.get("uploaded_photos") or photo.get("placeholders_removed"))
-    saved = status in {"saved_automatically", "saved_manually"} or "save" in completed
+    needs_check = status not in SUCCESS_STATUSES or bool(error or warnings or missing or photo_failed or photo_unverified or photo_skipped or order_failed or table_unverified)
+    photo_changed = bool(photo.get("uploaded_photos") or photo.get("photos_removed") or photo.get("placeholders_removed") or photo.get("order_action") == "arranged")
+    saved = photo.get("persisted") is True or status in {"saved_automatically", "saved_manually"} or "save" in completed
     photo_saved = ("Yes" if saved else "No — review required") if photo_changed else ("Not needed" if photo.get("action") == "skipped_existing" else "")
+    photo_result = PHOTO_LABELS.get(photo.get("action"), "Not recorded" if set(selected) & {"product_photos", "photo_order"} else "Not selected")
+    if order_failed:
+        photo_result = "Photo ordering failed"
+    elif photo.get("order_action") == "arranged" and photo.get("action") != "reordered":
+        photo_result += "; arranged side → front → back"
     return {
         "Product code": preparation.get("product_code") or getattr(match, "sku", ""),
         "Product": getattr(match, "pimbo_product_name", "") or getattr(match, "orbea_product_name", "") or getattr(match, "kross_product_name", ""),
         "Brand": brand, "Status": STATUS_LABELS.get(status, status), "Needs checking": "Yes" if needs_check else "No",
         "Reason to check": "\n".join(dict.fromkeys(item for item in reasons if item)),
-        "Photo result": PHOTO_LABELS.get(photo.get("action"), "Not recorded" if "product_photos" in selected else "Not selected"),
+        "Photo result": photo_result,
+        "Photos removed": photo.get("photos_removed", ""),
         "Placeholders removed": photo.get("placeholders_removed", ""), "Existing real photos": photo.get("existing_photos", ""),
         "Photos added to form": photo.get("uploaded_photos", ""), "Photo changes saved": photo_saved,
         "Selected steps": ", ".join(selected), "Completed steps": ", ".join(completed),

@@ -52,6 +52,14 @@ class OrbeaPhotoVariant:
 
 
 @dataclass(frozen=True)
+class OrbeaPhotoComponent:
+    zone: str
+    code: str
+    order: int = 0
+    behind_zones: bool = False
+
+
+@dataclass(frozen=True)
 class OrbeaPhotoProduct:
     source_url: str
     title: str
@@ -59,6 +67,9 @@ class OrbeaPhotoProduct:
     views: tuple[str, ...]
     variants: tuple[OrbeaPhotoVariant, ...]
     zone_defaults: Mapping[str, str]
+    model_code: str = ""
+    components: tuple[OrbeaPhotoComponent, ...] = ()
+    component_rules: tuple[Mapping[str, Any], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -209,6 +220,77 @@ def _order_value(item: Mapping[str, Any]) -> int:
         return 0
 
 
+def _photo_components(metadata: Mapping[str, Any]) -> tuple[OrbeaPhotoComponent, ...]:
+    sidebar = metadata.get("componentsSidebar")
+    components: list[OrbeaPhotoComponent] = []
+    if isinstance(sidebar, Mapping):
+        for zone, item in sidebar.items():
+            if not isinstance(item, Mapping):
+                continue
+            default = item.get("default")
+            code = str(default.get("component") or "").strip() if isinstance(default, Mapping) else ""
+            if code:
+                components.append(OrbeaPhotoComponent(
+                    str(zone), code, _order_value({"order": item.get("customOrder")}),
+                    item.get("behindZones") is True,
+                ))
+    else:
+        # Older product payloads expose the standard specification directly.
+        raw = metadata.get("components")
+        items = raw.values() if isinstance(raw, Mapping) else raw if isinstance(raw, list) else []
+        for item in items:
+            if not isinstance(item, Mapping):
+                continue
+            kind = item.get("component_type")
+            kind = kind if isinstance(kind, Mapping) else {}
+            code = str(item.get("component") or "").strip()
+            if code:
+                components.append(OrbeaPhotoComponent(
+                    str(item.get("type") or kind.get("code") or ""), code,
+                    _order_value({"order": kind.get("order_myo")}),
+                    kind.get("layer_behind_zones") is True,
+                ))
+    for component in components:
+        if not _SAFE_SEGMENT.fullmatch(component.zone) or not _SAFE_SEGMENT.fullmatch(component.code):
+            raise ValueError("The Orbea default component has an invalid image identifier")
+    # JavaScript enumerates numeric component keys before sorting by customOrder.
+    components.sort(key=lambda item: (item.order, int(item.zone) if item.zone.isdigit() else 0, item.zone))
+    return tuple(components)
+
+
+def _forced_component_variants(product: OrbeaPhotoProduct, colours: Mapping[str, str]) -> set[str]:
+    forced: set[str] = set()
+    for rule in product.component_rules:
+        matched = True
+        for index, condition in enumerate(rule.get("conditions") or []):
+            kind = condition.get("condition_type")
+            colour = colours.get(str(condition.get("zone") or ""))
+            if kind == "always":
+                passed = True
+            elif kind == "color-zone-code":
+                passed = bool(colour) and colour == condition.get("color_code")
+            elif kind == "color-zone":
+                passed = colour in (condition.get("colors") or [])
+            elif kind == "component-selected":
+                passed = any(item.code == condition.get("component") for item in product.components)
+            elif kind in {"equal-zones", "not-equal-zones"}:
+                passed = colours.get(condition.get("zone1")) == colours.get(condition.get("zone2"))
+                if kind == "not-equal-zones":
+                    passed = not passed
+            else:
+                raise ValueError(f"Unsupported Orbea component variant condition: {kind}")
+            if index == 0:
+                matched = passed
+            elif condition.get("operator") == "OR":
+                matched = matched or passed
+            else:
+                matched = matched and passed
+        if matched:
+            forced.update(str(action.get("action_component_type") or "") for action in rule.get("actions") or []
+                          if action.get("action_type") == "force-component-variant")
+    return forced
+
+
 def parse_orbea_photo_product(page_html: str, source_url: str) -> OrbeaPhotoProduct:
     """Parse the published configurator template embedded in a product page."""
 
@@ -251,6 +333,7 @@ def parse_orbea_photo_product(page_html: str, source_url: str) -> OrbeaPhotoProd
         raise ValueError("The Orbea image template has no published views")
 
     zones = [item for item in (template.get("zones") or []) if isinstance(item, Mapping)]
+    zones.sort(key=_order_value)
     colour_zones = [item for item in zones if item.get("colors")]
     primary_zone = next(
         (item for item in colour_zones if str(item.get("identifier") or "").upper() == "C1"),
@@ -305,6 +388,13 @@ def parse_orbea_photo_product(page_html: str, source_url: str) -> OrbeaPhotoProd
     if not title and h1 is not None:
         title = h1.get_text(" ", strip=True)
     title = title or fallback_title
+    metadata = _json_assignment(initializer, "product")
+    metadata = metadata if isinstance(metadata, Mapping) else {}
+    rules = tuple(rule for group in (template.get("rules") or [])
+                  if isinstance(group, Mapping) and group.get("status") in (None, "published")
+                  for rule in (group.get("rules") or []) if isinstance(rule, Mapping)
+                  and any(isinstance(action, Mapping) and action.get("action_type") == "force-component-variant"
+                          for action in (rule.get("actions") or [])))
     return OrbeaPhotoProduct(
         source_url=source_url,
         title=title,
@@ -312,6 +402,9 @@ def parse_orbea_photo_product(page_html: str, source_url: str) -> OrbeaPhotoProd
         views=tuple(views),
         variants=tuple(variants),
         zone_defaults=defaults,
+        model_code=str(metadata.get("code") or ""),
+        components=_photo_components(metadata),
+        component_rules=rules,
     )
 
 
@@ -435,12 +528,15 @@ class OrbeaPhotoService:
     def _layer_url(product: OrbeaPhotoProduct, view: str, group: str, layer: str) -> str:
         filename = layer if layer.lower().endswith(".webp") else f"{layer}.webp"
         layer_stem = filename[:-5]
-        for segment in (view, group, layer_stem):
+        group_segments = group.split("/")
+        if len(group_segments) > 1 and (len(group_segments) != 2 or group_segments[0] != "components"):
+            raise ValueError("Orbea manifest contained an unsafe image path")
+        for segment in (view, *group_segments, layer_stem):
             if not _SAFE_SEGMENT.fullmatch(segment):
                 raise ValueError("Orbea manifest contained an unsafe image path")
         return (
             f"{ORBEA_ASSET_ROOT}/{quote(product.asset_hash, safe='')}/"
-            f"{quote(view, safe='')}/{quote(group, safe='')}/XL/{quote(filename, safe='')}"
+            f"{quote(view, safe='')}/{'/'.join(quote(segment, safe='') for segment in group_segments)}/XL/{quote(filename, safe='')}"
         )
 
     @staticmethod
@@ -453,27 +549,57 @@ class OrbeaPhotoService:
         layers: list[tuple[str, str]] = []
         base = manifest.get("base")
         base_values = base.get(view, []) if isinstance(base, Mapping) else []
-        for name in base_values if isinstance(base_values, list) else []:
-            layer = str(name or "").strip()
-            if layer:
-                layers.append(("base", layer))
+        base_layer = f"base-{product.model_code}"
+        if base_layer not in base_values:
+            base_layer = "base"
+
+        colours = dict(product.zone_defaults)
+        colours[variant.zone] = variant.code
+        forced = _forced_component_variants(product, colours)
+        multiview = {"40", "48", "85"} | {
+            str(action.get("action_component_type") or "")
+            for rule in product.component_rules for action in (rule.get("actions") or [])
+            if action.get("action_type") == "force-component-variant"
+        }
+        component_layers: dict[str, tuple[str, str]] = {}
+        components = manifest.get("components")
+        if isinstance(components, Mapping) and components:
+            if not product.components:
+                raise ValueError("The Orbea page has no standard component metadata for this image template")
+            for component in product.components:
+                if view != "side" and component.zone not in multiview:
+                    continue
+                data = components.get(component.zone)
+                view_map = data.get("views") if isinstance(data, Mapping) else None
+                available = view_map.get(view, []) if isinstance(view_map, Mapping) else []
+                selected = component.code
+                coloured = f"{selected}_{colours.get('C1', '')}"
+                if component.zone in forced and coloured in available:
+                    selected = coloured
+                if selected in available:
+                    component_layers[component.zone] = (f"components/{component.zone}", selected)
+            layers.extend(component_layers[item.zone] for item in product.components
+                          if item.behind_zones and item.zone in component_layers)
 
         zones = manifest.get("zones")
         if isinstance(zones, Mapping):
-            for zone, data in zones.items():
+            for zone in colours:
+                data = zones.get(zone)
                 zone = str(zone or "").strip()
                 if not isinstance(data, Mapping) or not _SAFE_SEGMENT.fullmatch(zone):
                     continue
                 view_map = data.get("views")
                 available = view_map.get(view, []) if isinstance(view_map, Mapping) else []
                 available_codes = {str(code) for code in available if code}
-                selected = (
-                    variant.code
-                    if zone == variant.zone
-                    else str(product.zone_defaults.get(zone, "") or "")
-                )
+                selected = colours[zone]
                 if selected and selected in available_codes:
                     layers.append((zone, f"{zone}-{selected}"))
+        # The public renderer draws rear components, paint, front components,
+        # then one model-specific base. Base entries are alternatives, not layers.
+        layers.extend(component_layers[item.zone] for item in product.components
+                      if not item.behind_zones and item.zone in component_layers)
+        if base_layer in base_values:
+            layers.append(("base", base_layer))
         return layers
 
     def inspect_product(self, url: str) -> tuple[OrbeaPhotoProduct, Mapping[str, Any]]:

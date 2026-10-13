@@ -13,8 +13,8 @@ class PhotoWorkflow(OrbeaDirectWorkflow):
     prefix = "photo"
     output_attribute = "_photo_output_dir"
     translation_prefix = "orbea.photo"
-    start_key = "orbea.photo.download"
-    start_text = "Download all colours"
+    start_key = "orbea.tables.download"
+    start_text = "Download selected"
     starting_text = "Reading product colours…"
     start_icon = FluentIcon.DOWNLOAD
 
@@ -39,7 +39,7 @@ class PhotoWorkflow(OrbeaDirectWorkflow):
         view._photo_log.clear()
         view._photo_progress.setValue(0)
         self.set_busy(True)
-        worker = OrbeaPhotoWorker(
+        worker = lambda: OrbeaPhotoWorker(
             view._make_photo_service, entries, output_dir
         )
         self.start_worker(worker, total=len(entries))

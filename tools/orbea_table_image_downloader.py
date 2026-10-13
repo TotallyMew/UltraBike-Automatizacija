@@ -2,8 +2,8 @@
 """Download Orbea geometry and centimetre size-guide tables as PNG images.
 
 The script reads the ``Orbea URL`` column from the Pimbo match workbook,
-deduplicates repeated URLs, and stores one labelled geometry image per available
-frame size plus the size guide for each bike page. Runs are resumable: a
+deduplicates repeated URLs, and stores labelled geometry images for all frame
+sizes and adjustable settings, plus the size guide for each bike page. Runs are resumable: a
 checkpoint is updated after every URL and already-valid PNGs are not downloaded
 again unless ``--force`` or ``--fresh`` is used.
 """
@@ -25,14 +25,20 @@ import zipfile
 from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from itertools import product
 from pathlib import Path
 from typing import Any, Iterable
 from urllib.parse import unquote, urlsplit, urlunsplit
 from xml.etree import ElementTree as ET
 
+if __package__:
+    from .orbea_geometry_capture import capture_styled_geometry
+else:
+    from orbea_geometry_capture import capture_styled_geometry
+
 
 SCRIPT_VERSION = 1
-GEOMETRY_CAPTURE_VERSION = 4
+GEOMETRY_CAPTURE_VERSION = 6
 AVAILABILITY_PROBE_VERSION = 2
 DEFAULT_SHEET = "Matches"
 GEOMETRY_CAPTION = "Geometry chart by size"
@@ -623,8 +629,8 @@ def geometry_size_details(driver, table) -> tuple[Any | None, dict[str, Any]]:
     """Return the frame-size selector and every geometry size it offers.
 
     Orbea currently labels this selector ``TALLA`` even on some English pages.
-    Identifying it as the non-POSITION selector keeps the logic independent of
-    that translated label and supports pages that also expose HIGH/LOW geometry.
+    Other selectors can describe Head Angle or suspension settings. They must
+    never be classified as frame sizes merely because they are not POSITION.
     """
 
     from selenium.webdriver.common.by import By
@@ -664,10 +670,174 @@ def geometry_size_details(driver, table) -> tuple[Any | None, dict[str, Any]]:
             "low",
             "high",
         }.issubset(option_names)
-        if not is_position and details.get("options"):
+        if not is_position and geometry_selector_kind(details) == "size":
             return select, details
 
     return None, {"value": "", "text": "", "options": []}
+
+
+def geometry_selector_kind(details: dict[str, Any]) -> str:
+    label = clean_text(details.get("label")).casefold()
+    names = {clean_text(option.get("text")).casefold() for option in details.get("options", []) if clean_text(option.get("text"))}
+    if label in {"position", "flipchip", "flip chip"} or {"low", "high"}.issubset(names):
+        return "position"
+    if label in {"size", "frame size", "talla", "taille", "größe", "rahmengröße"}:
+        return "size"
+    if names and all(re.fullmatch(r"(?:x{0,3}[sml]|[2-6]xl)(?:\s*/\s*(?:x{0,3}[sml]|[2-6]xl))?", name) for name in names):
+        return "size"
+    return "configuration"
+
+
+GEOMETRY_SELECTORS_JS = r"""
+const root = arguments[0].closest('#geometry-data');
+if (!root) return [];
+return [...root.querySelectorAll('select')].map((select, index) => {
+  const group = select.closest('.select-container') || select.parentElement;
+  const selected = select.options[select.selectedIndex];
+  return {
+    key: select.id || select.name || `setting-${index + 1}`,
+    label: group?.querySelector('label')?.textContent?.trim() || `Setting ${index + 1}`,
+    value: select.value || '', text: selected?.textContent?.trim() || '',
+    options: [...select.options].filter(option => !option.disabled && option.value).map(option => ({
+      value: option.value, text: option.textContent.trim(), selected: option.selected
+    })), input: select
+  };
+});
+"""
+
+
+def geometry_selectors(driver, table) -> list[dict[str, Any]]:
+    selectors = driver.execute_script(GEOMETRY_SELECTORS_JS, table) or []
+    for selector in selectors:
+        selector["kind"] = geometry_selector_kind(selector)
+    return selectors
+
+
+def geometry_configurations(selectors, requested_position):
+    """All published choices, preserving the preferred compatibility position."""
+    dimensions = []
+    for selector in selectors:
+        options = list({option["value"]: option for option in selector["options"] if option.get("value")}.values())
+        if not options:
+            raise RuntimeError(f"Geometry setting {selector['label']!r} has no available choices")
+        if selector["kind"] == "position":
+            preferred = selector["value"] if requested_position == "page-default" else requested_position
+            options.sort(key=lambda option: clean_text(option["text"]).casefold() != preferred.casefold())
+        elif selector["kind"] == "configuration":
+            options.sort(key=lambda option: option["value"] != selector["value"])
+        dimensions.append([
+            {"key": selector["key"], "label": selector["label"], "kind": selector["kind"],
+             "value": option["value"], "text": option["text"] or option["value"]}
+            for option in options
+        ])
+    return [list(settings) for settings in product(*dimensions)]
+
+
+def geometry_configuration_label(settings):
+    return " / ".join(f"{setting['label']}: {setting['text']}" for setting in settings)
+
+
+def set_geometry_configuration(driver, table, settings, timeout, *, force=False):
+    """Re-resolve native selects after every response and verify the full set."""
+    from selenium.webdriver.support.ui import WebDriverWait
+
+    for setting in settings:
+        selector = next((item for item in geometry_selectors(driver, table) if item["key"] == setting["key"]), None)
+        if selector is None or not any(option["value"] == setting["value"] for option in selector["options"]):
+            raise RuntimeError(f"Geometry choice {setting['label']}: {setting['text']} disappeared")
+        if selector["value"] == setting["value"] and not force:
+            continue
+        previous = (getattr(table, "id", None), clean_text(table.text))
+        # Orbea can replace a native select while leaving a stale Tom Select
+        # widget behind. Dispatch on the current select, never that old widget.
+        driver.execute_script(
+            """const select = arguments[0];
+            select.value = arguments[1];
+            select.dispatchEvent(new Event('change', {bubbles: true}));""",
+            selector["input"], setting["value"],
+        )
+        stable_signature, stable_reads = None, 0
+
+        def changed(_driver):
+            nonlocal stable_signature, stable_reads
+            try:
+                current_table = wait_for_geometry_table(driver, 1.0)
+                current = next((item for item in geometry_selectors(driver, current_table) if item["key"] == setting["key"]), None)
+                signature = (getattr(current_table, "id", None), clean_text(current_table.text))
+                if not current or current["value"] != setting["value"] or signature == previous:
+                    stable_signature, stable_reads = None, 0
+                    return False
+                stable_reads = stable_reads + 1 if signature == stable_signature else 1
+                stable_signature = signature
+                return current_table if stable_reads >= 2 else False
+            except Exception:
+                return False
+
+        table = WebDriverWait(driver, timeout, poll_frequency=0.15).until(
+            changed, message=f"Geometry table did not update for {setting['label']}: {setting['text']}",
+        )
+    current = {item["key"]: item["value"] for item in geometry_selectors(driver, table)}
+    if any(current.get(setting["key"]) != setting["value"] for setting in settings):
+        raise RuntimeError(f"Geometry settings did not retain {geometry_configuration_label(settings)}")
+    return table
+
+
+GEOMETRY_TABLE_DATA_JS = r"""
+const table = arguments[0];
+const clean = value => (value || '').replace(/\s+/g, ' ').trim();
+return {
+  headers: [...table.querySelectorAll('thead th,thead td')].map(cell => clean(cell.innerText)),
+  rows: [...table.querySelectorAll('tbody tr')].map(row =>
+    [...row.querySelectorAll('td,th')].map(cell => clean(cell.innerText)))
+};
+"""
+
+
+def capture_geometry_configurations(driver, table, destination, selectors, timeout, requested_position):
+    variants, primary_path, primary_position = [], None, ""
+    filenames = set()
+    combinations = geometry_configurations(selectors, requested_position)
+    for settings in combinations:
+        label = geometry_configuration_label(settings)
+        filename = slugify("-".join(f"{setting['label']}-{setting['text']}" for setting in settings))
+        if len(settings) == 1 and settings[0]["kind"] == "size":
+            filename = slugify(settings[0]["text"])
+        if filename in filenames:
+            signature = json.dumps([(setting["key"], setting["value"]) for setting in settings])
+            filename = f"{filename}-{hashlib.sha256(signature.encode()).hexdigest()[:8]}"
+        filenames.add(filename)
+        path = destination.with_name(f"{destination.stem}-{filename}{destination.suffix}")
+        variant = {"size": next((setting["text"] for setting in settings if setting["kind"] == "size"), ""),
+                   "wheel_size": "", "label": label, "settings": settings, "filename": path.name,
+                   "status": TABLE_STATUS_TRANSIENT_ERROR, "dimensions": None, "position": "", "error": ""}
+        for attempt in range(2):
+            try:
+                table = set_geometry_configuration(driver, table, settings, timeout, force=attempt > 0)
+                # The native fields and refreshed metrics are authoritative;
+                # Orbea's stale decorative widgets must not mislabel the PNG.
+                data = driver.execute_script(GEOMETRY_TABLE_DATA_JS, table)
+                dimensions = capture_styled_geometry(driver, table, path, settings, data, screenshot=screenshot_element)
+                position = next((setting["text"] for setting in settings if setting["kind"] == "position"), "")
+                variant.update(status=TABLE_STATUS_DOWNLOADED, dimensions=list(dimensions), position=position,
+                               wheel_size=geometry_wheel_size(table), frame_sizes=geometry_frame_sizes(table), error="")
+                if primary_path is None:
+                    primary_path, primary_position = path, position
+                break
+            except KeyboardInterrupt:
+                raise
+            except Exception as error:
+                variant["error"] = concise_error(error)
+                try:
+                    table = wait_for_geometry_table(driver, timeout)
+                except Exception:
+                    pass
+        variants.append(variant)
+    if primary_path is None:
+        raise RuntimeError("No geometry configuration could be captured: " + "; ".join(f"{v['label']}: {v['error']}" for v in variants))
+    temporary = destination.with_name(f".{destination.stem}.compat.tmp.png")
+    shutil.copy2(primary_path, temporary)
+    os.replace(temporary, destination)
+    return png_dimensions(destination), primary_position, any(selector["kind"] == "position" for selector in selectors), variants
 
 
 def set_geometry_size(
@@ -783,9 +953,15 @@ def geometry_wheel_size(table) -> str:
     wheel_sizes: list[str] = []
     for header in headers[1:]:
         value = clean_text(header.text)
-        if value and value not in wheel_sizes:
+        if re.fullmatch(r'\d+(?:[.,]\d+)?\s*(?:["″]|in(?:ch(?:es)?)?)', value, re.I) and value not in wheel_sizes:
             wheel_sizes.append(value)
     return "; ".join(wheel_sizes)
+
+
+def geometry_frame_sizes(table) -> list[str]:
+    from selenium.webdriver.common.by import By
+    return [clean_text(header.text) for header in table.find_elements(By.CSS_SELECTOR, "thead th")[1:]
+            if clean_text(header.text) and not re.search(r'["″]|inch', header.text, re.I)]
 
 
 def set_geometry_position(
@@ -1000,11 +1176,12 @@ def capture_geometry(
     control=None,
     selector_timeout: float | None = None,
 ) -> tuple[tuple[int, int], str, bool, list[dict[str, Any]]]:
-    """Capture one geometry PNG per available frame size.
+    """Capture each frame size and every adjustable geometry combination.
 
     The legacy ``geometry.png`` is retained as a compatibility copy of the
     first successful size. Every authoritative capture is saved with its size
-    in the filename and includes the visible selector in the screenshot.
+    in the filename. Adjustable settings use explicit captions above the table
+    so stale decorative dropdown labels cannot misidentify its measurements.
     """
 
     if control is None:
@@ -1016,6 +1193,11 @@ def capture_geometry(
         selector_timeout if selector_timeout is not None else timeout
     )
     try:
+        selectors = geometry_selectors(driver, table)
+        if selectors:
+            return capture_geometry_configurations(
+                driver, table, destination, selectors, effective_selector_timeout, requested_position,
+            )
         _size_select, size_details = geometry_size_details(driver, table)
         size_options = [
             option
@@ -1277,11 +1459,13 @@ def capture_orbea_tables(
                 result["geometry_dimensions"] = dimensions
                 result["geometry_position"] = actual_position
                 result["geometry_position_supported"] = position_supported
-                result["geometry_size_selector_supported"] = bool(variants)
+                result["geometry_size_selector_supported"] = any(variant.get("size") for variant in variants)
+                result["geometry_configuration_selector_supported"] = any(
+                    setting.get("kind") != "size" for variant in variants for setting in variant.get("settings", []))
                 result["geometry_variants"] = variants
                 if failed_variants:
                     messages = [
-                        f"geometry {variant.get('size') or 'unknown size'}: "
+                        f"geometry {variant.get('label') or variant.get('size') or 'unknown variant'}: "
                         f"{variant.get('error') or 'capture failed'}"
                         for variant in failed_variants
                     ]
@@ -1461,7 +1645,7 @@ def refresh_record_from_files(
             and record.get("geometry_position_requested") == required_geometry_position
         )
     variants = list(record.get("geometry_variants", []) or [])
-    if geometry_ok and record.get("geometry_size_selector_supported"):
+    if geometry_ok and (variants or record.get("geometry_size_selector_supported") or record.get("geometry_configuration_selector_supported")):
         geometry_ok = bool(variants) and all(
             variant.get("status") == TABLE_STATUS_DOWNLOADED
             and png_dimensions(
@@ -1536,6 +1720,8 @@ def apply_capture_result(
         record["geometry_size_selector_supported"] = bool(
             result.get("geometry_size_selector_supported")
         )
+    if result.get("geometry_configuration_selector_supported") is not None:
+        record["geometry_configuration_selector_supported"] = bool(result["geometry_configuration_selector_supported"])
     geometry_dimensions = result.get("geometry_dimensions")
     size_dimensions = result.get("size_guide_dimensions")
     if geometry_dimensions is not None:
@@ -1604,6 +1790,7 @@ def write_manifests(
         "Geometry Status",
         "Geometry PNG",
         "Geometry Sizes",
+        "Geometry Configurations",
         "Geometry Wheel Sizes",
         "Geometry PNGs",
         "Geometry Position",
@@ -1649,6 +1836,7 @@ def write_manifests(
                         for variant in geometry_variants
                         if clean_text(variant.get("size"))
                     ),
+                    "Geometry Configurations": "; ".join(clean_text(variant.get("label")) for variant in geometry_variants if variant.get("label")),
                     "Geometry Wheel Sizes": "; ".join(
                         clean_text(variant.get("wheel_size"))
                         for variant in geometry_variants
@@ -1727,7 +1915,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         choices=("low", "high", "page-default"),
         default=DEFAULT_GEOMETRY_POSITION,
         help=(
-            "Position used when an Orbea geometry table offers HIGH/LOW "
+            "Preferred compatibility image when an Orbea geometry table offers HIGH/LOW "
             f"(default: {DEFAULT_GEOMETRY_POSITION})"
         ),
     )

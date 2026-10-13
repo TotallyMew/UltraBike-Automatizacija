@@ -10,9 +10,11 @@ from .photo_packages import PHOTOS_CAPTURE_VERSION, collect_colour_photos, packa
 from .checkpoint import atomic_write_json, utc_now
 from .features import DESCRIPTION_CAPTURE_VERSION
 from .image_store import link_image
+from .table_packages import geometry_layout_outdated, is_table_image, prune_obsolete_tables
 from .models import RunCancelled
 from .utils import canonicalize_url, relative_or_absolute
 from .website import SPECIFICATIONS_CAPTURE_VERSION, product_matches
+from tools.orbea_table_image_downloader import AVAILABILITY_PROBE_VERSION, GEOMETRY_CAPTURE_VERSION
 
 
 def validate_product(product: Any, row: dict[str, Any]) -> None:
@@ -31,6 +33,9 @@ def stage_complete(stage, prior, run_dir):
         return False
     if prior.get("status") == "not_available":
         return True
+    if stage == "tables" and (prior.get("geometry_capture_version") != GEOMETRY_CAPTURE_VERSION
+                              or prior.get("availability_probe_version") != AVAILABILITY_PROBE_VERSION):
+        return False
     files = prior.get("files", [])
     return bool(prior.get("status") == "downloaded" and files and
                 all((Path(run_dir) / path).is_file() for path in files))
@@ -122,29 +127,47 @@ def collect_packages(service, website, config, checkpoint, reporter, token, log,
                     note = " | ".join(photo_info["unavailable"])
                 else:
                     record = checkpoint.images.get(canonicalize_url(row["catalogue_url"]), {})
+                    if geometry_layout_outdated({**record, "files": [v.get("filename", "") for v in record.get("geometry_variants", [])]}):
+                        raise RuntimeError("Geometry variants still use the old plain layout; recapture tables before packaging them")
+                    states = {record.get("geometry_status"), record.get("size_guide_status")}
+                    if not states.issubset({"downloaded", "not_available"}):
+                        raise RuntimeError(" | ".join(record.get("errors", [])) or "Table downloads remain incomplete")
                     paths = []
                     for key, state in (("geometry_image", "geometry_status"), ("size_guide_image", "size_guide_status")):
                         if record.get(state) == "downloaded" and record.get(key):
                             paths.append(checkpoint.run_dir / record[key])
-                    for variant in record.get("geometry_variants", []):
+                    variants = record.get("geometry_variants", []) if record.get("geometry_status") == "downloaded" else []
+                    for variant in variants:
+                        if variant.get("status", "downloaded") != "downloaded":
+                            raise RuntimeError("A geometry configuration download remains incomplete")
                         filename = variant.get("filename")
                         if filename:
+                            if Path(filename).name != filename or not is_table_image(Path(filename)):
+                                raise ValueError("A geometry filename is outside the table folder")
                             paths.append(checkpoint.run_dir / record.get("folder", "") / filename)
-                    for path in dict.fromkeys(paths):
+                    paths = list(dict.fromkeys(paths))
+                    for path in paths:
+                        if not path.resolve().is_relative_to(checkpoint.run_dir.resolve()) or not is_table_image(path):
+                            raise ValueError("A downloaded table is outside this collection's table files")
                         if not path.is_file():
                             raise FileNotFoundError(f"A downloaded table is missing: {path.name}")
+                    for path in paths:
                         destination = folder / "tables" / path.name
                         destination.parent.mkdir(parents=True, exist_ok=True)
                         if not link_image(path, destination):
                             service._log(log, "This output drive cannot share table storage; saved a separate copy")
                         files.append(destination)
-                    states = {record.get("geometry_status"), record.get("size_guide_status")}
-                    if not states.issubset({"downloaded", "not_available"}):
-                        raise RuntimeError(" | ".join(record.get("errors", [])) or "Table downloads remain incomplete")
                     if "not_available" in states:
                         note = "One or more tables were not published"
                     if not files:
                         status = "not_available"
+                    cleanup_errors = prune_obsolete_tables(folder, files)
+                    from .upload import invalidate_saved_table_upload
+                    invalidate_saved_table_upload(folder, sku=row["sku"], product_id=row.get("product_id"))
+                    if cleanup_errors:
+                        note = " | ".join(filter(None, (note, *cleanup_errors)))
+                        for error in cleanup_errors:
+                            service._log(log, error)
             except RunCancelled:
                 checkpoint.save()
                 raise
@@ -162,6 +185,10 @@ def collect_packages(service, website, config, checkpoint, reporter, token, log,
             if stage == "specifications":
                 stages[stage]["capture_version"] = SPECIFICATIONS_CAPTURE_VERSION
                 stages[stage]["source"] = getattr(product, "specifications_source", "legacy_components")
+            if stage == "tables":
+                stages[stage].update(geometry_capture_version=GEOMETRY_CAPTURE_VERSION,
+                                     availability_probe_version=AVAILABILITY_PROBE_VERSION,
+                                     package_files=[str(path.relative_to(folder)) for path in files])
             checkpoint.save()
 
         # Keep failures for previously requested, now unchecked items visible.

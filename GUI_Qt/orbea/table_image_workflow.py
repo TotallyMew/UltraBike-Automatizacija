@@ -41,7 +41,7 @@ class TableImageWorkflow(OrbeaDirectWorkflow):
         view._table_image_log.setVisible(True)
         view._table_image_progress.setValue(0)
         self.set_busy(True)
-        worker = OrbeaTableImageWorker(
+        worker = lambda: OrbeaTableImageWorker(
             view._make_table_image_service,
             entries,
             output_dir,

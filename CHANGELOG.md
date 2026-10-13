@@ -7,6 +7,156 @@ are generated from the installer and are not a substitute for this history.
 
 ### Changed
 
+- Product photos, geometry and size tables now share the gallery removal loop
+  and confirmation handling. Geometry/size file inputs reset their native value
+  without Firefox's Element Clear command, which cannot interact with Pimbo's
+  hidden file input. Offline Firefox checks reproduce the original failure and
+  verify all 48 attachments across asynchronous input replacements.
+- Refreshed table uploads awaiting replacement show New tables need uploading
+  instead of the earlier saved status, and are included in unprocessed selection.
+
+- Previously downloaded plain geometry variants are identified in the product
+  list and blocked before Pimbo editing. Download missing tables recaptures the
+  stale exports; a completed table refresh invalidates the old attachment upload
+  stages so Retry unfinished steps also uploads the replacement images.
+  Large attachment sets upload in batches of at most twelve files, preserving
+  every configuration and verifying cumulative attachments before the next batch.
+
+- Table attachments saved immediately by Pimbo are reloaded and verified even
+  when the main Save button is disabled. They report saved_automatically and
+  complete the Save step. Older no_changes records containing changed table
+  fields remain retryable and are marked for checking in upload reports.
+
+- Pimbo table replacement handles the current Geometry removal confirmation
+  before reading the product URL. This prevents Firefox from dismissing the
+  pending confirmation through its default unhandled-prompt behaviour. Exact
+  gallery-specific confirmations are accepted; unrelated prompts still fail.
+
+- Geometry exports use the same native element screenshot method as Size Tables,
+  preserving Orbea's original table and configuration
+  fields, without the bike diagram. Captures expand past the dialog's scroll
+  limit, keep every row and correct stale displayed selector labels. Capture
+  version 6 refreshes previous plain table exports. Size Tables are unchanged.
+
+- Orbea model copying now supports explicit target-paint mappings for the Spalva
+  attribute. All 70 supplied paint names have configured values in the copy
+  workspace. Gloss/Matt labels distinguish different assignments, including
+  Frozen Concrete Gloss → Mėlyna and Matt → Pilka; ambiguous names without finish
+  labels preserve the current attribute. Missing mappings preserve existing attributes; missing
+  dropdown options block Save. Specification Spalva remains unchanged. Mapping
+  changes revisit only relevant saved targets, and results include colour values.
+
+- Orbea Size Tables now replace previous attachments instead of appending
+  duplicates. Both table galleries validate replacements, wait for upload, and
+  verify the saved URLs after one reload. Selecting either table upload requires
+  automatic Save in the service and UI; missing tables or failed uploads block
+  Save and remain eligible for retry.
+
+- Orbea table refreshes remove obsolete generated table files only after the new
+  set is complete. Uploads use the latest successful table manifest rather than
+  all geometry PNGs in the folder, including reports created by earlier running
+  versions. Missing current variants and incomplete refreshes block table upload;
+  locked leftover files are reported and excluded from the current set.
+
+- Orbea Geometry uploads now validate the full replacement set, remove existing
+  geometry attachments, and upload the new configurations without duplicate main
+  image aliases. Missing or invalid files preserve existing geometry; upload
+  failures block automatic Save. Successful saves reload and verify every
+  replacement URL. Product photos and Size Tables stay in their own galleries.
+
+- Orbea geometry downloads now capture all adjustable setting combinations,
+  including OCCAM Flipchip × Head Angle, with explicit labels in each PNG.
+  Head Angle is no longer mistaken for a frame size; current native selectors
+  and refreshed table data are verified despite stale Orbea dropdown widgets.
+  Earlier captures are refreshed, and missing configuration files remain retryable.
+
+- Description writes now use HugeRTE's Source Code dialog and its Save control,
+  with complete formatted HTML read-back. Attribute selection waits for the
+  replacement input after React renders and uses dedicated single-value clear
+  buttons when replacing old values.
+
+- Fixed Orbea category copying against Pimbo's current category card: removal
+  uses selected chips' × controls, excluding the header MagicAI icon, and exact
+  category paths can be selected from its permanent list as well as older popups.
+
+- Orbea model copying now logs each confirmed source-read outcome and a separate
+  reading summary, including ready, failed and unread groups. Returning to the
+  product list no longer leaves "Reading source" as the last log entry. Stopped
+  runs and worker errors are reported without claiming an old checkpoint finished.
+
+- Fixed false empty-description errors during Orbea source reads. The reader
+  waits for HugeRTE's iframe and saved LT content, retrying replaced editors
+  while preserving the complete description HTML.
+
+- Fixed a false attribute-loading timeout during Orbea source reads. Pimbo's
+  empty dropdown buttons and addons are no longer counted as attribute labels;
+  hidden companion inputs and open-menu controls are excluded from row detection.
+  Unreadable or ambiguous labels now report their actual cause.
+
+- Redesigned Orbea **Model copying** around base TTCC groups: all specific SKUs
+  and names are visible with one source selector per group, searchable groups
+  and preserved selections. It now uses the app's cards, table theme and run
+  sidebar, with stacked controls in narrow windows.
+
+- Orbea report updates continue when the Excel file is open: the app saves an
+  updated copy, keeps the original intact, and opens the latest report. Source
+  workbook reads and model copying do not require closing Excel.
+
+- Added **Earnings → Add in bulk** for pasted SKUs or Excel SKU/name columns,
+  with shared brand, product type and date, a payout preview, duplicate
+  handling and an atomic save of the individual earnings records.
+
+- Fixed named-colour photo matching for Pimbo titles that append category and
+  wheel size after a separate colour segment, including DENNA M30 Nickel,
+  Caramel and Escape Green. The same parsing keeps category text out of Spalva.
+
+- Added an Excel-driven Pimbo photo scan in the Orbea product list. It checks
+  selected variant codes for uploaded product-gallery photos, records missing,
+  present, not-found and failed checks, and saves the results in the run Excel.
+  Missing products can be selected for matched-colour downloads, then uploaded
+  and arranged using the photo workflow. Geometry and size tables do not count
+  as product photos.
+
+- Simplified Orbea Automation to one **Load products** menu, one additive
+  **Selection** menu, **Download selected** with missing/failed, refresh and
+  missing-Pimbo-photo modes, and **Upload selected** with an unfinished-step
+  retry mode. Product actions use checked, visible rows and retain hidden
+  selections. The eligible download count reflects the chosen data stages.
+- Downloads now include incomplete checkpoint rows, validate every selected
+  collection before starting, and save their scope and stage choices for
+  interruption recovery. Resume uses the identified saved run and preserves
+  stages completed during the interrupted operation. Refreshing photos makes
+  those photos eligible for upload again.
+- Combined Orbea's standalone image forms into one URL list, destination,
+  image-type selection and progress display. Description extraction and Excel
+  sorting remain in Extra tools. Updated English and Lithuanian labels.
+- Orbea panels are built directly in their final layout. A shared controller
+  owns worker startup, cancellation and cleanup, keeps selection locked until
+  queued results finish, and releases browser leases after startup failures.
+
+- Product-photo uploads now replace the entire existing gallery with the
+  downloaded photos, rather than skipping products with real images. Removal
+  runs once before the upload batches. Missing downloads retain the gallery;
+  Orbea results skipped by the old rule remain retryable and are flagged in exports.
+
+- Added an Orbea photo-order step for existing uploads, arranging matched views
+  as side, front, back and retaining other gallery images. New uploads with all
+  three views are arranged automatically, with the saved order verified in Pimbo.
+- Added Orbea product selection by upload status, including failures, No changes
+  needed, saved products, and unprocessed products. Status selections add to
+  existing checked products; Clear selection explicitly resets them.
+- Kept the Orbea upload table scrollable during a run and allowed viewing Activity,
+  History, Earnings, Spotify, and Info while the upload retains browser ownership.
+
+- Fixed Pimbo photo uploads when the Images gallery contains both a header
+  Upload control and a drop-area control. They now resolve to one gallery,
+  allowing Coming Soon placeholder removal while keeping table images separate.
+- Product-photo uploads wait for Pimbo to finish media upload and product
+  attachment before reporting a confirmed count or navigating to the next bike.
+  Attachment errors and partial uploads fail visibly. Photos-only batches no
+  longer require form Save; earlier unverified No changes photo results can be
+  retried and are flagged in exports.
+
 - Applied the proposed layouts across automation, Earnings, Settings, Account,
   Activity, upload history, sign-in, help, translations, and Spotify, using
   Fluent spacing tokens and native controls. Setup and review sit beside run

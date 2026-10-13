@@ -861,7 +861,7 @@ class KrossScreen(ResponsiveWidget):
         if not options.any_selected:
             self._show_error(self.tr("kross.stages.required"))
             return
-        if len(selected) > 1 and not options.save:
+        if len(selected) > 1 and not options.allows_multiple_products:
             self._show_error(self.tr("kross.stages.multi_requires_save"))
             return
         output_text = self._output_input.text().strip()

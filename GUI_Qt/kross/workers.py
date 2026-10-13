@@ -191,7 +191,7 @@ class KrossUploadWorker(QThread):
 
     def run(self) -> None:
         try:
-            if len(self.matches) > 1 and not self.options.save:
+            if len(self.matches) > 1 and not self.options.allows_multiple_products:
                 raise ValueError(
                     "A run without Save can target only one PIMBO product at a time"
                 )

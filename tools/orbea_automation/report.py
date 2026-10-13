@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import csv
-import os
 import re
 from collections import Counter
 from datetime import datetime
@@ -13,7 +12,8 @@ from openpyxl.formatting.rule import FormulaRule
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-from .checkpoint import RunCheckpoint, utc_now
+from .checkpoint import RunCheckpoint, utc_now, WORKBOOK_NAME, MANIFEST_NAME
+from Utilities.ExportFiles import atomic_save_workbook, replace_generated_export
 from .utils import canonicalize_url
 
 
@@ -374,7 +374,7 @@ def _summary_sheet(workbook: Workbook, checkpoint: RunCheckpoint) -> Any:
 
 
 def write_report(checkpoint: RunCheckpoint) -> Path:
-    """Build the four-sheet formatted report and atomically replace the prior copy."""
+    """Refresh the report, keeping an open original and publishing a new copy."""
 
     workbook = Workbook()
     _summary_sheet(workbook, checkpoint)
@@ -422,12 +422,26 @@ def write_report(checkpoint: RunCheckpoint) -> Path:
         _add_file_links(collected, ("Local Folder",), checkpoint.run_dir)
     workbook.active = workbook.index(matches)
 
-    destination = checkpoint.workbook_path
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = destination.with_name(f".{destination.stem}.tmp{destination.suffix}")
-    workbook.save(temporary)
-    workbook.close()
-    os.replace(temporary, destination)
+    if "photo_scan_skus" in checkpoint.data or any(row.get("pimbo_photo_scan") for row in checkpoint.results):
+        scan_skus = checkpoint.data.get("photo_scan_skus")
+        photo_rows = [row for row in checkpoint.results if row.get("sku")
+                      and (scan_skus is None or row["sku"] in scan_skus)]
+        photos = _make_data_sheet(workbook, "Pimbo Photos",
+            ("Variant SKU", "Pimbo Product", "Pimbo Photo Status", "Uploaded Photos", "Placeholders", "Checked At (UTC)", "Error", "Pimbo URL", "Orbea URL"),
+            ((row["sku"], row.get("title", ""),
+              row.get("pimbo_photo_scan", {}).get("status", "not_checked").replace("_", " ").capitalize(),
+              row.get("pimbo_photo_scan", {}).get("photos"), row.get("pimbo_photo_scan", {}).get("placeholders"),
+              row.get("pimbo_photo_scan", {}).get("checked_at", ""), row.get("pimbo_photo_scan", {}).get("error", ""),
+              row.get("product_url", ""), row.get("catalogue_url", "")) for row in photo_rows),
+            (18, 55, 22, 18, 16, 28, 65, 52, 52))
+        _add_web_links(photos, ("Pimbo URL", "Orbea URL"))
+        workbook.active = workbook.index(photos)
+
+    canonical = checkpoint.run_dir / WORKBOOK_NAME
+    destination = atomic_save_workbook(workbook, checkpoint.workbook_path, fallback_base=canonical)
+    if checkpoint.data.get("report_filename", WORKBOOK_NAME) != destination.name:
+        checkpoint.data["report_filename"] = destination.name
+        checkpoint.save()
     return destination
 
 
@@ -451,7 +465,7 @@ def sort_existing_match_workbook(
     source_path: Path | str,
     destination_path: Path | str | None = None,
 ) -> Path:
-    """Create a clean, sorted five-column copy of an existing match workbook."""
+    """Create a sorted match copy, preserving optional model-copy source marks."""
 
     source = Path(source_path)
     if not source.is_file() or source.suffix.lower() != ".xlsx":
@@ -470,7 +484,8 @@ def sort_existing_match_workbook(
                 "The Excel file is missing required columns: " + ", ".join(missing)
             )
 
-        indexes = [lookup[header.casefold()] for header in MATCH_HEADERS]
+        headers = MATCH_HEADERS + (("Šaltinis",) if "šaltinis" in lookup else ())
+        indexes = [lookup[header.casefold()] for header in headers]
         model_column = lookup.get("catalogue model") or lookup.get("model")
         sortable_rows = []
         for row_index in range(2, worksheet.max_row + 1):
@@ -491,19 +506,14 @@ def sort_existing_match_workbook(
     matches = _make_data_sheet(
         output,
         "Matches",
-        MATCH_HEADERS,
+        headers,
         rows,
-        (18, 58, 20, 10, 52),
+        (18, 58, 20, 10, 52, 14),
     )
     _add_web_links(matches, ("Orbea URL",))
     _format_matches_sheet(matches)
 
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = destination.with_name(f".{destination.stem}.tmp{destination.suffix}")
-    output.save(temporary)
-    output.close()
-    os.replace(temporary, destination)
-    return destination
+    return atomic_save_workbook(output, destination)
 
 
 def write_image_manifest(checkpoint: RunCheckpoint) -> Path:
@@ -517,6 +527,7 @@ def write_image_manifest(checkpoint: RunCheckpoint) -> Path:
         "Geometry Status",
         "Geometry PNG",
         "Geometry Sizes",
+        "Geometry Configurations",
         "Geometry Wheel Sizes",
         "Geometry PNGs",
         "Size Guide Status",
@@ -552,6 +563,7 @@ def write_image_manifest(checkpoint: RunCheckpoint) -> Path:
                         for variant in geometry_variants
                         if str(variant.get("size", "")).strip()
                     ),
+                    "Geometry Configurations": "; ".join(str(variant.get("label", "")) for variant in geometry_variants if variant.get("label")),
                     "Geometry Wheel Sizes": "; ".join(
                         str(variant.get("wheel_size", "")).strip()
                         for variant in geometry_variants
@@ -571,5 +583,13 @@ def write_image_manifest(checkpoint: RunCheckpoint) -> Path:
                     "Image Error": _record_error(image),
                 }
             )
-    os.replace(temporary, destination)
+    try:
+        destination = replace_generated_export(
+            temporary, destination, fallback_base=checkpoint.run_dir / MANIFEST_NAME,
+        )
+    finally:
+        temporary.unlink(missing_ok=True)
+    if checkpoint.data.get("manifest_filename", MANIFEST_NAME) != destination.name:
+        checkpoint.data["manifest_filename"] = destination.name
+        checkpoint.save()
     return destination

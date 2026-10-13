@@ -44,6 +44,11 @@ def parse_orbea_name(name, *, source_model=""):
         len(title) == len(source_model) or title[len(source_model)].isspace()
     ):
         model, color = title[:len(source_model)], title[len(source_model):]
+    # Pimbo also uses model/year / colour / category (wheel size). Only
+    # split a fenced colour segment; slashes within plain colour names stay.
+    segment = re.match(r"^\s*([/|;])\s*(.*)$", color)
+    if segment:
+        color = re.split(rf"\s+{re.escape(segment[1])}\s+", segment[2], maxsplit=1)[0]
     color = re.sub(r"\(\s*(?:Glossy?|Matte?)\s*\)", "", color, flags=re.I)
     color = re.sub(r"\s*[-–—]\s*", " - ", color)
     color = _clean(color).strip(" /-|")

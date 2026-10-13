@@ -121,6 +121,7 @@ from GUI_Qt.earnings.dialogs import (
     EarningEntryDialog, EarningsSettingsDialog, GoalAdjustmentDialog, GoalDialog,
     QuestPickerDialog, SessionRecapDialog, UploadEarningsDialog,
 )
+from GUI_Qt.earnings.bulk_add import BulkEarningAddDialog
 from Utilities.ResourcePaths import resource_path
 
 class EarningsScreen(ResponsiveWidget):
@@ -462,7 +463,13 @@ class EarningsScreen(ResponsiveWidget):
         grid.setHorizontalSpacing(10)
         grid.setVerticalSpacing(7)
         self.entry_heading = StrongBodyLabel("Add earning")
-        grid.addWidget(self.entry_heading, 0, 0, 1, 2)
+        grid.addWidget(self.entry_heading, 0, 0)
+        self.bulk_add_button = PushButton("Add in bulk")
+        self.bulk_add_button.setObjectName("earningsSecondaryAction")
+        self.bulk_add_button.setFixedHeight(32)
+        self.bulk_add_button.setMinimumWidth(112)
+        self.bulk_add_button.clicked.connect(self._add_entries_in_bulk)
+        grid.addWidget(self.bulk_add_button, 0, 1, Qt.AlignmentFlag.AlignRight)
         self.sku_input = LineEdit()
         self.sku_input.setPlaceholderText("SKU (required)")
         self.name_input = LineEdit()
@@ -1888,6 +1895,30 @@ class EarningsScreen(ResponsiveWidget):
         except Exception as error:
             InfoBar.error(title="Could not add earning", content=str(error), parent=self, position=InfoBarPosition.TOP)
 
+    def _add_entries_in_bulk(self):
+        dialog = BulkEarningAddDialog(
+            self.service, self, translate=self.main.i18n.tr,
+            brand_id=self.brand_input.currentData(),
+            product_type=self.type_input.currentData(),
+            earned_at=self.date_input.dateTime().toPython(),
+        )
+        if not dialog.exec() or dialog.result_data is None:
+            return
+        result = dialog.result_data
+        self.refresh_all()
+        if result.count:
+            self.earning_burst.show_amount(result.payout_cents, self.bulk_add_button)
+            if self._engagement_settings["sound_enabled"]:
+                self._success_sound.play()
+        InfoBar.success(
+            title=self.main.i18n.tr("earnings.bulk_add.complete.title"),
+            content=self.main.i18n.tr(
+                "earnings.bulk_add.complete", count=result.count,
+                amount=money(result.payout_cents), skipped=len(result.skipped_skus),
+            ),
+            parent=self, position=InfoBarPosition.TOP, duration=4000,
+        )
+
     def _selected_entry(self):
         entries = self._selected_entries()
         return entries[0] if len(entries) == 1 else None
@@ -2892,6 +2923,7 @@ class EarningsScreen(ResponsiveWidget):
             self.clear_filters_button,
             self.edit_entry_button,
             self.bulk_edit_button,
+            self.bulk_add_button,
             self.timer_finish,
         ):
             button.setStyleSheet(secondary_style)
@@ -2958,6 +2990,9 @@ class EarningsScreen(ResponsiveWidget):
         self.analytics_rate.title.setText(tr("earnings.metric.rate"))
         self.entry_heading.setText(tr("earnings.add.title"))
         self.add_button.setText(tr("earnings.add.action"))
+        self.bulk_add_button.setText(tr("earnings.bulk_add.action"))
+        self.bulk_add_button.setAccessibleName(tr("earnings.bulk_add.action"))
+        self.bulk_add_button.setToolTip(tr("earnings.bulk_add.tooltip"))
         self.timer_heading.setText(tr("earnings.timer.title"))
         self.goal_heading.setText(tr("earnings.goal.title"))
         self.goal_create.setText(tr("earnings.goal.quest.create.action"))

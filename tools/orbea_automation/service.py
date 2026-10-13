@@ -285,9 +285,12 @@ class OrbeaAutomationService:
                 != GEOMETRY_CAPTURE_VERSION
             ):
                 record["geometry_status"] = "pending"
+                record["attempts"] = 0
+                record["probe_refresh_required"] = True
             legacy_probe_refresh = self._upgrade_probe_record(
                 record, AVAILABILITY_PROBE_VERSION
             )
+            legacy_probe_refresh = legacy_probe_refresh or bool(record.get("probe_refresh_required"))
             if config.collect_product_data:
                 missing_files = False
                 for status_key, path in (("geometry_status", geometry_path), ("size_guide_status", size_path)):
@@ -310,7 +313,7 @@ class OrbeaAutomationService:
                 record.get("size_guide_status"),
             }
             if retry_failed:
-                should_process = is_transient or legacy_probe_refresh or (config.collect_product_data and not prior)
+                should_process = is_transient or legacy_probe_refresh or (config.collect_product_data and record_needs_processing(record))
             else:
                 should_process = record_needs_processing(record)
             if should_process:
@@ -515,10 +518,12 @@ class OrbeaAutomationService:
         if cancelled:
             raise RunCancelled("The Orbea product photo download was stopped")
 
-    def _lookup_products(self, website, checkpoint, reporter, token, log) -> None:
+    def _lookup_products(self, website, checkpoint, reporter, token, log, *, row_keys=None, only_missing=False) -> None:
         from .website import OrbeaAccessError, WEBSITE_LOOKUP_VERSION, template_code
 
-        rows = [row for row in checkpoint.results if row.get("sku") and row.get("status") in {"code_match", "title_only", "ambiguous", "unmatched"}]
+        rows = [row for row in checkpoint.results if row.get("sku") and row.get("status") in {"code_match", "title_only", "ambiguous", "unmatched"}
+                and (row_keys is None or row.get("row_key") in row_keys)
+                and (not only_missing or not (row.get("status") == "code_match" and row.get("catalogue_url")))]
         matches = {}
         saved_queries = set()
         lookup_errors = {}
@@ -612,8 +617,7 @@ class OrbeaAutomationService:
 
     def _prepare_matched_retry(self, config, checkpoint):
         """Make selected downloads pending while retaining the saved matches."""
-        rows = [row for row in checkpoint.results
-                if row.get("status") == "code_match" and row.get("catalogue_url")]
+        rows = checkpoint.download_rows
         if not rows:
             raise ValueError("The saved run has no matched Orbea products to retry")
         selected = {stage for stage, enabled in (
@@ -641,6 +645,9 @@ class OrbeaAutomationService:
                         if data.get("pimbo_product_id") == row.get("product_id") and data.get("sku") == row.get("sku"):
                             data.update(status="partial", stages=stages, errors=[], warnings=[])
                             atomic_write_json(metadata, data)
+                            if "photos" in selected:
+                                from .upload import invalidate_saved_photo_upload
+                                invalidate_saved_photo_upload(folder, sku=row["sku"], product_id=row.get("product_id"))
         if "tables" in selected:
             urls = {canonicalize_url(row["catalogue_url"]) for row in rows}
             for url in urls:
@@ -714,20 +721,25 @@ class OrbeaAutomationService:
         write_report(checkpoint)
         if not retry_matched and not config.downloads_only and not checkpoint.data.get("website_lookup_completed"):
             return
-        rows = [row for row in checkpoint.results if row.get("status") == "code_match"]
+        rows = checkpoint.download_rows
         for row in rows:
             pending_by_url.setdefault(canonicalize_url(row.get("catalogue_url")), set()).update(
                 missing_downloads(row, config, checkpoint.run_dir))
         for index, row in enumerate(rows, 1):
             collect_product(row)
             reporter.emit("product_data", index, len(rows), f"{row['sku']}: {row.get('collection_status', 'checked')}")
+        selected_urls = {canonicalize_url(row.get("catalogue_url")) for row in rows}
         checkpoint.data["images_completed"] = not config.download_images or not any(
             record.get(field) not in {"downloaded", "not_available"}
-            for record in checkpoint.images.values() for field in ("geometry_status", "size_guide_status"))
+            for url, record in checkpoint.images.items()
+            if checkpoint.data.get("selected_download_row_keys") is None or url in selected_urls
+            for field in ("geometry_status", "size_guide_status"))
+        completion_rows = rows if checkpoint.data.get("selected_download_row_keys") is not None else [
+            row for row in checkpoint.results if row.get("status") == "code_match"]
         checkpoint.data["product_data_completed"] = all(not missing_downloads(row, config, checkpoint.run_dir)
-            for row in checkpoint.results if row.get("status") == "code_match")
+            for row in completion_rows)
         checkpoint.data["product_photos_completed"] = not config.download_product_photos or not any(
-            row.get("collection_stages", {}).get("photos", {}).get("status") == "error" for row in checkpoint.results)
+            row.get("collection_stages", {}).get("photos", {}).get("status") == "error" for row in completion_rows)
         checkpoint.save()
 
     def _finalize_run(
@@ -751,6 +763,8 @@ class OrbeaAutomationService:
                     checkpoint.save()
                 write_image_manifest(checkpoint)
                 write_report(checkpoint)
+                if checkpoint.workbook_path.name != "orbea_matches.xlsx":
+                    self._log(log, f"Excel report saved separately because the original was open or read-only: {checkpoint.workbook_path}")
             except Exception as error:
                 if failure is None:
                     failure = error
@@ -774,7 +788,49 @@ class OrbeaAutomationService:
         retry_failed: bool = False,
         retry_matched: bool = False,
         download_missing: bool = False,
+        selected_row_keys: tuple[str, ...] | None = None,
+        lookup_missing: bool = False,
+        download_mode: str | None = None,
+        download_batch_id: str | None = None,
     ) -> OrbeaRunResult:
+        # New UI requests use an explicit mode; legacy flags remain supported.
+        # A resumed refresh continues its pending stages without invalidating
+        # stages already completed by the interrupted attempt.
+        new_mode = download_mode
+        if download_mode is not None:
+            from .selected_downloads import DOWNLOAD_MODES
+            if download_mode not in DOWNLOAD_MODES or not selected_row_keys:
+                raise ValueError("Selected downloads need a mode and at least one saved row")
+            retry_matched = download_mode == "refresh"
+            retry_failed = download_mode == "missing"
+            lookup_missing = download_mode == "pimbo_photos"
+            download_missing = True
+        elif resume and config.resume_run_dir and not any((retry_failed, retry_matched, download_missing, lookup_missing)):
+            data = json.loads((config.resume_run_dir / "run_checkpoint.json").read_text(encoding="utf-8-sig"))
+            operation = data.get("selected_download_operation", {})
+            if operation and not data.get("completed"):
+                selected_row_keys = tuple(data.get("selected_download_row_keys", ()))
+                lookup_missing = operation.get("mode") == "pimbo_photos"
+                retry_failed = operation.get("mode") == "missing"
+                retry_matched = operation.get("mode") == "refresh" and not operation.get("prepared", True)
+                download_missing = True
+        explicit_download_missing = download_missing
+        if lookup_missing and (not selected_row_keys or not download_missing or not config.download_product_photos):
+            raise ValueError("Missing-photo downloads need selected, scanned product codes")
+        if selected_row_keys is not None and not (retry_matched or lookup_missing or download_missing):
+            raise ValueError("Selected bikes must be refreshed using their saved matches")
+        if selected_row_keys is not None:
+            if not config.resume_run_dir:
+                raise ValueError("Selected downloads need a saved collection")
+            data = json.loads((config.resume_run_dir / "run_checkpoint.json").read_text(encoding="utf-8-sig"))
+            eligible = {row.get("row_key") for row in data.get("results", [])
+                        if (row.get("pimbo_photo_scan", {}).get("status") == "no_photos" and row.get("product_id")
+                            if lookup_missing else row.get("status") == "code_match" and row.get("catalogue_url"))}
+            if not selected_row_keys or not set(selected_row_keys) <= eligible:
+                raise RuntimeError("Some selected bikes have no verified saved Orbea match")
+        if selected_row_keys is not None:
+            from dataclasses import replace
+            config = replace(config, collect_product_data=True, downloads_only=True)
         download_missing = download_missing or config.downloads_only
         if download_missing:
             from dataclasses import replace
@@ -804,19 +860,47 @@ class OrbeaAutomationService:
             checkpoint = open_or_create_checkpoint(
                 config, resume=resume, retry_failed=retry_failed, retry_matched=retry_matched, download_missing=download_missing
             )
+            if retry_matched or explicit_download_missing or retry_failed:
+                if selected_row_keys is None:
+                    checkpoint.data.pop("selected_download_row_keys", None)
+                    checkpoint.data.pop("selected_download_operation", None)
+                else:
+                    keys = tuple(dict.fromkeys(selected_row_keys))
+                    checkpoint.data["selected_download_row_keys"] = list(keys)
+                    if new_mode or retry_matched or lookup_missing:
+                        previous_operation = checkpoint.data.get("selected_download_operation", {})
+                        checkpoint.data["selected_download_operation"] = {
+                            "mode": new_mode or ("pimbo_photos" if lookup_missing else "refresh"),
+                            "batch_id": download_batch_id or previous_operation.get("batch_id"),
+                            "prepared": not retry_matched,
+                        }
+            keys = checkpoint.data.get("selected_download_row_keys")
+            if keys is not None:
+                available = {row.get("row_key") for row in checkpoint.results
+                             if (row.get("pimbo_photo_scan", {}).get("status") == "no_photos" and row.get("product_id")
+                                 if lookup_missing else row.get("status") == "code_match" and row.get("catalogue_url"))}
+                if not keys or not set(keys) <= available:
+                    raise ValueError("Some selected bikes have no verified saved Orbea match")
+            if retry_matched or explicit_download_missing or retry_failed:
+                checkpoint.save()
             reporter = _ProgressReporter(progress, checkpoint)
             self._check_cancelled(token)
             if retry_matched:
                 count = self._prepare_matched_retry(config, checkpoint)
+                if "selected_download_operation" in checkpoint.data:
+                    checkpoint.data["selected_download_operation"]["prepared"] = True
+                    checkpoint.save()
                 retry_failed = False
-                self._log(log, f"Retrying saved downloads for all {count} matched Orbea products")
-                reporter.emit("product_data", 0, count, f"Retrying all {count} matched products")
+                scope = "selected" if checkpoint.data.get("selected_download_row_keys") is not None else "all matched"
+                self._log(log, f"Retrying saved downloads for {count} {scope} Orbea products")
+                reporter.emit("product_data", 0, count, f"Retrying {count} {scope} products")
             if download_missing:
-                if not any(row.get("status") == "code_match" and row.get("catalogue_url") for row in checkpoint.results):
+                if not lookup_missing and not any(row.get("status") == "code_match" and row.get("catalogue_url") for row in checkpoint.results):
                     raise ValueError("This saved collection has no matched Orbea product links")
                 checkpoint.data["completed"] = False
                 checkpoint.save()
-                self._log(log, "Downloading only missing selected items using saved Orbea links")
+                if not retry_matched:
+                    self._log(log, "Downloading only missing selected items using saved Orbea links")
             scan_pending = not checkpoint.data.get("scan_completed") and not retry_matched and not download_missing
             catalogue = CatalogueIndex.from_workbook(config.catalogue_path) if scan_pending and config.catalogue_path else CatalogueIndex((), allow_empty=True)
             if scan_pending and config.catalogue_path:
@@ -871,6 +955,9 @@ class OrbeaAutomationService:
             self._check_cancelled(token)
             if website is not None:
                 checkpoint.set_phase("product_data" if retry_matched else "website_lookup")
+                if lookup_missing:
+                    self._lookup_products(website, checkpoint, reporter, token, log,
+                                          row_keys=set(keys), only_missing=True)
                 if config.collect_product_data:
                     self._collect_website_products(website, config, checkpoint, reporter, token, log, retry_failed=retry_failed, retry_matched=retry_matched)
                 elif not retry_matched:
@@ -918,8 +1005,12 @@ class OrbeaAutomationService:
                 bool(checkpoint.data.get("scan_completed"))
                 and bool(checkpoint.data.get("images_completed"))
                 and bool(checkpoint.data.get("product_photos_completed"))
-                and (website is None or bool(checkpoint.data.get("website_lookup_completed")))
+                and (website is None or bool(checkpoint.data.get("website_lookup_completed"))
+                     or (keys is not None and all(row.get("status") == "code_match"
+                         for row in checkpoint.results if row.get("row_key") in keys)))
                 and (not config.collect_product_data or bool(checkpoint.data.get("product_data_completed")))
+                and (not lookup_missing or all(row.get("status") == "code_match"
+                     for row in checkpoint.results if row.get("row_key") in keys))
             )
             if complete:
                 checkpoint.mark_completed()

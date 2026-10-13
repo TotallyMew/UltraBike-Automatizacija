@@ -4,6 +4,8 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from typing import ClassVar
+from .photo_order import VIEWS, desired_photo_order, photo_sort_key, photo_view
 
 from Managers.PimboProductEditor import PimAutomationError, PimPreparationResult, PimPreparationStatus, PimboProductEditor
 from tools.kross_automation.service import KrossPimboClient, KrossWorkflowOptions
@@ -11,14 +13,48 @@ from tools.supplier_upload import IMAGE_SUFFIXES, SupplierUploadWorkflow, normal
 from .checkpoint import atomic_write_json, utc_now
 from .component_values import normalize_component_specifications
 from .photos import normalize_orbea_product_url
+from .table_packages import current_table_files, geometry_needs_recollection
 from .specifications import MANUAL_SPECIFICATION_FIELDS, build_orbea_specification_plan, parse_orbea_name
 from .website import SPECIFICATIONS_CAPTURE_VERSION
 
 METADATA_NAME = "orbea-product.json"
 
 
+def invalidate_saved_photo_upload(folder, *, sku, product_id):
+    """Keep upload history, but require refreshed source photos to be uploaded again."""
+    match = OrbeaUploadMatch(str(sku), "local_ready", str(product_id or ""), local_folder=str(folder))
+    record = OrbeaUploadService.read_upload_result(match)
+    if record and set(record.get("completed_stages", [])) & {"product_photos", "photo_order"}:
+        record["completed_stages"] = [stage for stage in record["completed_stages"]
+                                      if stage not in {"product_photos", "photo_order"}]
+        record["source_photos_refreshed_at"] = utc_now()
+        atomic_write_json(Path(folder) / "orbea-upload-result.json", record)
+
+
+def invalidate_saved_table_upload(folder, *, sku, product_id):
+    """A refreshed package has new attachments that must be uploaded again."""
+    match = OrbeaUploadMatch(str(sku), "local_ready", str(product_id or ""), local_folder=str(folder))
+    record = OrbeaUploadService.read_upload_result(match)
+    if record and set(record.get("completed_stages", [])) & {"geometry", "size_tables"}:
+        record["completed_stages"] = [stage for stage in record["completed_stages"]
+                                      if stage not in {"geometry", "size_tables"}]
+        record["source_tables_refreshed_at"] = utc_now()
+        atomic_write_json(Path(folder) / "orbea-upload-result.json", record)
+
+
 @dataclass(frozen=True)
 class OrbeaWorkflowOptions(KrossWorkflowOptions):
+    STAGES: ClassVar[tuple[str, ...]] = ("product_photos", "photo_order", *KrossWorkflowOptions.STAGES[1:])
+    photo_order: bool = False
+
+    def __post_init__(self):
+        if self.geometry or self.size_tables:
+            object.__setattr__(self, "save", True)
+
+    @property
+    def photos_only(self):
+        return bool(self.product_photos or self.photo_order) and set(self.selected_stages) <= {"product_photos", "photo_order", "save"}
+
     @classmethod
     def only(cls, *stages):
         unknown = set(stages) - set(cls.STAGES)
@@ -39,6 +75,8 @@ class OrbeaUploadMatch:
     local_folder: str = ""
     note: str = ""
     variant_skus: tuple[str, ...] = ()
+    checkpoint_path: str = ""
+    row_key: str = ""
 
     @property
     def ready(self):
@@ -85,6 +123,8 @@ class OrbeaUploadService(SupplierUploadWorkflow):
     metadata_name = METADATA_NAME
     geometry_name = "tables/geometry.png"
     size_table_name = "tables/size-guide-cm.png"
+    replace_geometry_images = True
+    replace_size_table_images = True
     required_specification_fields = ("Modelis",)
     specification_value_migrations = ()
     workflow_options_type = OrbeaWorkflowOptions
@@ -104,6 +144,13 @@ class OrbeaUploadService(SupplierUploadWorkflow):
         return MANUAL_SPECIFICATION_FIELDS + (("Spalva",) if color.casefold() == "custom" else ())
 
     def validate_product_sources(self, product, selected):
+        if selected.geometry or selected.size_tables:
+            try:
+                current_table_files(Path(self._upload_target.local_folder))
+            except ValueError as error:
+                raise PimAutomationError(str(error)) from error
+        if selected.geometry and geometry_needs_recollection(Path(self._upload_target.local_folder)):
+            raise PimAutomationError("Saved geometry variants use the old plain layout; download the tables again before uploading")
         if product and selected.specifications_magic_ai and (
             product.specifications_capture_version < SPECIFICATIONS_CAPTURE_VERSION
         ):
@@ -131,7 +178,7 @@ class OrbeaUploadService(SupplierUploadWorkflow):
         url = normalize_orbea_product_url(data.get("orbea_url") or "")
         stages = data.get("stages") or {}
         tables = stages.get("tables", {})
-        table_names = {Path(path).name for path in tables.get("files", [])}
+        table_names = {Path(path).name for path in tables.get("package_files", tables.get("files", []))}
         tables_confirmed = tables.get("status") in {"downloaded", "not_available"}
         for filename in ("tables/geometry.png", "tables/size-guide-cm.png"):
             if not (folder / filename).resolve().is_relative_to(folder):
@@ -175,11 +222,31 @@ class OrbeaUploadService(SupplierUploadWorkflow):
             return None
 
     @classmethod
+    def pending_table_upload_stages(cls, match):
+        record = cls.read_upload_result(match)
+        if not record:
+            return ()
+        saved = set(cls.saved_upload_stages(match))
+        return tuple(stage for stage in ('geometry', 'size_tables')
+                     if stage in record.get('selected_stages', []) and stage not in saved)
+
+    @classmethod
     def upload_finished(cls, match):
         record = cls.read_upload_result(match)
         if record is None:
             return False
+        if "geometry" in record.get("selected_stages", []) and geometry_needs_recollection(Path(match.local_folder)):
+            return False
         status = record["preparation"].get("status")
+        photo = record["preparation"].get("photo_upload") or {}
+        if "product_photos" in record.get("selected_stages", []) and photo.get("action") == "skipped_existing":
+            return False
+        if status == PimPreparationStatus.NO_CHANGES.value and photo.get("action") == "uploaded" and not photo.get("persisted"):
+            # Older runs counted selected files before their asynchronous attachment finished.
+            return False
+        if status == PimPreparationStatus.NO_CHANGES.value and set(record["preparation"].get("changed_fields") or ()) & {"geometry_images", "size_table_images"}:
+            # Older batches skipped the reload verification when Save was disabled.
+            return False
         completed = set(record.get("completed_stages", []))
         if status == PimPreparationStatus.NO_CHANGES.value:
             completed.add("save")
@@ -196,6 +263,16 @@ class OrbeaUploadService(SupplierUploadWorkflow):
         # The first save precedes component AI. A failed second phase can have
         # completed pre-fill/AI in memory without saving those changes.
         completed -= {"save", "specifications_prefill", "specifications_magic_ai"}
+        if geometry_needs_recollection(Path(match.local_folder)):
+            completed.discard("geometry")
+        if record["preparation"].get("status") == PimPreparationStatus.NO_CHANGES.value:
+            changed = set(record["preparation"].get("changed_fields") or ())
+            if "geometry_images" in changed:
+                completed.discard("geometry")
+            if "size_table_images" in changed:
+                completed.discard("size_tables")
+        if (record["preparation"].get("photo_upload") or {}).get("action") == "skipped_existing":
+            completed -= {"product_photos", "photo_order"}
         return tuple(stage for stage in OrbeaWorkflowOptions.STAGES if stage in completed)
 
     @classmethod
@@ -243,9 +320,17 @@ class OrbeaUploadService(SupplierUploadWorkflow):
                 paths = [(folder / path).resolve() for path in stage.get("package_files", [])]
                 if any(not path.is_relative_to(photos.resolve()) or not path.is_file() for path in paths):
                     raise PimAutomationError("A matched-colour photo is missing or outside this product's photos folder")
-                return tuple(sorted(paths))
-        return tuple(path for path in sorted(photos.rglob("*")) if path.is_file()
+                return tuple(sorted(paths, key=photo_sort_key))
+        return tuple(path for path in sorted(photos.rglob("*"), key=photo_sort_key) if path.is_file()
                      and path.suffix.casefold() in IMAGE_SUFFIXES and path.resolve().is_relative_to(folder))
+
+    def can_arrange_product_photos(self, folder):
+        return set(VIEWS) <= {photo_view(path) for path in self.local_photo_candidates(folder)}
+
+    def arrange_product_photos(self, editor, folder):
+        sources = [card.get("src", "") for card in editor._product_photo_cards()]
+        desired = desired_photo_order(sources, self.local_photo_candidates(folder))
+        return editor.reorder_product_photos(desired)
 
     @staticmethod
     def _local_product_photo_is_uploadable(path):
@@ -260,9 +345,18 @@ class OrbeaUploadService(SupplierUploadWorkflow):
     def geometry_upload_paths(path):
         if path is None:
             return ()
-        folder = path.parent.resolve()
-        return (path, *tuple(item for item in sorted(folder.glob("geometry-*.png"))
-                            if item.is_file() and item.resolve().is_relative_to(folder)))
+        path = Path(path).resolve()
+        if geometry_needs_recollection(path.parent.parent):
+            raise PimAutomationError("Saved geometry variants use the old plain layout; download the tables again before uploading")
+        current = current_table_files(path.parent.parent)
+        if current is None:
+            return (path,)  # Older packages have no reliable variant list.
+        geometry = tuple(item for item in current if item.name.casefold() != "size-guide-cm.png")
+        if path not in geometry:
+            raise PimAutomationError("The main geometry image is not in the latest table download")
+        if any(not item.is_file() for item in geometry):
+            raise PimAutomationError("A geometry image from the latest download is missing; refresh the table download")
+        return geometry
 
     def upload_and_save(self, match, output_root=None, *, options=None, progress=None, resume_completed=False):
         folder = Path(match.local_folder).resolve()

@@ -45,7 +45,7 @@ class DescriptionWorkflow(OrbeaDirectWorkflow):
         view._description_log.clear()
         view._description_progress.setValue(0)
         self.set_busy(True)
-        worker = OrbeaDescriptionWorker(view._make_description_service, config)
+        worker = lambda: OrbeaDescriptionWorker(view._make_description_service, config)
         self.start_worker(worker)
 
     def validate_inputs(self) -> bool:

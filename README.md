@@ -84,6 +84,15 @@ Known defects, concurrency risks, and structural debt are tracked in the
 [technical debt backlog](docs/technical-debt-backlog.md), with priorities,
 evidence, and completion criteria.
 
+## Adding earnings in bulk
+
+Earnings → Add in bulk accepts one SKU per line or two copied Excel columns
+(SKU and optional product name). Choose the shared brand, product type and
+date, review the count and payout, then add all entries together. Existing
+and repeated SKUs are skipped unless you explicitly include duplicates as
+separate paid work. Each product keeps its own earnings record at the current
+rate; a failed batch rolls back all its new entries.
+
 ## Tests
 
 ```powershell
@@ -138,10 +147,16 @@ with **Check now**. Downloads require HTTPS and a matching SHA-256 digest.
 
 ### Product photos and upload results
 
-Before a product-photo upload, the app checks only the product gallery. It removes the exact Orbea `https://www.orbea.com/uploads/products/images/picture-coming-soon.webp` placeholder, accepts the image-removal confirmation, verifies that it disappeared, and then uploads replacements. Existing real photos cause a successful skip. If real photos and placeholders coexist, only placeholders are removed. A placeholder is kept when there are no replacement photos and no real photos. Geometry and size-table images do not count as product photos.
+Before a product-photo upload, the app verifies the target product and replaces its product gallery with the downloaded photos. The gallery is cleared once before the first batch, including Coming Soon placeholders; later batches retain the new uploads. Missing usable downloads leave the gallery unchanged. The app waits for product attachment to finish and verifies the gallery count. Geometry and size-table images are separate from product photos.
 
 Use **Export upload results to Excel** in the Orbea or KROSS upload section. The export includes loaded products with saved results and unprocessed products, plus a **Needs checking** sheet. Photo outcomes distinguish uploads, skips, placeholder removals, and whether changes were saved. Saved collection folders retain their latest upload result for export after reopening. For historical results, use **History → Export to Excel**, which includes the same detailed results and review list alongside the history sheet. Older results retain their original outcome; photo actions that were not recorded are labelled accordingly.
 
+
+### Orbea Automation
+
+Use **Load products** for Excel, saved folders, or reloading the current source. **Selection** offers Select visible, Clear visible and additive status selection. Download selected provides missing/failed, refresh, and missing-Pimbo-photo modes with an eligible count. Upload selected offers normal or unfinished-step retry. Product actions process checked, visible rows and preserve hidden checks. Scan Pimbo, Scan Pimbo photos and Resume interrupted run remain distinct; resume restores the identified saved scope. Extra tools combines image URLs, destination and image types in one form, alongside description extraction and Excel sorting.
+
+**Model copying** accepts your regular `orbea_matches.xlsx`. Each base TTCC code appears beside all of its specific SKUs and bike names. Select the source beside the bike already prepared and saved in Pimbo, then check the groups to process. Search by base code, SKU or name; actions use the checked groups currently shown and keep hidden selections. **Read sources** captures the saved data, and **Copy and save** applies it to the remaining bikes. Source choices are remembered separately from Excel; optional `Šaltinis` / `TAIP` marks are still supported. Run controls and the activity log use the same cards and sidebar as the other workflows, stacking below the list in narrow windows.
 
 ### Orbea colour folders
 

@@ -15,7 +15,7 @@ class NavigationService:
         route_key = resolve_route_key(route_key)
         if route_key not in main.ROUTES:
             return False
-        if not self.can_leave_current():
+        if not self.can_leave_current(route_key):
             self.restore_selection()
             return False
         try:
@@ -54,7 +54,7 @@ class NavigationService:
             pass
         return True
 
-    def can_leave_current(self) -> bool:
+    def can_leave_current(self, target_route: str | None = None) -> bool:
         main = self.main
         stack = getattr(main, "content_stack", None)
         screen = stack.currentWidget() if stack is not None else None
@@ -67,7 +67,12 @@ class NavigationService:
                 for value in vars(screen).values()
             )
             owner_getter = getattr(main, "browser_lease_owner", None)
-            if running or (callable(owner_getter) and owner_getter() is not None):
+            owner = owner_getter() if callable(owner_getter) else None
+            background_navigation = getattr(owner, "can_navigate_during_upload", None)
+            can_view_background = bool(callable(background_navigation)
+                                       and background_navigation(target_route)
+                                       and (not running or screen is owner))
+            if (running or owner is not None) and not can_view_background:
                 InfoBar.warning(title=main.i18n.tr("common.warning"),
                     content=main.i18n.tr("kross.browser.busy"), parent=main)
                 return False

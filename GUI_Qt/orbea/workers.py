@@ -89,6 +89,21 @@ class _OrbeaServiceWorker(QThread):
         self.failed.emit(str(exc))
 
 
+class OrbeaModelCopyWorker(_OrbeaServiceWorker):
+    item_finished = Signal(object)
+
+    def __init__(self, factory, driver, workbook, mode, selected_ttcc=()):
+        super().__init__(factory, driver)
+        self.workbook, self.mode, self.selected_ttcc = workbook, mode, selected_ttcc
+
+    def _execute(self, service):
+        if self.mode == "capture":
+            return service.capture_templates(self.workbook, selected_ttcc=self.selected_ttcc,
+                                             item_finished=self.item_finished.emit, **self._callbacks())
+        return service.run(self.workbook, selected_ttcc=self.selected_ttcc,
+                           retry_failed=self.mode == "retry", item_finished=self.item_finished.emit, **self._callbacks())
+
+
 class OrbeaFilterWorker(_OrbeaServiceWorker):
     loaded = Signal(object)
     skip_cancelled = True
@@ -117,6 +132,8 @@ class OrbeaRunWorker(_OrbeaServiceWorker):
         self, driver, make_service: Callable[[Any], Any], config, *,
         resume: bool, retry_failed: bool, retry_matched: bool = False,
         download_missing: bool = False,
+        selected_jobs=(),
+        download_request=None,
     ):
         super().__init__(make_service, driver)
         self.driver = driver
@@ -125,8 +142,41 @@ class OrbeaRunWorker(_OrbeaServiceWorker):
         self.retry_failed = retry_failed
         self.retry_matched = retry_matched
         self.download_missing = download_missing
+        self.selected_jobs = selected_jobs
+        self.download_request = download_request
 
     def _execute(self, service):
+        if self.selected_jobs or self.download_request:
+            from dataclasses import replace
+            from tools.orbea_automation.selected_downloads import begin_download_batch
+            from tools.orbea_automation.checkpoint import atomic_write_json
+            results = []
+            jobs = (tuple((job.config, job.row_keys) for job in self.download_request.jobs)
+                    if self.download_request else self.selected_jobs)
+            batch_path, batch = begin_download_batch(self.download_request) if self.download_request else (None, None)
+            for index, (config, keys) in enumerate(jobs):
+                if self.stop_requested and results:
+                    break
+                self.log_message.emit(f"Downloading data for {len(keys)} selected products in {config.resume_run_dir.name}")
+                continuing = self.download_request and self.download_request.jobs[index].resume
+                kwargs = ({"download_mode": self.download_request.mode, "download_batch_id": batch["id"]}
+                          if self.download_request and not continuing else {})
+                result = service.run(config, **self._callbacks(), resume=True, retry_failed=False,
+                                     retry_matched=not bool(self.download_request),
+                                     **({"selected_row_keys": keys} if not continuing else {}), **kwargs)
+                results.append(result)
+                if batch is not None:
+                    for item in batch["jobs"]:
+                        if Path(item["run_dir"]).resolve() == config.resume_run_dir.resolve():
+                            item["completed"] = result.completed
+                    atomic_write_json(batch_path, batch)
+                if result.cancelled:
+                    break
+                if len(results) < len(jobs):
+                    self.partial_result.emit(result)
+            return replace(results[-1], completed=len(results) == len(jobs)
+                           and all(result.completed for result in results),
+                           cancelled=self.stop_requested or any(result.cancelled for result in results))
         return service.run(
             self.config,
             **self._callbacks(),
@@ -144,6 +194,36 @@ class OrbeaRunWorker(_OrbeaServiceWorker):
             self.website_blocked.emit(str(exc))
         else:
             super()._emit_error(exc)
+
+
+class OrbeaPimboPhotoScanWorker(_OrbeaServiceWorker):
+    item_finished = Signal(object)
+    skip_cancelled = True
+
+    def __init__(self, make_service, run_dir=None, skus=(), *, jobs=()):
+        super().__init__(make_service)
+        self.run_dir, self.skus = run_dir, skus
+        self.jobs = jobs or ((run_dir, skus),)
+
+    def _execute(self, service):
+        results = []
+        for root, skus in self.jobs:
+            if self.stop_requested:
+                break
+            results.extend(service.run(root, skus, **self._callbacks(), item_finished=self.item_finished.emit))
+        return tuple(results)
+
+
+class OrbeaMissingPhotosWorker(_OrbeaServiceWorker):
+    skip_cancelled = True
+
+    def __init__(self, make_service, config, keys):
+        super().__init__(make_service)
+        self.config, self.keys = config, keys
+
+    def _execute(self, service):
+        return service.run(self.config, **self._callbacks(), resume=True, download_missing=True,
+                           lookup_missing=True, selected_row_keys=self.keys)
 
 
 class OrbeaDescriptionWorker(_OrbeaServiceWorker):

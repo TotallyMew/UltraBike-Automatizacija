@@ -25,22 +25,21 @@ class OrbeaDirectWorkflow(QObject):
 
     def start_worker(self, worker, *, total=None):
         view = self.screen
-        setattr(view, f"_{self.prefix}_worker", worker)
-        worker.progress_changed.connect(self.on_progress)
-        worker.log_message.connect(getattr(view, f"_append_{self.prefix}_log"))
-        worker.succeeded.connect(self.on_result)
-        worker.failed.connect(self.on_error)
-        worker.finished.connect(self.finished)
-        try:
-            if hasattr(view.main, "track_worker"):
-                details = {"output_path": str(getattr(view, self.output_attribute))}
-                if total is not None:
-                    details["total"] = total
-                view.main.track_worker(worker, "orbea", "orbea", **details)
-            worker.start()
-        except Exception as error:
-            self.on_error(str(error))
-            self.finished()
+        details = {"output_path": str(getattr(view, self.output_attribute))}
+        if total is not None:
+            details["total"] = total
+        view.workflow_controller.start_job(
+            {"photo": "photos", "table_image": "tables"}.get(self.prefix, self.prefix),
+            worker if callable(worker) else lambda: worker,
+            owner=view, attribute=f"_{self.prefix}_worker", details=details,
+            signals={"progress_changed": self.on_progress,
+                     "log_message": getattr(view, f"_append_{self.prefix}_log"),
+                     "succeeded": self.on_result, "failed": self.on_error},
+            finished=self.finished, failed=self.start_failed)
+
+    def start_failed(self, message):
+        self.set_busy(False)
+        self.on_error(message)
 
     def finished(self):
         view = self.screen

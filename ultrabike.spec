@@ -37,6 +37,7 @@ _qt_runtime_binaries = [
 _datas = [
     (str(ROOT / "Assets" / "Translations" / "*.txt"), "Assets/Translations"),
     (str(ROOT / "Assets" / "i18n" / "*.json"), "Assets/i18n"),
+    (str(ROOT / "Assets" / "orbea_colour_attributes.json"), "Assets"),
     (str(ROOT / "Assets" / "Sounds" / "*.wav"), "Assets/Sounds"),
     (str(ROOT / "VERSION.txt"), "."),
 ]

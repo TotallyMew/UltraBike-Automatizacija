@@ -262,15 +262,28 @@ class RunCheckpoint:
 
     @property
     def workbook_path(self) -> Path:
-        return self.run_dir / WORKBOOK_NAME
+        return self._export_path("report_filename", WORKBOOK_NAME)
 
     @property
     def manifest_path(self) -> Path:
-        return self.run_dir / MANIFEST_NAME
+        return self._export_path("manifest_filename", MANIFEST_NAME)
+
+    def _export_path(self, key: str, default: str) -> Path:
+        name = self.data.get(key, default)
+        if (not isinstance(name, str) or Path(name).name != name
+                or Path(name).suffix.lower() != Path(default).suffix.lower()):
+            name = default
+        return self.run_dir / name
 
     @property
     def results(self) -> list[dict[str, Any]]:
         return self.data.setdefault("results", [])
+
+    @property
+    def download_rows(self) -> list[dict[str, Any]]:
+        keys = self.data.get("selected_download_row_keys")
+        return [row for row in self.results if row.get("status") == "code_match"
+                and row.get("catalogue_url") and (keys is None or row.get("row_key") in keys)]
 
     @property
     def images(self) -> dict[str, dict[str, Any]]:

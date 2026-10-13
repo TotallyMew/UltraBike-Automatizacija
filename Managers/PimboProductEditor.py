@@ -8,10 +8,12 @@ operation guarded by Draft/product/version verification.
 from __future__ import annotations
 
 import html
+import hashlib
 import re
 import time
 from dataclasses import dataclass, field, replace
 from enum import Enum
+from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 from urllib.parse import urlsplit
 
@@ -19,6 +21,7 @@ from selenium.common.exceptions import NoAlertPresentException, NoSuchElementExc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import Select
+from Managers.PimboChoices import PimboChoiceMixin
 
 
 PIMBO_PRODUCTS_URL = "https://pim.bo.ultrabike.lt/dashboard/products"
@@ -169,7 +172,7 @@ def _is_lithuanian_copy(value: str) -> bool:
     )
 
 
-class PimboProductEditor:
+class PimboProductEditor(PimboChoiceMixin):
     """Semantic Selenium controller for the current PIMBO product page."""
 
     SECTION_VALUES = {
@@ -211,6 +214,12 @@ class PimboProductEditor:
         self._bound_product_id = ""
         self._photo_upload_product_id = ""
         self.photo_upload: dict[str, Any] = {}
+        self._geometry_upload_changed = False
+        self._geometry_upload_error = ""
+        self._geometry_expected_sources: tuple[str, ...] | None = None
+        self._size_table_upload_changed = False
+        self._size_table_upload_error = ""
+        self._size_table_expected_sources: tuple[str, ...] | None = None
 
     def _assert_bound_product(self) -> None:
         if self._bound_product_id and self.product_id != self._bound_product_id:
@@ -418,6 +427,12 @@ class PimboProductEditor:
             self._bound_product_id = product_id
             self._photo_upload_product_id = ""
             self.photo_upload = {}
+            self._geometry_upload_changed = False
+            self._geometry_upload_error = ""
+            self._geometry_expected_sources = None
+            self._size_table_upload_changed = False
+            self._size_table_upload_error = ""
+            self._size_table_expected_sources = None
             initial_fields = self.capture_field_state()
             self._assert_bound_product()
             return PimPreparationResult(
@@ -657,76 +672,96 @@ class PimboProductEditor:
             )
         return changed
 
-    def description_html(self) -> str:
+    def description_html(self, *, require_content: bool = False) -> str:
+        """Read the current locale after the rich-text editor has initialized.
+
+        Basic Info becomes ready before HugeRTE mounts its iframe and supplies
+        the saved HTML. An absent iframe is not an empty description. Source
+        copying additionally waits through the editor's initial blank body.
+        """
         self.open_section("general")
-        iframe = self._find_visible(By.CSS_SELECTOR, "main iframe.tox-edit-area__iframe")
-        if iframe is None:
-            return ""
-        try:
-            self.driver.switch_to.frame(iframe)
-            body = self.driver.find_element(By.ID, "hugerte")
-            return str(body.get_attribute("innerHTML") or "")
-        finally:
-            self.driver.switch_to.default_content()
+
+        def read():
+            # Re-resolve on every poll: React may replace the editor while the
+            # section or locale is loading.
+            iframe = self._find_visible(By.CSS_SELECTOR, "main iframe.tox-edit-area__iframe")
+            if iframe is None:
+                return False
+            try:
+                self.driver.switch_to.frame(iframe)
+                body = self.driver.find_element(By.ID, "hugerte")
+                if body.get_attribute("contenteditable") != "true":
+                    return False
+                value = str(body.get_attribute("innerHTML") or "")
+                if require_content and not _strip_html(value):
+                    return False
+                # A ready, genuinely empty editor is a valid read for setters.
+                return (value,)
+            finally:
+                self.driver.switch_to.default_content()
+
+        message = ("PIMBO description is empty or its content did not finish loading" if require_content
+                   else "HugeRTE description editor did not finish loading")
+        return self._wait_until(read, message)[0]
 
     def set_description_html(self, value: str) -> bool:
         self._assert_bound_product()
         self.open_section("general")
         before = self.description_html()
-        if before == value:
+        expected = self.normalize_description_html(value)
+        if self.normalize_description_html(before) == expected:
             return False
-        # Re-resolve after reading the old value because switching in and out of
-        # the iframe can invalidate a React-owned element reference.
-        self.open_section("general")
-        iframe = self._wait_until(
-            lambda: self._find_visible(By.CSS_SELECTOR, "main iframe.tox-edit-area__iframe"),
-            "HugeRTE description iframe was not found",
-        )
-        try:
-            self.driver.switch_to.frame(iframe)
-            body = self.driver.find_element(By.ID, "hugerte")
-            self._assert_bound_product()
-            self.driver.execute_script(
-                """
-                const body = arguments[0];
-                const value = arguments[1];
-                const editor = window.parent.tinymce?.activeEditor;
-                if (editor && editor.getBody && editor.getBody() === body) {
-                  editor.setContent(value);
-                  editor.fire('input');
-                  editor.fire('change');
-                  editor.save();
-                } else {
-                  body.focus();
-                  body.innerHTML = value;
-                  try {
-                    body.dispatchEvent(new InputEvent('input', {
-                      bubbles: true, inputType: 'insertFromPaste', data: value
-                    }));
-                  } catch (_) {
-                    body.dispatchEvent(new Event('input', {bubbles: true}));
-                  }
-                  body.dispatchEvent(new Event('change', {bubbles: true}));
-                  body.dispatchEvent(new Event('blur', {bubbles: true}));
-                }
-                """,
-                body,
-                value,
+
+        # Use HugeRTE's own HTML dialog so its model and React onChange receive
+        # the entire formatted description. Editing only the iframe DOM can
+        # look correct while leaving the product's description state unchanged.
+        source_selector = "main .tox button[aria-label='Source code']"
+        source = self._find_visible(By.CSS_SELECTOR, source_selector)
+        if source is None:
+            overflow = self._wait_until(
+                lambda: self._find_visible(
+                    By.CSS_SELECTOR,
+                    "main .tox button[aria-label='Reveal or hide additional toolbar items']",
+                ),
+                "HugeRTE additional toolbar control was not found",
             )
-        finally:
-            self.driver.switch_to.default_content()
-        expected_text = _strip_html(value)
+            self._click(overflow)
+            source = self._wait_until(
+                lambda: self._find_visible(By.CSS_SELECTOR, source_selector),
+                "HugeRTE Source code button was not found",
+            )
+        self._click(source)
+        dialog_xpath = (
+            "//div[@role='dialog' and contains(@class,'tox-dialog')]"
+            "[.//*[normalize-space()='Source Code']]"
+        )
+        dialog = self._wait_until(
+            lambda: self._find_visible(By.XPATH, dialog_xpath),
+            "HugeRTE Source Code dialog did not open",
+        )
+        field = self._wait_until(
+            lambda: next(iter(self._displayed(dialog.find_elements(By.CSS_SELECTOR, "textarea.tox-textarea"))), None),
+            "HugeRTE Source Code textarea was not found",
+        )
+        self._assert_bound_product()
+        field.send_keys(Keys.CONTROL, "a")
+        field.send_keys(Keys.BACKSPACE)
+        if value:
+            field.send_keys(value)
+        if field.get_attribute("value") != value:
+            raise PimAutomationError("HugeRTE Source Code textarea did not retain the complete HTML")
+        save = self._wait_until(
+            lambda: next(iter(self._displayed(dialog.find_elements(By.XPATH, ".//button[normalize-space()='Save']"))), None),
+            "HugeRTE Source Code Save button was not found",
+        )
+        self._click(save)
         self._wait_until(
-            lambda: (
-                current
-                if (current := _strip_html(self.description_html()))
-                and (
-                    current == expected_text
-                    or expected_text[:160] in current
-                )
-                else ""
-            ),
-            "PIMBO did not retain the pasted KROSS description",
+            lambda: self._find_visible(By.XPATH, dialog_xpath) is None,
+            "HugeRTE Source Code dialog did not close",
+        )
+        self._wait_until(
+            lambda: self.normalize_description_html(self.description_html()) == expected,
+            "PIMBO did not retain the complete description HTML and formatting",
             6.0,
         )
         return True
@@ -816,6 +851,9 @@ class PimboProductEditor:
                   input.name, input.id, input.getAttribute('aria-label'),
                   input.getAttribute('data-testid'), input.getAttribute('data-slot')
                 ].filter(Boolean);
+                const card = input.closest('[data-slot="card"]');
+                const title = card && card.querySelector('[data-slot="card-title"]');
+                if (title) parts.push(title.innerText || title.textContent || '');
                 if (input.id) {
                   const label = document.querySelector(`label[for="${CSS.escape(input.id)}"]`);
                   if (label) parts.push(label.innerText || label.textContent || '');
@@ -847,6 +885,25 @@ class PimboProductEditor:
         # together instead of accidentally dropping Geometry or Size tables.
         return list(self.driver.find_elements(By.CSS_SELECTOR, selector))
 
+    def _single_image_upload_area(self, inputs: list[Any]) -> Any | None:
+        if len(inputs) == 1:
+            return inputs[0]
+        if not inputs:
+            return None
+        try:
+            same_card = self.driver.execute_script(
+                """
+                const cards = Array.from(arguments).map(input => input.closest('[data-slot="card"]'));
+                return cards.every(card => card && card === cards[0]);
+                """,
+                *inputs,
+            )
+        except Exception:
+            return None
+        # PIMBO has both a header Upload input and a drop-area input in one
+        # gallery. Only collapse controls whose shared upload card is proven.
+        return inputs[0] if same_card is True else None
+
     def _image_group_input(self, group: str) -> Any:
         inputs = self._image_file_inputs()
         if not inputs:
@@ -863,8 +920,9 @@ class PimboProductEditor:
                 for element, context in contexts
                 if not any(alias in context for alias in reserved_aliases)
             ]
-            if len(candidates) == 1:
-                return candidates[0]
+            image_input = self._single_image_upload_area(candidates)
+            if image_input is not None:
+                return image_input
             if len(candidates) > 1:
                 raise PimAutomationError("PIMBO product-photo upload area is ambiguous")
             raise PimAutomationError(
@@ -879,8 +937,9 @@ class PimboProductEditor:
             for element, context in contexts
             if any(alias.casefold() in context for alias in aliases)
         ]
-        if len(matches) == 1:
-            return matches[0]
+        image_input = self._single_image_upload_area(matches)
+        if image_input is not None:
+            return image_input
         label = "Geometry" if group == "geometry" else "Size tables"
         if not matches:
             raise PimAutomationError(f"PIMBO {label!r} image upload area was not found")
@@ -901,9 +960,11 @@ class PimboProductEditor:
             """
             const input = arguments[0];
             const selector = "input[type='file'][accept*='image']";
-            let root = input.parentElement;
+            let root = input.closest('[data-slot="card"]');
+            const uploadCard = root;
+            if (!root) root = input.parentElement;
             if (!root) throw new Error('Product photo area was not found');
-            for (let depth = 0; root.parentElement && depth < 8; depth++) {
+            for (let depth = 0; !uploadCard && root.parentElement && depth < 8; depth++) {
               const parent = root.parentElement;
               if (parent.tagName === 'MAIN' || parent.querySelectorAll(selector).length !== 1) break;
               root = parent;
@@ -936,65 +997,218 @@ class PimboProductEditor:
             raise PimAutomationError("PIMBO product photos could not be inspected")
         return cards
 
-    def _remove_photo_placeholder(self, card: dict[str, Any], before_count: int) -> None:
+    def inspect_product_photos(self, *, expected_product_id: str = "") -> dict[str, int]:
+        """Read uploaded product photos, excluding Geometry and Size Tables."""
+        self._assert_bound_product()
+        if not self.product_id or (expected_product_id and self.product_id != expected_product_id):
+            raise PimAutomationError("The verified PIMBO product is not open for photo inspection")
+        self._bound_product_id = expected_product_id or self.product_id
+        self.open_section("general")
+        cards = self._product_photo_cards()
+        placeholders = sum(self._is_photo_placeholder(card.get("src", "")) for card in cards)
+        # Unreadable attached images still count as photos. An inspection error
+        # must never become an empty-gallery result.
+        return {"photos": len(cards), "placeholders": placeholders}
+
+    def _remove_gallery_image(self, card, before_count, *, cards_now, label,
+                              confirmations, confirmation_label, require_confirmation=False):
+        """Shared photo/table removal: click, handle confirm, verify disappearance."""
         self._assert_bound_product()
         button = card.get("button")
         if button is None:
-            raise PimAutomationError("The Orbea placeholder has no Remove image control")
+            raise PimAutomationError(f"A {label} has no removal control")
         # The trash icon is intentionally transparent until hover, so do not use is_displayed.
         self.driver.execute_script("arguments[0].click();", button)
 
-        def confirmation():
+        def removed_or_confirmation():
             try:
-                return self.driver.switch_to.alert
+                # Read the native prompt before URL/DOM commands. Firefox can
+                # otherwise dismiss it with its default prompt handler.
+                return {"alert": self.driver.switch_to.alert}
             except NoAlertPresentException:
+                self._assert_bound_product()
+                if not require_confirmation and len(cards_now()) < before_count:
+                    return {"removed": True}
                 return None
 
-        alert = self._wait_until(confirmation, "PIMBO image removal confirmation did not appear")
-        prompt = _clean(alert.text)
-        if prompt != "Remove this image from the product? The file will remain in the media library.":
-            alert.dismiss()
-            raise PimAutomationError(f"Unexpected image removal confirmation: {prompt}")
-        alert.accept()
-        self._wait_until(
-            lambda: sum(self._is_photo_placeholder(item.get("src", "")) for item in self._product_photo_cards()) < before_count,
-            "The Orbea placeholder remained after confirming its removal",
-        )
-        self.photo_upload["placeholders_removed"] += 1
+        message = ('PIMBO image removal confirmation did not appear' if require_confirmation
+                   else f'The {label} remained after removal')
+        result = self._wait_until(removed_or_confirmation, message)
+        alert = result.get('alert')
+        if alert is not None:
+            prompt = _clean(alert.text)
+            if prompt not in confirmations:
+                alert.dismiss()
+                raise PimAutomationError(f"Unexpected {confirmation_label} removal confirmation: {prompt}")
+            alert.accept()
+            self._assert_bound_product()
+            self._wait_until(lambda: len(cards_now()) < before_count,
+                             f'The {label} remained after confirming its removal')
+
+    def _clear_image_gallery(self, cards_now, remove, *, missing_control_message):
+        """Remove the current set, rereading React controls after each removal."""
+        cards = cards_now()
+        if any(card.get('button') is None for card in cards):
+            raise PimAutomationError(missing_control_message)
+        while cards:
+            remove(cards[0], len(cards))
+            cards = cards_now()
+
+    def _remove_product_photo(self, card: dict[str, Any], before_count: int) -> None:
+        if card.get('button') is None:
+            raise PimAutomationError('A product photo has no Remove image control')
+        self._remove_gallery_image(card, before_count, cards_now=self._product_photo_cards,
+            label='product photo', confirmation_label='image', require_confirmation=True,
+            confirmations={'Remove this image from the product? The file will remain in the media library.'})
+        self.photo_upload["photos_removed"] += 1
+        if self._is_photo_placeholder(card.get("src", "")):
+            self.photo_upload["placeholders_removed"] += 1
+        self.photo_upload["persisted"] = True
 
     def prepare_product_photo_upload(self, *, has_replacements: bool = True) -> bool:
-        """Inspect once per product, replace only the exact placeholder, and keep real photos."""
+        """Clear the product gallery before uploading its downloaded replacements."""
         self._assert_bound_product()
         self.open_section("general")
         if not self.product_id:
             raise PimAutomationError("No PIMBO product is open for photo upload")
         self._photo_upload_product_id = self.product_id
         self.photo_upload = {"action": "checking", "existing_photos": 0,
-                             "placeholders_removed": 0, "uploaded_photos": 0}
+                             "photos_removed": 0, "placeholders_removed": 0, "uploaded_photos": 0}
         try:
             cards = self._product_photo_cards()
-            placeholders = [card for card in cards if self._is_photo_placeholder(card.get("src", ""))]
-            real_count = len(cards) - len(placeholders)
-            self.photo_upload["existing_photos"] = real_count
-            if placeholders and (has_replacements or real_count):
-                while placeholders:
-                    self._remove_photo_placeholder(placeholders[0], len(placeholders))
-                    cards = self._product_photo_cards()
-                    placeholders = [card for card in cards if self._is_photo_placeholder(card.get("src", ""))]
-                # Recheck after deletion in case the gallery changed while removing it.
-                real_count = len(cards)
-                self.photo_upload["existing_photos"] = real_count
-            if real_count:
-                self.photo_upload["action"] = "skipped_existing"
-                return False
+            self.photo_upload["existing_photos"] = sum(not self._is_photo_placeholder(card.get("src", "")) for card in cards)
             if not has_replacements:
                 self.photo_upload["action"] = "missing_photos"
                 return False
+            self._clear_image_gallery(self._product_photo_cards, self._remove_product_photo,
+                                      missing_control_message='A product photo has no Remove image control')
             self.photo_upload["action"] = "ready"
             return True
         except Exception as error:
             self.photo_upload.update(action="failed", error=str(error))
             raise
+
+    PHOTO_UPLOAD_TIMEOUT = 120.0
+
+    def _product_photo_transfer_state(self) -> dict[str, Any]:
+        self._assert_bound_product()
+        state = self.driver.execute_script(
+            """
+            // PIMBO_PHOTO_TRANSFER_STATE: media upload and product attachment are separate requests.
+            const input = arguments[0];
+            const root = input.closest('[data-slot="card"]') || input.parentElement;
+            if (!root) throw new Error('Product photo area was not found');
+            const errors = Array.from(root.querySelectorAll('p.text-destructive, [role="alert"]'))
+              .map(node => (node.innerText || node.textContent || '').trim()).filter(Boolean);
+            return {
+              busy: !!root.querySelector('.animate-spin, button:disabled, [aria-busy="true"]')
+                || /uploading/i.test(root.innerText || root.textContent || ''),
+              error: errors.join('; ')
+            };
+            """,
+            self._image_group_input("product"),
+        )
+        if not isinstance(state, dict):
+            raise PimAutomationError("PIMBO photo upload progress could not be inspected")
+        return state
+
+    def _wait_for_product_photos(self, before_count: int, submitted: int) -> None:
+        confirmed_before = int(self.photo_upload.get("uploaded_photos", 0))
+        observed_added = 0
+
+        def completed():
+            nonlocal observed_added
+            self._assert_bound_product()
+            state = self._product_photo_transfer_state()
+            if state.get("error"):
+                return {"error": state["error"]}
+            cards = self._product_photo_cards()
+            stored = [card for card in cards if card.get("src")
+                      and urlsplit(card["src"]).scheme not in {"blob", "data"}
+                      and not self._is_photo_placeholder(card["src"])]
+            observed_added = min(submitted, max(0, len(stored) - before_count))
+            if not state.get("busy") and len(stored) == before_count + submitted:
+                return {"confirmed": True}
+            return None
+
+        try:
+            state = self._wait_until(
+                completed,
+                f"PIMBO did not finish uploading and attaching all {submitted} product photo(s)",
+                self.PHOTO_UPLOAD_TIMEOUT,
+            )
+            if state.get("error"):
+                raise PimAutomationError(f"PIMBO photo upload failed: {state['error']}")
+        except Exception as error:
+            self.photo_upload.update(action="failed", error=str(error), persisted=False,
+                                     uploaded_photos=confirmed_before + observed_added)
+            raise
+        self.photo_upload.update(action="uploaded", persisted=True,
+                                 uploaded_photos=confirmed_before + submitted)
+
+    def reorder_product_photos(self, ordered_sources: Iterable[str]) -> bool:
+        """Persist a complete existing gallery order using Pimbo's reorder operation."""
+        self._assert_bound_product()
+        self.open_section("general")
+        expected = list(ordered_sources)
+        current = [card.get("src", "") for card in self._product_photo_cards()]
+        if not expected or len(set(expected)) != len(expected) or sorted(current) != sorted(expected):
+            raise PimAutomationError("Photo ordering must retain every current product photo exactly once")
+        if urlsplit(self.driver.current_url).hostname != "pim.bo.ultrabike.lt" or not self.product_id:
+            raise PimAutomationError("No verified Pimbo product is open for photo ordering")
+        if self.is_dirty():
+            raise PimAutomationError("Save or discard existing form changes before arranging product photos")
+        response = self.driver.execute_async_script(
+            """
+            // PIMBO_PHOTO_REORDER: same operation used by the gallery's drag handle.
+            const productId = arguments[0], expected = arguments[1], done = arguments[2];
+            const endpoint = '/api/products/' + encodeURIComponent(productId);
+            async function request(path, options = {}) {
+              const controller = new AbortController();
+              const timer = setTimeout(() => controller.abort(), 8000);
+              try {
+                const response = await fetch(path, {...options, cache: 'no-store', signal: controller.signal});
+                if (!response.ok) throw new Error('Pimbo photo ordering request failed: HTTP ' + response.status);
+                return await response.json();
+              } finally { clearTimeout(timer); }
+            }
+            (async () => {
+              const product = await request(endpoint);
+              if (product.id !== productId || product.status !== 'draft')
+                throw new Error('Only the verified Draft product can be reordered');
+              const images = product.images || [];
+              const urls = images.map(image => image.media?.url || '');
+              if (images.length !== expected.length || new Set(urls).size !== images.length ||
+                  expected.some(url => !urls.includes(url)))
+                throw new Error('The product gallery changed before ordering; reload and retry');
+              const ids = expected.map(url => images.find(image => image.media?.url === url).id);
+              const changed = JSON.stringify(urls) !== JSON.stringify(expected);
+              if (changed) await request(endpoint + '/images/reorder', {
+                method: 'PATCH', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({orderedIds: ids})
+              });
+              const saved = await request(endpoint);
+              if (saved.id !== productId || (saved.images || []).map(image => image.id).join('|') !== ids.join('|'))
+                throw new Error('Pimbo did not confirm the requested photo order');
+              done({changed, verified: true});
+            })().catch(error => done({error: error.message || String(error)}));
+            """,
+            self.product_id, expected,
+        )
+        error = response.get("error") if isinstance(response, dict) else ""
+        if not isinstance(response, dict) or not response.get("verified") or error:
+            raise PimAutomationError(error or "Pimbo photo order could not be verified")
+        # Reload the clean form so the on-screen query cache reflects the saved order.
+        self.driver.refresh()
+        self.wait_ready()
+        self._assert_bound_product()
+        self.open_section("general")
+        self._wait_until(lambda: [card.get("src", "") for card in self._product_photo_cards()] == expected,
+                         "The saved Pimbo photo order did not appear in the gallery")
+        changed = response.get("changed") is True
+        self.photo_upload.setdefault("action", "reordered" if changed else "already_ordered")
+        self.photo_upload.update(order_action="arranged" if changed else "already_ordered", order_persisted=True, persisted=True)
+        return changed
 
     def _upload_images_to_group(
         self,
@@ -1011,16 +1225,15 @@ class PimboProductEditor:
             if not self._photo_upload_product_id or self._photo_upload_product_id != self.product_id or self.photo_upload.get("action") == "missing_photos":
                 if not self.prepare_product_photo_upload(has_replacements=True):
                     return 0
-            if self.photo_upload.get("action") == "skipped_existing":
-                return 0
             if self.photo_upload.get("action") == "failed":
                 raise PimAutomationError(self.photo_upload.get("error") or "Product photo inspection failed")
         image_input = self._image_group_input(group)
         self._assert_bound_product()
+        before_count = len(self._product_photo_cards()) if group == "product" else 0
         image_input.send_keys("\n".join(files))
         if group == "product":
-            self.photo_upload["uploaded_photos"] += len(files)
-            self.photo_upload["action"] = "uploaded"
+            self.photo_upload["submitted_photos"] = self.photo_upload.get("submitted_photos", 0) + len(files)
+            self._wait_for_product_photos(before_count, len(files))
         return len(files)
 
     def upload_product_images(self, paths: Iterable[str], *, skip_if_present: bool = True) -> int:
@@ -1030,7 +1243,200 @@ class PimboProductEditor:
             skip_if_present=skip_if_present,
         )
 
-    def upload_geometry_images(self, paths: Iterable[str], *, skip_if_present: bool = True) -> int:
+    def _geometry_image_cards(self) -> list[dict[str, Any]]:
+        return self._table_image_cards("geometry")
+
+    def _size_table_image_cards(self) -> list[dict[str, Any]]:
+        return self._table_image_cards("size_tables")
+
+    def _table_image_cards(self, group: str) -> list[dict[str, Any]]:
+        self._assert_bound_product()
+        label, remove_label, marker = (("Geometry", "Remove geometry image", "GEOMETRY") if group == "geometry"
+                                       else ("Size table", "Remove size table", "SIZE_TABLE"))
+        cards = self.driver.execute_script(
+            f"// PIMBO_{marker}_CARDS\n" +
+            """
+            const root = arguments[0].closest('[data-slot="card"]');
+            const label = arguments[1], removeSelector = arguments[2];
+            if (!root) throw new Error(label + ' image area was not found');
+            const cards = [], paired = new Set();
+            for (const img of root.querySelectorAll('img')) {
+              let button = null;
+              for (let node = img.parentElement; node; node = node.parentElement) {
+                const buttons = node.querySelectorAll(removeSelector);
+                if (buttons.length === 1 && node.querySelectorAll('img').length === 1) {
+                  button = buttons[0]; break;
+                }
+                if (node === root) break;
+              }
+              if (button) paired.add(button);
+              cards.push({src: img.getAttribute('src') || img.currentSrc || '', button});
+            }
+            for (const button of root.querySelectorAll(removeSelector)) {
+              if (!paired.has(button)) cards.push({src: '', button});
+            }
+            return cards;
+            """,
+            self._image_group_input(group), label, f'button[aria-label="{remove_label}"]',
+        )
+        if not isinstance(cards, list):
+            raise PimAutomationError(f"PIMBO {label.lower()} images could not be inspected")
+        return cards
+
+    @staticmethod
+    def _geometry_replacement_files(paths: Iterable[str]) -> list[str]:
+        return PimboProductEditor._table_replacement_files(paths, label="Geometry")
+
+    @staticmethod
+    def _table_replacement_files(paths: Iterable[str], *, label: str) -> list[str]:
+        """Validate the complete set before removal; omit identical PNG aliases."""
+        from PIL import Image
+
+        files, seen = [], set()
+        for value in paths:
+            path = Path(value).resolve()
+            try:
+                with Image.open(path) as image:
+                    image.verify()
+                signature = hashlib.sha256(path.read_bytes()).digest()
+            except (OSError, ValueError) as error:
+                raise PimAutomationError(f"{label} replacement image is missing or invalid: {path}") from error
+            if signature not in seen:
+                seen.add(signature)
+                files.append(str(path))
+        return files
+
+    def _remove_geometry_image(self, card: dict[str, Any], before_count: int) -> None:
+        self._remove_table_image(card, before_count, "geometry")
+
+    def _remove_table_image(self, card: dict[str, Any], before_count: int, group: str) -> None:
+        label = "geometry" if group == "geometry" else "size table"
+        cards_now = self._geometry_image_cards if group == "geometry" else self._size_table_image_cards
+        allowed = {
+                "Remove this image from the product? The file will remain in the media library.",
+                f"Remove this {label} image from the product? The file will remain in the media library.",
+                f"Remove this {label} from the product? The file will remain in the media library.",
+                f"Remove this {label} image from the product?",
+                f"Remove this {label} from the product?",
+        }
+        self._remove_gallery_image(card, before_count, cards_now=cards_now,
+            label=f'{label} image', confirmation_label=f'{label} image', confirmations=allowed)
+        setattr(self, "_geometry_upload_changed" if group == "geometry" else "_size_table_upload_changed", True)
+
+    def _geometry_transfer_state(self) -> dict[str, Any]:
+        return self._table_transfer_state("geometry")
+
+    def _table_transfer_state(self, group: str) -> dict[str, Any]:
+        label, marker = ("Geometry", "GEOMETRY") if group == "geometry" else ("Size table", "SIZE_TABLE")
+        self._assert_bound_product()
+        state = self.driver.execute_script(
+            f"// PIMBO_{marker}_TRANSFER_STATE\n" +
+            """
+            const root = arguments[0].closest('[data-slot="card"]');
+            if (!root) throw new Error('Table image area was not found');
+            const errors = [...root.querySelectorAll('p.text-destructive, [role="alert"]')]
+              .map(node => (node.innerText || node.textContent || '').trim()).filter(Boolean);
+            return {
+              busy: !!root.querySelector('.animate-spin, [aria-busy="true"]')
+                || [...root.querySelectorAll('button:disabled')].some(button =>
+                  /upload/i.test(button.innerText || button.textContent || ''))
+                || /uploading/i.test(root.innerText || root.textContent || ''),
+              error: errors.join('; ')
+            };
+            """,
+            self._image_group_input(group),
+        )
+        if not isinstance(state, dict):
+            raise PimAutomationError(f"PIMBO {label.lower()} upload progress could not be inspected")
+        return state
+
+    def _replace_geometry_images(self, paths: Iterable[str]) -> int:
+        return self._replace_table_images(paths, "geometry")
+
+    def _replace_table_images(self, paths: Iterable[str], group: str) -> int:
+        label = "geometry" if group == "geometry" else "size table"
+        prefix = "_geometry" if group == "geometry" else "_size_table"
+        cards_now = self._geometry_image_cards if group == "geometry" else self._size_table_image_cards
+        self._assert_bound_product()
+        self.open_section("general")
+        setattr(self, prefix + "_expected_sources", None)
+        setattr(self, prefix + "_upload_error", "")
+        try:
+            files = self._table_replacement_files(paths, label=label.capitalize())
+            if not files:
+                return 0
+            if not self.product_id:
+                raise PimAutomationError(f"No PIMBO product is open for {label} upload")
+            self._bound_product_id = self.product_id
+            remove_label = "Remove geometry image" if group == "geometry" else "Remove size table"
+            self._clear_image_gallery(cards_now, lambda card, count: self._remove_table_image(card, count, group),
+                                      missing_control_message=f'A {label} image has no {remove_label} control')
+            sources_before = ()
+            # Twelve-file configurations already upload successfully in Pimbo;
+            # sending all 48 Rallon variants together returns Too many files.
+            # Keep every variant, waiting for each smaller request to attach.
+            for offset in range(0, len(files), 12):
+                batch = files[offset:offset + 12]
+                expected_count = offset + len(batch)
+                image_input = self._image_group_input(group)
+                self._assert_bound_product()
+                # WebDriver appends to a multiple file input. Clearing avoids
+                # sending the previous request's files again if React reused it.
+                # Firefox's Element Clear tries to scroll a hidden file input
+                # into view. Clearing its native value is supported for file
+                # inputs and resets FileList without interacting with layout.
+                cleared = self.driver.execute_script(
+                    "// PIMBO_TABLE_FILE_INPUT_RESET\narguments[0].value = ''; return arguments[0].files.length;",
+                    image_input)
+                if cleared != 0:
+                    raise PimAutomationError(f"PIMBO {label} file selection could not be reset before uploading")
+                image_input = self._image_group_input(group)
+                self._assert_bound_product()
+                image_input.send_keys("\n".join(batch))
+                setattr(self, prefix + "_upload_changed", True)
+
+                def uploaded():
+                    state = self._table_transfer_state(group)
+                    if state.get("error"):
+                        return {"error": state["error"]}
+                    cards = cards_now()
+                    sources = tuple(card.get("src", "") for card in cards)
+                    if (not state.get("busy") and len(sources) == expected_count
+                            and len(set(sources)) == expected_count and set(sources_before) <= set(sources)
+                            and all(source and urlsplit(source).scheme not in {"blob", "data"} for source in sources)):
+                        return {"sources": sources}
+                    return None
+
+                outcome = self._wait_until(
+                    uploaded, f"PIMBO did not finish uploading {expected_count}/{len(files)} {label} image(s)", self.PHOTO_UPLOAD_TIMEOUT)
+                if outcome.get("error"):
+                    raise PimAutomationError(f"PIMBO {label} upload failed: {outcome['error']}")
+                sources_before = outcome["sources"]
+            setattr(self, prefix + "_expected_sources", sources_before)
+            return len(files)
+        except Exception as error:
+            setattr(self, prefix + "_upload_error", str(error))
+            raise
+
+    def _verify_saved_tables(self) -> None:
+        expected = (("geometry", self._geometry_expected_sources, self._geometry_image_cards),
+                    ("size table", self._size_table_expected_sources, self._size_table_image_cards))
+        if not any(sources is not None for _, sources, _ in expected):
+            return
+        self._assert_bound_product()
+        self.driver.refresh()
+        self.wait_ready()
+        self._assert_bound_product()
+        self.open_section("general")
+        for label, sources, cards_now in expected:
+            if sources is not None:
+                self._wait_until(lambda: tuple(card.get("src", "") for card in cards_now()) == sources,
+                                 f"The saved {label} images did not match the uploaded replacements")
+
+    def upload_geometry_images(self, paths: Iterable[str], *, skip_if_present: bool = True,
+                               replace_existing: bool = False) -> int:
+        if replace_existing:
+            return self._replace_geometry_images(paths)
         return self._upload_images_to_group(
             paths,
             "geometry",
@@ -1042,7 +1448,10 @@ class PimboProductEditor:
         paths: Iterable[str],
         *,
         skip_if_present: bool = True,
+        replace_existing: bool = False,
     ) -> int:
+        if replace_existing:
+            return self._replace_table_images(paths, "size_tables")
         return self._upload_images_to_group(
             paths,
             "size_tables",
@@ -1987,7 +2396,7 @@ class PimboProductEditor:
             30.0,
         )
 
-    def _run_translation_dialog(self, overwrite: bool) -> None:
+    def _run_translation_dialog(self, overwrite: bool) -> bool:
         self.switch_locale("lt")
         button = self._wait_until(
             lambda: self._find_visible(
@@ -2026,11 +2435,13 @@ class PimboProductEditor:
             "PIMBO translation did not finish",
             120.0,
         )
+        return True
 
     @staticmethod
     def _translation_validation_error(
         before: dict[str, dict[str, Any]],
         after: dict[str, dict[str, Any]],
+        *, allow_unchanged: bool = False,
     ) -> str:
         problems: list[str] = []
         for locale in ("en", "lv", "ee"):
@@ -2039,11 +2450,11 @@ class PimboProductEditor:
                 problems.append(f"{locale.upper()} name is empty")
             if not _strip_html(str(current.get("description") or "")):
                 problems.append(f"{locale.upper()} description is empty")
-            if current == before.get(locale):
+            if current == before.get(locale) and not allow_unchanged:
                 problems.append(f"{locale.upper()} copy was not updated")
         return "; ".join(problems)
 
-    def translate_lt_to_all(self, *, overwrite: bool = True) -> PimAiStepResult:
+    def translate_lt_to_all(self, *, overwrite: bool = True, allow_unchanged: bool = False) -> PimAiStepResult:
         before = {
             locale: self.localized_copy_snapshot(locale)
             for locale in ("en", "lv", "ee")
@@ -2051,12 +2462,14 @@ class PimboProductEditor:
         last_error = ""
         for attempt in (1, 2):
             try:
-                self._run_translation_dialog(overwrite)
+                completed = self._run_translation_dialog(overwrite) is True
                 after = {
                     locale: self.localized_copy_snapshot(locale)
                     for locale in ("en", "lv", "ee")
                 }
-                last_error = self._translation_validation_error(before, after)
+                last_error = self._translation_validation_error(
+                    before, after, allow_unchanged=allow_unchanged and completed,
+                )
                 if not last_error:
                     self.switch_locale("lt")
                     return PimAiStepResult(
@@ -2096,8 +2509,12 @@ class PimboProductEditor:
         if base.status == PimPreparationStatus.BLOCKED_NON_DRAFT:
             return base
         changed = tuple(dict.fromkeys(str(item) for item in changed_fields if item))
-        if self.photo_upload.get("placeholders_removed") and "images" not in changed:
+        if (self.photo_upload.get("photos_removed") or self.photo_upload.get("placeholders_removed")) and "images" not in changed:
             changed += ("images",)
+        if self._geometry_upload_changed and "geometry_images" not in changed:
+            changed += ("geometry_images",)
+        if self._size_table_upload_changed and "size_table_images" not in changed:
+            changed += ("size_table_images",)
         result = replace(
             base,
             status=PimPreparationStatus.READY_FOR_REVIEW,
@@ -2110,12 +2527,35 @@ class PimboProductEditor:
         if not base.product_id or self.product_id != base.product_id:
             return replace(result, status=PimPreparationStatus.FAILED,
                            error="PIMBO product changed during preparation")
+        if self._geometry_upload_error:
+            return replace(result, status=PimPreparationStatus.FAILED, failed_stage="geometry",
+                           error=self._geometry_upload_error)
+        if self._size_table_upload_error:
+            return replace(result, status=PimPreparationStatus.FAILED, failed_stage="size_tables",
+                           error=self._size_table_upload_error)
         failed_steps = [step for step in result.ai_steps if not step.success]
         if failed_steps:
             return replace(result, status=PimPreparationStatus.FAILED,
                            failed_stage=failed_steps[0].step,
                            error=failed_steps[0].detail or "A required MagicAI step failed")
         if not self.is_dirty():
+            persisted_fields = {"images"} if self.photo_upload.get("persisted") else set()
+            table_fields = set()
+            if self._geometry_expected_sources is not None:
+                table_fields.add("geometry_images")
+            if self._size_table_expected_sources is not None:
+                table_fields.add("size_table_images")
+            if changed and set(changed) <= persisted_fields | table_fields:
+                if table_fields:
+                    # Pimbo persists gallery attachments independently of the
+                    # main form. A disabled Save button is not persistence
+                    # evidence: reload and check the exact expected URLs first.
+                    try:
+                        self._verify_saved_tables()
+                    except Exception as error:
+                        return replace(result, status=PimPreparationStatus.FAILED, failed_stage="save",
+                                       error=f"Table attachment persistence verification failed: {error}")
+                return replace(result, status=PimPreparationStatus.SAVED_AUTOMATICALLY)
             return replace(
                 result,
                 status=PimPreparationStatus.FAILED,
@@ -2164,6 +2604,10 @@ class PimboProductEditor:
                 self.timeout,
             )
         except TimeoutException as error:
+            return result.with_status(PimPreparationStatus.FAILED, error=str(error))
+        try:
+            self._verify_saved_tables()
+        except Exception as error:
             return result.with_status(PimPreparationStatus.FAILED, error=str(error))
         return result.with_status(PimPreparationStatus.SAVED_MANUALLY, error="")
 
@@ -2224,6 +2668,7 @@ class PimboProductEditor:
                 "PIMBO product version did not increase after automatic Save",
                 max(self.timeout, 20.0),
             )
+            self._verify_saved_tables()
         except Exception as error:
             return result.with_status(PimPreparationStatus.FAILED, error=str(error))
         return result.with_status(PimPreparationStatus.SAVED_AUTOMATICALLY, error="")

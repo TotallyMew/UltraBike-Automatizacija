@@ -134,8 +134,8 @@ def collect_colour_photos(service, product, row, config, checkpoint, token, log,
     key = canonicalize_url(row["catalogue_url"])
     if key not in cache:
         entry = cache[key] = {"matches": {}, "errors": {}, "results": {}}
-        pending = [item for item in checkpoint.results if item.get("status") == "code_match"
-                   and canonicalize_url(item.get("catalogue_url", "")) == key
+        pending = [item for item in checkpoint.download_rows
+                   if canonicalize_url(item.get("catalogue_url", "")) == key
                    and not stage_complete("photos", item.get("collection_stages", {}).get("photos", {}), checkpoint.run_dir)]
         custom_rows, regular_rows = [], []
         for item in pending:

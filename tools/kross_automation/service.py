@@ -246,6 +246,15 @@ class KrossWorkflowOptions:
         return any(getattr(self, name) for name in self.STAGES)
 
     @property
+    def photos_only(self) -> bool:
+        return self.product_photos and set(self.selected_stages) <= {"product_photos", "save"}
+
+    @property
+    def allows_multiple_products(self) -> bool:
+        # Product photos are attached immediately by PIMBO, separately from form Save.
+        return self.save or self.photos_only
+
+    @property
     def needs_catalogue(self) -> bool:
         return any((
             self.product_photos,

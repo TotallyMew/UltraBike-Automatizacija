@@ -34,64 +34,6 @@ def _filter_summary(screen, disclosure, combos):
     update()
 
 
-def arrange_orbea(screen):
-    sources = ancestor_card(screen._paths_title)
-    filters = ancestor_card(screen._filters_title)
-    actions = ancestor_card(screen._start_btn)
-    source_layout = sources.layout()
-    # The optional catalogue belongs beside the destination, rather than in filters.
-    row = QGridLayout()
-    row.setHorizontalSpacing(16)
-    row.addWidget(_field(screen._catalogue_label, screen._catalogue_edit, screen._catalogue_btn), 0, 0)
-    row.addWidget(_field(screen._output_label, screen._output_edit, screen._output_btn), 0, 1)
-    row.setColumnStretch(0, 1)
-    row.setColumnStretch(1, 1)
-    old_grid = source_layout.takeAt(1).layout()
-    clear_layout(old_grid)
-    source_layout.insertLayout(1, row)
-    bind_text(screen._paths_title, screen.main, "layout.sources")
-
-    workspace = WorkspaceColumns(sidebar_width=360)
-    screen._workspace = workspace
-    clear_layout(screen._automation_layout)
-    screen._automation_layout.addWidget(workspace)
-    move_widget(sources, workspace.main_layout)
-    scope, scope_box = card()
-    scope_box.addWidget(heading(screen.main, "layout.scope"))
-    disclosure = Disclosure(screen.main, "layout.filters")
-    _filter_summary(screen, disclosure, [
-        screen._family_combo, screen._category_combo, screen._source_combo,
-        screen._locale_combo, screen._sort_combo,
-    ])
-    move_widget(filters, disclosure.body_layout)
-    scope_box.addWidget(disclosure)
-    workspace.main_layout.addWidget(scope)
-
-    panel = screen._upload_panel
-    move_widget(panel.products_card, workspace.main_layout)
-    move_widget(screen._report_details, workspace.main_layout)
-    move_widget(actions, workspace.side_layout)
-    action_box = actions.layout()
-    clear_layout(action_box)
-    action_box.addWidget(heading(screen.main, "layout.run"))
-    for widget in (screen._start_btn, screen._resume_hint, screen._resume_btn,
-            screen._retry_btn, screen._retry_matched_btn, screen._download_missing_btn,
-            screen._load_collection_btn, screen._saved_download_hint):
-        move_widget(widget, action_box, show=True)
-    move_widget(screen._collection_progress_card, workspace.side_layout)
-    move_widget(panel, workspace.side_layout)
-    panel.layout().setContentsMargins(0, 0, 0, 0)
-    steps_box = panel.steps_card.layout()
-    stage_grid = steps_box.takeAt(3).layout()
-    clear_layout(stage_grid)
-    steps_box.insertWidget(3, grouped_stages(screen.main, panel.checks))
-    # All upload actions stay visible within the narrow column.
-    for widget in (panel.start, panel.retry_upload, panel.stop):
-        move_widget(widget, steps_box)
-    workspace.main_layout.addStretch()
-    workspace.side_layout.addStretch()
-
-
 def arrange_kross(screen):
     sources = ancestor_card(screen._output_input)
     filters = ancestor_card(screen._filters_title)

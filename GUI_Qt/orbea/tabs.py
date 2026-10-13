@@ -10,7 +10,7 @@ from GUI_Qt.styles.screen_theme import CONTENT_SPACING
 
 class OrbeaSectionTabs(QTabBar):
     keyChanged = Signal(str)
-    KEYS = ("automation", "tools")
+    KEYS = ("automation", "tools", "model_copy")
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -18,7 +18,7 @@ class OrbeaSectionTabs(QTabBar):
         self.setDrawBase(False)
         self.setExpanding(False)
         self.setMovable(False)
-        for label in ("Automation", "Extra tools"):
+        for label in ("Automation", "Extra tools", "Model copying"):
             self.addTab(label)
         self.currentChanged.connect(
             lambda index: self.keyChanged.emit(self.KEYS[index])
