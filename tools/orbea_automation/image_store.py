@@ -6,12 +6,14 @@ import json
 import os
 import shutil
 import tempfile
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
 from .checkpoint import atomic_write_json, file_sha256
 
+ASSET_STORE_LOCK = threading.RLock()
 
 def link_image(source: Path, destination: Path, *, allow_copy: bool = True) -> bool:
     """Atomically replace a path with a hard link; never remove the source.
@@ -69,13 +71,14 @@ class OrbeaImageStore:
 
     def intern(self, path: Path) -> str:
         """Keep one copy of each PNG's contents and share its existing path."""
-        digest = file_sha256(path)
-        stored = self._path(digest)
-        if not self._valid(digest):
-            self._link(path, stored)
-            self._verified.add(digest)
-        self._link(stored, path)
-        return digest
+        with ASSET_STORE_LOCK:
+            digest = file_sha256(path)
+            stored = self._path(digest)
+            if not self._valid(digest):
+                self._link(path, stored)
+                self._verified.add(digest)
+            self._link(stored, path)
+            return digest
 
     @staticmethod
     def recipe_key(layer_urls: list[str]) -> str:
@@ -84,18 +87,21 @@ class OrbeaImageStore:
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
     def reuse(self, key: str, destination: Path) -> str | None:
-        record = self.root / "recipes" / f"{key}.json"
-        try:
-            digest = json.loads(record.read_text(encoding="utf-8"))["sha256"]
-            if not isinstance(digest, str) or not self._valid(digest):
+        with ASSET_STORE_LOCK:
+            record = self.root / "recipes" / f"{key}.json"
+            try:
+                digest = json.loads(record.read_text(encoding="utf-8"))["sha256"]
+                if not isinstance(digest, str) or not self._valid(digest):
+                    return None
+            except (OSError, ValueError, KeyError, TypeError):
                 return None
-        except (OSError, ValueError, KeyError, TypeError):
-            return None
-        self._link(self._path(digest), destination)
-        return digest
+            self._link(self._path(digest), destination)
+            return digest
 
     def remember(self, key: str, digest: str) -> None:
-        atomic_write_json(self.root / "recipes" / f"{key}.json", {"sha256": digest})
+        # Different model pages can share an identical immutable photo recipe.
+        with ASSET_STORE_LOCK:
+            atomic_write_json(self.root / "recipes" / f"{key}.json", {"sha256": digest})
 
 
 @dataclass(frozen=True)

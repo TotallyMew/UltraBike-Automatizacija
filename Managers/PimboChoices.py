@@ -120,6 +120,13 @@ const visible = node => !!(node && node.getClientRects().length);
 const popup = '[role="listbox"],[role="option"],[cmdk-list],[data-slot="command-list"],[data-slot="combobox-content"],div.absolute';
 if ([...panel.querySelectorAll('[aria-busy="true"],[data-loading="true"],.animate-pulse')]
       .some(visible)) return [];
+if (arguments[1]) {
+  const count=[...panel.querySelectorAll('[data-slot="card-description"]')]
+    .map(node=>visible(node) && clean(node.textContent).match(/^(\d+)\s+values\b/i)).find(Boolean);
+  const fields=[...panel.querySelectorAll('input[placeholder="Search or add new..."]')]
+    .filter(input=>visible(input) && !input.closest(popup));
+  if (count && fields.length!==Number(count[1])) return [];
+}
 return [...panel.querySelectorAll('input[placeholder="Search or add new..."]')]
   .filter(input => visible(input) && !input.closest(popup)).map(input => {
     let label = input.id ? [...panel.querySelectorAll('label')].find(n => n.htmlFor === input.id) : null;
@@ -140,7 +147,9 @@ return [...panel.querySelectorAll('input[placeholder="Search or add new..."]')]
       if (names.length === 1) label = labels[0];
       else if (names.length > 1) break;
     }
-    return {name:clean(label?.textContent), input};
+    const row = {name:clean(label?.textContent), input};
+    if (arguments[1]) row.required = input.required || input.getAttribute('aria-required') === 'true' || /\*\s*$/.test(label?.textContent || '');
+    return row;
   });
 """
 
@@ -294,14 +303,13 @@ class PimboChoiceMixin:
             field.send_keys(choice["label"])
             option = self._wait_until(option_ready, f"Exact existing option {choice['label']!r} for {name!r} was not found")
         self._click(option)
-        # Selecting an option replaces the entire Base UI input. Wait for the
-        # new field before blurring it; a missing field during React's render
-        # must not leave the search input focused and mistaken for a selection.
+        # Selecting an option replaces the entire Base UI input. Resolve the
+        # new field before leaving it. Escape on Pimbo's closed combobox clears
+        # its committed value; Tab leaves the selection intact.
         def blur_selected():
             current = self._choice_field(name, categories)
             if current is None:
                 return False
-            current.send_keys(Keys.ESCAPE)
             current.send_keys(Keys.TAB)
             return True
 
@@ -359,6 +367,6 @@ class PimboChoiceMixin:
         return self._replace_choices("Categories", categories, True)
 
     def set_attribute_values(self, name, values):
-        if name.casefold() == "spalva":
-            raise ValueError("Model copying must not change Spalva")
+        # The copy service excludes source Spalva and supplies only the target's
+        # explicitly mapped colour here. It must use the same verified dropdown.
         return self._replace_choices(name, [{"id": "", "label": value} for value in values])

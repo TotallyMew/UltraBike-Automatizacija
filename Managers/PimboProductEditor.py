@@ -22,10 +22,28 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import Select
 from Managers.PimboChoices import PimboChoiceMixin
+from Managers.PimboContentInspection import PimboContentInspectionMixin
 
 
 PIMBO_PRODUCTS_URL = "https://pim.bo.ultrabike.lt/dashboard/products"
 PIMBO_LOGIN_URL = "https://pim.bo.ultrabike.lt/dashboard/login"
+
+STATUS_CONTROL_JS = r"""
+const main = arguments[0];
+const visible = node => !!(node && node.getClientRects().length);
+const clean = value => (value || '').replace(/\s+/g, ' ').replace(/\s*\*\s*$/, '').trim();
+const labels = [...main.querySelectorAll('label,[data-field-label]')]
+  .filter(node => visible(node) && clean(node.textContent).toLowerCase() === 'status');
+if (labels.length !== 1) return null;
+for (let node = labels[0].parentElement, depth=0; node && depth<6; node=node.parentElement, depth++) {
+  const fields = [...node.querySelectorAll('label,[data-field-label]')].filter(visible);
+  if (fields.length > 1) return null;
+  const controls = [...node.querySelectorAll('button[role="combobox"],select')].filter(visible);
+  if (controls.length === 1) return controls[0];
+  if (controls.length > 1) return null;
+}
+return null;
+"""
 
 
 class PimPreparationStatus(str, Enum):
@@ -172,7 +190,7 @@ def _is_lithuanian_copy(value: str) -> bool:
     )
 
 
-class PimboProductEditor(PimboChoiceMixin):
+class PimboProductEditor(PimboChoiceMixin, PimboContentInspectionMixin):
     """Semantic Selenium controller for the current PIMBO product page."""
 
     SECTION_VALUES = {
@@ -2610,6 +2628,115 @@ class PimboProductEditor(PimboChoiceMixin):
         except Exception as error:
             return result.with_status(PimPreparationStatus.FAILED, error=str(error))
         return result.with_status(PimPreparationStatus.SAVED_MANUALLY, error="")
+
+    def _status_control(self) -> Any | None:
+        main = self._find_visible(By.CSS_SELECTOR, "main")
+        return self.driver.execute_script(STATUS_CONTROL_JS, main) if main is not None else None
+
+    def _publication_status(self) -> str:
+        control = self._status_control()
+        if control is None:
+            raise PimAutomationError("The unique PIMBO Status dropdown was not found")
+        if control.tag_name.casefold() == "select":
+            return _clean(Select(control).first_selected_option.text).casefold()
+        values = control.find_elements(By.CSS_SELECTOR, '[data-slot="select-value"]')
+        return _clean(values[0].text if len(values) == 1 else control.text).casefold()
+
+    def publish_and_verify(self, result: PimPreparationResult) -> PimPreparationResult:
+        """Explicit final Draft → Published action, separate from Draft editing.
+
+        Only a clean, verified product can be published. Save must increment
+        its version and Published must survive a reload. An already Published
+        product is rechecked without another Save, making retries idempotent.
+        """
+        def guard():
+            self._assert_bound_product()
+            if not result.product_id or self.product_id != result.product_id:
+                raise PimAutomationError("PIMBO product changed; publication was cancelled")
+
+        def saved_publication(initial_version, *, allow_unchanged=False):
+            guard()
+            if self.is_dirty() or self._publication_status() != "published":
+                return False
+            version = self.current_version()
+            return version is not None and (version >= initial_version if allow_unchanged else version > initial_version)
+
+        try:
+            self.wait_ready()
+            guard()
+            self._bound_product_id = result.product_id
+            if self.is_dirty():
+                raise PimAutomationError("PIMBO has unsaved changes; save or discard them before publishing")
+            status = self._wait_until(lambda: value if (value := self._publication_status())
+                in {"draft", "published", "in review", "disabled"} else None,
+                "The PIMBO Status field did not finish loading", self.timeout)
+            if status not in {"draft", "published"}:
+                return replace(result, status=PimPreparationStatus.BLOCKED_NON_DRAFT,
+                    failed_stage="publish_products", error=f"Cannot publish a product with status {status!r}; expected Draft")
+            if result.status not in {PimPreparationStatus.SAVED_AUTOMATICALLY, PimPreparationStatus.NO_CHANGES}:
+                if result.status != PimPreparationStatus.BLOCKED_NON_DRAFT or status != "published":
+                    raise PimAutomationError("Earlier preparation did not succeed; publication was cancelled")
+            version = self.current_version()
+            if version is None:
+                raise PimAutomationError("PIMBO product version was unavailable before publishing")
+            if result.initial_version is None:
+                result = replace(result, initial_version=version,
+                    initial_fields=result.initial_fields or {"status": status})
+            guard()
+            url = self.driver.current_url
+            if status == "published":
+                self.driver.get(url)
+                self.wait_ready()
+                self._wait_until(lambda: saved_publication(version, allow_unchanged=True),
+                    "The already Published status did not survive reload", self.timeout)
+                return replace(result, status=PimPreparationStatus.SAVED_AUTOMATICALLY
+                    if result.status == PimPreparationStatus.SAVED_AUTOMATICALLY else PimPreparationStatus.NO_CHANGES,
+                    failed_stage="", error="", final_url=self.driver.current_url)
+
+            control = self._status_control()
+            if control is None or not control.is_enabled():
+                raise PimAutomationError("The PIMBO Status dropdown is disabled or unavailable")
+            if control.tag_name.casefold() == "select":
+                Select(control).select_by_visible_text("Published")
+            else:
+                self._click(control)
+
+                def published_option():
+                    guard()
+                    fresh = self._status_control()
+                    popup_id = fresh.get_attribute("aria-controls") if fresh is not None else ""
+                    popups = self.driver.find_elements(By.ID, popup_id) if popup_id else []
+                    options = [option for popup in popups if popup.is_displayed()
+                        and popup.get_attribute("role") == "listbox"
+                        for option in popup.find_elements(By.CSS_SELECTOR, '[role="option"]')
+                        if option.is_displayed() and option.is_enabled()
+                        and option.get_attribute("aria-disabled") != "true" and _clean(option.text) == "Published"]
+                    return options[0] if len(options) == 1 else None
+
+                self._click(self._wait_until(published_option,
+                    "The exact Published option did not load in the Status dropdown", self.timeout))
+            self._wait_until(lambda: self._publication_status() == "published",
+                "Published did not remain selected in the Status dropdown", self.timeout)
+            guard()
+            if self.current_version() != version:
+                raise PimAutomationError("PIMBO product version changed; publication Save was cancelled")
+            button = self.save_button()
+            if button is None or not button.is_enabled() or not self.is_dirty():
+                raise PimAutomationError("PIMBO has no enabled Save action for publication")
+            guard()
+            self._click(button)
+            self._wait_until(lambda: saved_publication(version),
+                "Publication Save did not finish with a new version and Published status", max(self.timeout, 20.0))
+            self.driver.get(url)
+            self.wait_ready()
+            self._wait_until(lambda: saved_publication(version),
+                "Published status did not persist after reload", self.timeout)
+            return replace(result, status=PimPreparationStatus.SAVED_AUTOMATICALLY,
+                changed_fields=tuple(dict.fromkeys((*result.changed_fields, "status"))),
+                failed_stage="", error="", final_url=self.driver.current_url)
+        except Exception as error:
+            return replace(result, status=PimPreparationStatus.FAILED,
+                failed_stage="publish_products", error=str(error), final_url=self.driver.current_url)
 
     def save_and_verify(self, result: PimPreparationResult) -> PimPreparationResult:
         """Save a prepared Draft product and verify the version increment.

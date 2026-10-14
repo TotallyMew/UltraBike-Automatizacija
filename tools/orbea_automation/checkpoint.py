@@ -177,7 +177,7 @@ def saved_run_config(run_dir: Path, *, browser_name: str | None = None) -> Orbea
     ) if name in saved}
     options.update({name: settings[name] for name in (
         "max_products", "navigation_timeout", "control_discovery_timeout", "table_render_timeout",
-        "selector_timeout", "image_retry_limit",
+        "selector_timeout", "image_retry_limit", "download_browser_count",
     ) if name in settings})
     return OrbeaRunConfig(
         Path(saved["catalogue_path"]) if saved.get("catalogue_path") else None,
@@ -218,6 +218,7 @@ class RunCheckpoint:
                 "table_render_timeout": config.table_render_timeout,
                 "selector_timeout": config.selector_timeout,
                 "image_retry_limit": config.image_retry_limit,
+                "download_browser_count": config.download_browser_count,
             },
             "totals": {"products": None, "pages": None},
             "results": [],

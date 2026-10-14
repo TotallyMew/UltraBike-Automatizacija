@@ -5,16 +5,18 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QHeaderView, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget
-from qfluentwidgets import CaptionLabel, LineEdit, PlainTextEdit, PrimaryPushButton, PushButton, StrongBodyLabel
+from qfluentwidgets import BodyLabel, CaptionLabel, FlowLayout, LineEdit, PlainTextEdit, PrimaryPushButton, PushButton, StrongBodyLabel
 
 from GUI_Qt.styles.screen_theme import CARD_SPACING
 from GUI_Qt.styles.theme_config import get_dialog_table_style
 from GUI_Qt.widgets.workspace import WorkspaceColumns
 
-from tools.orbea_automation.model_copy import OrbeaModelCopyService, export_copy_results, load_copy_workbook
+from tools.orbea_automation.model_copy import OrbeaCopyRunResult, OrbeaModelCopyService, export_copy_results, load_copy_workbook
 from .workers import OrbeaModelCopyWorker
-from .model_copy_groups import ModelCopyGroupTable
+from .model_copy_groups import COPY_SELECTION_STATUSES, ModelCopyGroupTable
+from .panels import StatusSelectionButton
 from .colour_attributes import OrbeaColourAttributePanel
+from .browser_pool import BrowserCountControl
 
 
 class OrbeaModelCopyPanel(QWidget):
@@ -28,10 +30,14 @@ class OrbeaModelCopyPanel(QWidget):
         self._run_mode = None
         self._run_selection = ()
         self._completed_state = None
+        self._source_files_stamp = None
+        self._results_data = None
         self.state = None
         self.groups = []
         self.error = ""
         self._status_message = None
+        self._excluded_count = None
+        self._included_count = None
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(CARD_SPACING)
@@ -70,13 +76,41 @@ class OrbeaModelCopyPanel(QWidget):
         self.search.setMinimumHeight(38)
         self.search.setClearButtonEnabled(True)
         groups_box.addWidget(self.search)
-        selection_row = QHBoxLayout()
+        selection_row = FlowLayout()
+        selection_row.setHorizontalSpacing(8)
+        selection_row.setVerticalSpacing(8)
         self.select_all = PushButton("")
         self.clear_selection = PushButton("")
         selection_row.addWidget(self.select_all)
         selection_row.addWidget(self.clear_selection)
-        selection_row.addStretch()
+        self.select_status = StatusSelectionButton(COPY_SELECTION_STATUSES, self._select_by_status, self)
+        self.unselect_status = StatusSelectionButton(COPY_SELECTION_STATUSES, lambda status: self._select_by_status(status, checked=False), self)
+        selection_row.addWidget(self.select_status)
+        selection_row.addWidget(self.unselect_status)
         groups_box.addLayout(selection_row)
+        self.exclusion = QWidget(self)
+        exclusion_box = QVBoxLayout(self.exclusion)
+        exclusion_box.setContentsMargins(0, 0, 0, 0)
+        exclusion_box.setSpacing(4)
+        self.exclusion_label = BodyLabel(self.exclusion)
+        self.exclude_prefixes = LineEdit(self.exclusion)
+        self.exclude_prefixes.setMinimumHeight(38)
+        self.exclude_prefixes.setClearButtonEnabled(True)
+        self.exclusion_label.setBuddy(self.exclude_prefixes)
+        self.exclude_button = PushButton(self.exclusion)
+        self.exclude_button.setMinimumHeight(38)
+        self.include_button = PushButton(self.exclusion)
+        self.include_button.setMinimumHeight(38)
+        self.exclusion_hint = CaptionLabel(self.exclusion)
+        self.exclusion_hint.setWordWrap(True)
+        exclusion_row = QHBoxLayout()
+        exclusion_row.addWidget(self.exclude_prefixes, 1)
+        exclusion_row.addWidget(self.include_button)
+        exclusion_row.addWidget(self.exclude_button)
+        exclusion_box.addWidget(self.exclusion_label)
+        exclusion_box.addLayout(exclusion_row)
+        exclusion_box.addWidget(self.exclusion_hint)
+        groups_box.addWidget(self.exclusion)
         self.selection_summary = CaptionLabel("")
         self.selection_summary.setWordWrap(True)
         groups_box.addWidget(self.selection_summary)
@@ -97,6 +131,8 @@ class OrbeaModelCopyPanel(QWidget):
         self.status = CaptionLabel("")
         self.status.setWordWrap(True)
         run_box.addWidget(self.status)
+        self.browsers = BrowserCountControl(screen, self)
+        run_box.addWidget(self.browsers)
         self.read = PushButton("")
         self.start = PrimaryPushButton("")
         self.resume = PushButton("")
@@ -154,6 +190,10 @@ class OrbeaModelCopyPanel(QWidget):
         self.search.textChanged.connect(self.table.set_filter)
         self.select_all.clicked.connect(lambda: self.table.select_visible(True))
         self.clear_selection.clicked.connect(lambda: self.table.select_visible(False))
+        self.exclude_button.clicked.connect(self._exclude_by_code)
+        self.include_button.clicked.connect(self._include_by_code)
+        self.exclude_prefixes.returnPressed.connect(self._exclude_by_code)
+        self.exclude_prefixes.textChanged.connect(self._exclusion_changed)
         self.read.clicked.connect(lambda: self.launch("capture"))
         self.start.clicked.connect(lambda: self.launch("copy"))
         self.resume.clicked.connect(lambda: self.launch("copy"))
@@ -176,6 +216,10 @@ class OrbeaModelCopyPanel(QWidget):
                 self.path.setText(path)
 
     def _path_changed(self):
+        self._source_files_stamp = None
+        self._excluded_count = None
+        self._included_count = None
+        self._refresh_exclusion_hint()
         self.state, self.groups = None, []
         self.error = ""
         path = self.path.text().strip()
@@ -187,35 +231,57 @@ class OrbeaModelCopyPanel(QWidget):
                     self.state = OrbeaModelCopyService.load_checkpoint(path)
                     self.groups = self.state.groups
                 self.screen._setting_set("orbea_model_copy_excel", path)
-                ready = sum(group.status == "ready" for group in self.groups)
-                if self.state and ready:
+                self._source_files_stamp = self._files_stamp()
+                listed = [group for group in self.groups if group.has_multiple_bikes]
+                ready = sum(group.status == "ready" for group in listed)
+                if not listed:
+                    self._set_status("no_target_groups", "No groups with target bikes were found. Standalone bikes are omitted from copying.")
+                elif self.state and ready:
                     self._set_status("checkpoint_loaded", "Loaded {ready} saved source groups. Select groups to copy unfinished bikes.", ready=ready)
-                elif not any(group.source_sku for group in self.groups):
-                    self._set_status("sources_unmarked", "Loaded {count} TTCC groups. Choose one prepared source bike in each group, then read sources.", count=len(self.groups))
+                elif not any(group.source_sku for group in listed):
+                    self._set_status("sources_unmarked", "Loaded {count} TTCC groups. Choose one prepared source bike in each group, then read sources.", count=len(listed))
                 else:
-                    self._set_status("loaded", "Loaded {count} TTCC groups. Read saved sources before copying.", count=len(self.groups))
+                    self._set_status("loaded", "Loaded {count} TTCC groups. Read saved sources before copying.", count=len(listed))
             except (OSError, ValueError, KeyError, TypeError) as error:
                 self._status_message = None
                 self.status.setText(str(error))
         self._render()
         self.update_state()
 
-    def _render(self, preserve_selection=False):
+    def _files_stamp(self):
+        path = Path(self.path.text().strip()).resolve()
+        def stamp(file):
+            try:
+                stat = file.stat()
+                return stat.st_mtime_ns, stat.st_size
+            except FileNotFoundError:
+                return None
+        return str(path), stamp(path), stamp(OrbeaModelCopyService.checkpoint_path(path))
+
+    def _render(self, preserve_selection=False, *, refresh_text=False):
         values = self.state.results if self.state else []
-        self.table.set_groups(self.groups, values, preserve_selection=preserve_selection)
-        self.table.setVisible(bool(self.groups))
-        self.empty_hint.setVisible(not self.groups)
+        self.table.set_groups(self.groups, values, preserve_selection=preserve_selection, refresh_text=refresh_text)
+        self.table.setVisible(bool(self.table.groups))
+        self.empty_hint.setVisible(not self.table.groups)
+        self.empty_hint.setText(self._t("no_target_groups", "No groups with target bikes were found. Standalone bikes are omitted from copying.")
+                                if self.groups else self._t("empty_hint", "Choose an Excel file to see its base codes and bikes."))
         self.results_card.setVisible(self.state is not None)
         self.results.setVisible(bool(values))
         self.results_empty.setVisible(not values)
-        self.results.setRowCount(len(values))
-        for row, result in enumerate(values):
-            for column, value in enumerate((result.sku, result.source_sku, self._status_text(result.status), result.title,
+        data = tuple((result.sku, result.source_sku, self._status_text(result.status), result.title,
                                             self._t("stage." + result.failed_stage, result.failed_stage) if result.failed_stage else "", result.error,
-                                            "; ".join(result.colour_attribute) or self._t("colour_unmapped", "No mapping — unchanged"))):
-                item = QTableWidgetItem(value)
-                item.setToolTip(value)
-                self.results.setItem(row, column, item)
+                                            "; ".join(result.colour_attribute) or self._t("colour_unmapped", "No mapping — unchanged"))
+                     for result in values)
+        if data != self._results_data:
+            self.results.setRowCount(len(data))
+            for row, values in enumerate(data):
+                if self._results_data is not None and row < len(self._results_data) and values == self._results_data[row]:
+                    continue
+                for column, value in enumerate(values):
+                    item = QTableWidgetItem(value)
+                    item.setToolTip(value)
+                    self.results.setItem(row, column, item)
+            self._results_data = data
         self.update_state()
 
     @staticmethod
@@ -229,27 +295,76 @@ class OrbeaModelCopyPanel(QWidget):
             return
         selected = set(self.table.selected_codes(visible_only=False))
         try:
-            self.state = OrbeaModelCopyService.select_source(self.path.text().strip(), ttcc, sku)
+            before = self._files_stamp()
+            cached = (self.state or OrbeaCopyRunResult(self.groups, [], OrbeaModelCopyService.checkpoint_path(self.path.text())))
+            self.state = OrbeaModelCopyService.select_source(self.path.text().strip(), ttcc, sku,
+                state=cached if before == self._source_files_stamp else None)
+            after = self._files_stamp()
+            self._source_files_stamp = after if before[:2] == after[:2] else None
             self.groups = self.state.groups
             self.error = ""
             self._render(preserve_selection=True)
             # A newly chosen source makes its group available immediately.
-            for group in self.groups:
-                checked = self._eligible(group) and (group.ttcc in selected or (group.ttcc == ttcc and sku))
-                self.table.group_check(group.ttcc).setChecked(bool(checked))
+            group = next((group for group in self.table.groups if group.ttcc == ttcc), None)
+            if group is not None:
+                checked = self._eligible(group) and (group.ttcc in selected or bool(sku))
+                check = self.table.group_check(ttcc)
+                blocked = check.blockSignals(True)
+                try:
+                    check.setChecked(checked)
+                finally:
+                    check.blockSignals(blocked)
             if getattr(self.screen.main, "driver", None) is None:
                 self._set_status("connect_to_read", "Source choices saved. Connect to Pimbo to read sources.")
             elif sku:
                 self._set_status("source_chosen", "Source {sku} selected for {ttcc}. Read sources before copying.", sku=sku, ttcc=ttcc)
             else:
-                self._set_status("sources_unmarked", "Loaded {count} TTCC groups. Choose one prepared source bike in each group, then read sources.", count=len(self.groups))
+                self._set_status("sources_unmarked", "Loaded {count} TTCC groups. Choose one prepared source bike in each group, then read sources.", count=len(self.table.groups))
         except (OSError, ValueError, KeyError, TypeError) as error:
-            self._render(preserve_selection=True)
+            self._source_files_stamp = None
+            self._render(preserve_selection=True, refresh_text=True)
             self._failed(str(error))
         self.update_state()
 
     def _status_text(self, status):
         return self._t("status." + status, status.replace("_", " "))
+
+    def _select_by_status(self, status, *, checked=True):
+        if self.screen.workflow_controller.activity().name != "idle":
+            return
+        self.table.select_visible(checked, status=status, results=self.state.results if self.state else ())
+
+    def _exclusion_changed(self):
+        self._excluded_count = None
+        self._included_count = None
+        self._refresh_exclusion_hint()
+        self.update_state()
+
+    def _refresh_exclusion_hint(self):
+        hint = self._t("prefix_selection.hint", "Checks or unchecks whole TTCC groups by base code or bike SKU, including hidden groups. Separate prefixes with commas or spaces.")
+        if self._excluded_count is not None:
+            hint = self._t("exclude.result", "{count} groups unchecked.", count=self._excluded_count) + " " + hint
+        elif self._included_count is not None:
+            hint = self._t("include.result", "{count} groups checked.", count=self._included_count) + " " + hint
+        self.exclusion_hint.setText(hint)
+
+    def _exclude_by_code(self):
+        if self.screen.workflow_controller.activity().name != "idle":
+            return
+        count = self.table.exclude_code_prefixes(self.exclude_prefixes.text())
+        if count is not None:
+            self._excluded_count = count
+            self._included_count = None
+            self._refresh_exclusion_hint()
+
+    def _include_by_code(self):
+        if self.screen.workflow_controller.activity().name != "idle":
+            return
+        count = self.table.include_code_prefixes(self.exclude_prefixes.text())
+        if count is not None:
+            self._included_count = count
+            self._excluded_count = None
+            self._refresh_exclusion_hint()
 
     def selected_ttcc(self, *, ready_only=True):
         selected = self.table.selected_codes()
@@ -263,12 +378,20 @@ class OrbeaModelCopyPanel(QWidget):
         busy = activity.name != "idle"
         active = activity.name in {"model_copy_read", "model_copy"}
         connected = getattr(self.screen.main, "driver", None) is not None
+        has_groups = bool(self.table.groups)
         self.path.setEnabled(not busy)
         self.browse.setEnabled(not busy)
         self.search.setEnabled(not busy)
+        self.browsers.combo.setEnabled(not busy)
         self.colours.table.setEnabled(not busy)
-        self.select_all.setEnabled(not busy and bool(self.groups))
-        self.clear_selection.setEnabled(not busy and bool(self.groups))
+        self.select_all.setEnabled(not busy and has_groups)
+        self.clear_selection.setEnabled(not busy and has_groups)
+        self.select_status.set_available(not busy and has_groups)
+        self.unselect_status.set_available(not busy and has_groups)
+        self.exclusion.setVisible(has_groups)
+        self.exclude_prefixes.setEnabled(not busy)
+        self.exclude_button.setEnabled(not busy and has_groups and bool(self.exclude_prefixes.text().strip(" \t\r\n,;")))
+        self.include_button.setEnabled(self.exclude_button.isEnabled())
         self.read.setEnabled(not busy and connected and bool(self.selected_ttcc(ready_only=False)))
         ready = bool(self.selected_ttcc()) and connected and self.state is not None and self.colours.mapping is not None
         for button in (self.start, self.resume):
@@ -277,13 +400,15 @@ class OrbeaModelCopyPanel(QWidget):
         self.retry.setEnabled(not busy and ready and any(item.status == "failed" for item in self.state.results))
         self.stop.setVisible(active)
         self.stop.setEnabled(active and not activity.stopping)
+        self.stop.setText(self.screen._t("orbea.browsers.stop", "Stop after active products") if self.browsers.count > 1
+                          else self._t("stop", "Stop after current product"))
         self.export.setEnabled(not busy and self.state is not None)
         self.table.set_busy(busy)
         selected = set(self.table.selected_codes())
         self.selection_summary.setText(self._t(
             "selection_summary", "{selected} selected groups · {targets} target bikes · Showing {visible} of {total} groups",
             selected=len(selected), targets=sum(len(group.targets) for group in self.groups if group.ttcc in selected),
-            visible=len(self.table.visible_groups()), total=len(self.groups),
+            visible=len(self.table.visible_groups()), total=len(self.table.groups),
         ))
 
     def launch(self, mode):
@@ -310,16 +435,16 @@ class OrbeaModelCopyPanel(QWidget):
         self._completed_state = None
         self.log.clear()
         self.screen.workflow_controller.start_job("model_copy_read" if mode == "capture" else "model_copy",
-            lambda: OrbeaModelCopyWorker(factory, self.screen.main.driver, self.path.text().strip(), mode, selected),
+            lambda: OrbeaModelCopyWorker(factory, self.screen.main.driver, self.path.text().strip(), mode, selected,
+                browser_count=self.browsers.count, browser_pool_factory=self.screen.workflow_controller.make_browser_pool),
             owner=self, attribute="worker", operation_attribute="_operation_id", kind="upload" if mode != "capture" else "orbea",
             details={"output_path": str(OrbeaModelCopyService.checkpoint_path(self.path.text()).parent)},
             signals={"succeeded": self._result, "failed": self._failed, "progress_changed": self._progress,
-                     "item_finished": self._item_finished, "log_message": self.log.appendPlainText},
+                     "progress_ready": self._item_finished, "log_message": self.log.appendPlainText},
             finished=self._finished, failed=self._failed)
 
-    def _item_finished(self, item):
+    def _item_finished(self, item, state):
         try:
-            state = OrbeaModelCopyService.load_checkpoint(self.path.text().strip())
             self._result(state, completed=False)
             if self._run_mode == "capture":
                 group = next(group for group in state.groups if group.ttcc == item.ttcc)
@@ -344,6 +469,8 @@ class OrbeaModelCopyPanel(QWidget):
         self.error = state.error
         if completed:
             self._completed_state = state
+        current = self._files_stamp()
+        self._source_files_stamp = current if self._source_files_stamp and current[:2] == self._source_files_stamp[:2] else None
         self._render(preserve_selection=True)
 
     def _failed(self, message):
@@ -388,7 +515,11 @@ class OrbeaModelCopyPanel(QWidget):
 
     def request_stop(self):
         self.screen.workflow_controller.request_stop()
-        self._set_status("stopping", "Stopping after the current product…")
+        if self.browsers.count > 1:
+            self._status_message = None
+            self.status.setText(self.screen._t("orbea.browsers.stopping", "Stopping after active products…"))
+        else:
+            self._set_status("stopping", "Stopping after the current product…")
 
     def _set_status(self, key, fallback, **kwargs):
         self._status_message = (key, fallback, kwargs)
@@ -428,13 +559,15 @@ class OrbeaModelCopyPanel(QWidget):
             self.start.setStyleSheet(primary_style)
 
     def retranslate_ui(self):
+        self.browsers.retranslate_ui()
+        self.browsers.hint.setText(self._t("browsers_hint", "TTCC groups run in parallel; each group stays in one browser. Stop finishes active bikes, then closes extra browsers."))
         self.colours.retranslate_ui()
         self.title.setText(self._t("title", "Model copying"))
-        self.hint.setText(self._t("hint", 'Load orbea_matches.xlsx, then choose one prepared source bike for each base code. Save the source in Pimbo before reading it. Excel Šaltinis/TAIP marks are also supported.'))
+        self.hint.setText(self._t("hint", 'Load orbea_matches.xlsx. The first bike in each group is selected as the source by default; you can change it. Save the source in Pimbo before reading it. Excel Šaltinis/TAIP marks and saved choices take priority.'))
         self.path.setPlaceholderText(self._t("excel", "orbea_matches.xlsx or another Matches workbook"))
         for label, key, fallback in (
             (self.groups_title, "groups_title", "Choose source bikes"),
-            (self.groups_hint, "groups_hint", "Each base code contains its matching bikes. Choose one saved source per group; its data will be copied to the other bikes. Actions apply to checked groups shown below."),
+            (self.groups_hint, "groups_hint", "Only groups with multiple bikes are shown. The first bike is the default source. Choose another saved source if needed; actions apply to checked groups shown below."),
             (self.run_title, "run_title", "Run copying"),
             (self.run_hint, "run_hint", "Read the selected sources, then copy their saved data to the other bikes in each group."),
             (self.results_title, "results_title", "Copy results"),
@@ -452,12 +585,19 @@ class OrbeaModelCopyPanel(QWidget):
             button.setText(self._t(key, fallback))
         self.select_all.setText(self._t("select_visible", "Select visible groups"))
         self.clear_selection.setText(self._t("clear_visible", "Clear visible groups"))
+        self.select_status.retranslate_ui(self._t, checked=True, status_prefix="selection_status.")
+        self.unselect_status.retranslate_ui(self._t, checked=False, status_prefix="selection_status.")
+        self.exclusion_label.setText(self._t("prefix_selection.label", "Include / exclude groups by code prefix"))
+        self.include_button.setText(self._t("include.apply", "Include codes"))
+        self.exclude_button.setText(self._t("exclude.apply", "Exclude codes"))
+        self.exclude_prefixes.setPlaceholderText(self._t("exclude.placeholder", "e.g. U9, U3 or a full SKU"))
+        self._refresh_exclusion_hint()
         self.table.setHorizontalHeaderLabels((self._t("base_code", "Base code"), self._t("source_role", "Source"), "SKU",
                                               self._t("name", "Name"), self._t("status", "Status")))
         self.results.setHorizontalHeaderLabels((self._t("target", "Target SKU"), self._t("source", "Source SKU"),
             self._t("status", "Status"), self._t("name", "Name"), self._t("stage", "Stage"), self._t("error", "Reason"),
             self._t("colour_attribute", "Spalva attribute")))
-        self._render(preserve_selection=True)
+        self._render(preserve_selection=True, refresh_text=True)
         self.apply_theme()
         if self._status_message:
             key, fallback, kwargs = self._status_message

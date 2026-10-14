@@ -105,6 +105,10 @@ class OrbeaCopyGroup:
     def targets(self):
         return [row for row in self.rows if row.sku != self.source_sku]
 
+    @property
+    def has_multiple_bikes(self):
+        return len({row.sku for row in self.rows}) > 1
+
 
 @dataclass
 class OrbeaModelCopyResult:
@@ -175,6 +179,9 @@ def load_copy_workbook(path: Path | str) -> list[OrbeaCopyGroup]:
             sources = [row for row in group.rows if row.source]
             if len(sources) > 1:
                 group.error = "Multiple sources marked TAIP in one TTCC group"
+            if not sources and not group.error:
+                sources = [group.rows[0]]
+                sources[0].source = True
             group.source_sku = sources[0].sku if len(sources) == 1 else ""
             group.status = ("error" if group.error else "unmarked" if not sources else
                             "no_targets" if not group.targets else "pending")
@@ -193,9 +200,25 @@ class OrbeaModelCopyService(SupplierUploadWorkflow):
         self.pimbo_client_factory = pimbo_client_factory
         self._stopped = False
         self.colour_mapping = load_colour_mapping()
+        self._parallel_checkpoint = None
+        self._parallel_scope = set()
 
     def set_colour_mapping(self, mapping):
         self.colour_mapping = mapping
+
+    def configure_parallel(self, checkpoint, scope):
+        self._parallel_checkpoint = checkpoint
+        self._parallel_scope = set(scope)
+
+    def _read_state(self, workbook):
+        return (self._parallel_checkpoint.snapshot() if self._parallel_checkpoint is not None
+                else self.load_checkpoint(workbook))
+
+    def _persist_state(self, path, workbook, groups, results):
+        if self._parallel_checkpoint is not None:
+            self._parallel_checkpoint.persist(self._parallel_scope, groups, results)
+        else:
+            self._write(path, workbook, groups, results)
 
     def _colour_mapping_changed(self, result, template):
         if result.status != "saved" or not template or not result.title:
@@ -282,6 +305,16 @@ class OrbeaModelCopyService(SupplierUploadWorkflow):
             if (old and old.source_selected_in_app and not group.workbook_error
                     and (not old.source_sku or any(row.sku == old.source_sku for row in group.rows))):
                 cls._apply_source_choice(group, old.source_sku)
+            elif (old and not old.source_sku and not old.source_selected_in_app
+                    and old.status in {"unmarked", "no_targets"} and not old.template
+                    and not old.workbook_error and not group.workbook_error
+                    and [row.sku for row in old.rows] == [row.sku for row in group.rows]):
+                # Older checkpoints had no default. Adopt the first bike without
+                # treating it as an explicit app choice or changing workbook marks.
+                old.source_sku = group.source_sku
+                for row in old.rows:
+                    row.source = row.sku == old.source_sku
+                old.status, old.error = group.status, group.error
         invalid_templates = {group.ttcc for group in groups if group.template}
         changed = (cls._scope(groups) != cls._scope(current)
                    or any(group.workbook_error and group.ttcc in invalid_templates for group in current)
@@ -311,16 +344,23 @@ class OrbeaModelCopyService(SupplierUploadWorkflow):
         group.status = "unmarked" if not sku else "no_targets" if not group.targets else "pending"
 
     @classmethod
-    def select_source(cls, workbook, ttcc, sku):
+    def select_source(cls, workbook, ttcc, sku, *, state=None):
         path = cls.checkpoint_path(workbook)
-        state = (cls.load_checkpoint(workbook, allow_scope_change=True) if path.is_file()
-                 else OrbeaCopyRunResult(load_copy_workbook(workbook), [], path))
+        if state is None:
+            state = (cls.load_checkpoint(workbook, allow_scope_change=True) if path.is_file()
+                     else OrbeaCopyRunResult(load_copy_workbook(workbook), [], path))
+        elif Path(state.checkpoint_path).resolve() != path:
+            raise ValueError("Source choices belong to another workbook")
         group = next((group for group in state.groups if group.ttcc == ttcc), None)
         if group is None:
             raise ValueError(f"TTCC group {ttcc} is not in this workbook")
         if group.source_sku != sku or not group.source_selected_in_app:
+            # Commit a replacement only after the atomic write succeeds. The UI
+            # may reuse a verified snapshot while workbook/checkpoint stamps match.
+            group = replace(group, rows=[replace(row) for row in group.rows])
             cls._apply_source_choice(group, sku)
-            state.results = [item for item in state.results if item.ttcc != ttcc]
+            state = replace(state, groups=[group if item.ttcc == ttcc else item for item in state.groups],
+                            results=[item for item in state.results if item.ttcc != ttcc], cancelled=False, error="")
         cls._write(path, workbook, state.groups, state.results)
         return state
 
@@ -331,7 +371,7 @@ class OrbeaModelCopyService(SupplierUploadWorkflow):
         previous = []
         previous_groups = {}
         try:
-            previous_state = self.load_checkpoint(workbook)
+            previous_state = self._read_state(workbook)
             previous = previous_state.results
             previous_groups = {group.ttcc: group for group in previous_state.groups}
         except (OSError, ValueError, KeyError, TypeError):
@@ -401,12 +441,12 @@ class OrbeaModelCopyService(SupplierUploadWorkflow):
                         raise PimAutomationError("Cannot safely leave an unverified source product")
                 except Exception as recovery:
                     batch_error = f"{error}; recovery: {recovery}"
-            self._write(path, workbook, groups, results)
+            self._persist_state(path, workbook, groups, results)
             if item_finished:
                 item_finished(group)
             if batch_error:
                 break
-        self._write(path, workbook, groups, results)
+        self._persist_state(path, workbook, groups, results)
         return OrbeaCopyRunResult(groups, results, path, self._stop(cancellation), batch_error)
 
     def _verify_fields(self, editor, template, title, finish, colours):
@@ -429,7 +469,7 @@ class OrbeaModelCopyService(SupplierUploadWorkflow):
 
     def run(self, workbook, *, selected_ttcc=None, retry_failed=False, progress=None, log=None,
             cancellation=None, item_finished: Callable | None = None):
-        state = self.load_checkpoint(workbook)
+        state = self._read_state(workbook)
         groups, results, path = state.groups, state.results, state.checkpoint_path
         self.prepare_upload_batch((None, None), progress=log)
         selected = set(selected_ttcc) if selected_ttcc is not None else {group.ttcc for group in groups if group.template and group.status == "ready"}
@@ -452,7 +492,7 @@ class OrbeaModelCopyService(SupplierUploadWorkflow):
                 self._leave_read_only_product(source, source_match.pimbo_product_id)
             except Exception as error:
                 group.status, group.error = "source_changed", str(error)
-                self._write(path, workbook, groups, results)
+                self._persist_state(path, workbook, groups, results)
                 if log:
                     log(f"{group.ttcc}: {error}")
                 try:
@@ -484,7 +524,8 @@ class OrbeaModelCopyService(SupplierUploadWorkflow):
                     if result.product_id in source_ids:
                         result.status = "source_product"
                         self._leave_read_only_product(editor, result.product_id)
-                    elif result.product_id in seen:
+                    elif (result.product_id in seen or (self._parallel_checkpoint is not None
+                          and not self._parallel_checkpoint.claim(result.product_id))):
                         result.status = "duplicate"
                         self._leave_read_only_product(editor, result.product_id)
                     else:
@@ -574,7 +615,7 @@ class OrbeaModelCopyService(SupplierUploadWorkflow):
                         if self._unverified_product_open():
                             batch_error = str(error)
                 results = [item for item in results if not (item.ttcc == group.ttcc and item.sku == row.sku)] + [result]
-                self._write(path, workbook, groups, results)
+                self._persist_state(path, workbook, groups, results)
                 if item_finished:
                     item_finished(result)
                 if log:
@@ -583,7 +624,7 @@ class OrbeaModelCopyService(SupplierUploadWorkflow):
                     break
             if batch_error:
                 break
-        self._write(path, workbook, groups, results)
+        self._persist_state(path, workbook, groups, results)
         return OrbeaCopyRunResult(groups, results, path, self._stop(cancellation), batch_error)
 
 

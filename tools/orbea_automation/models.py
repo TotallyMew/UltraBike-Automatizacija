@@ -87,6 +87,7 @@ class OrbeaRunConfig:
     download_specifications: bool = False
     resume_run_dir: Path | None = None
     downloads_only: bool = False
+    download_browser_count: int = 1
     search: str = field(default="orbea", init=False)
 
     def __post_init__(self) -> None:
@@ -117,6 +118,8 @@ class OrbeaRunConfig:
                 raise ValueError(f"{name} must be positive")
         if self.image_retry_limit < 0:
             raise ValueError("image_retry_limit cannot be negative")
+        if type(self.download_browser_count) is not int or not 1 <= self.download_browser_count <= 4:
+            raise ValueError("download_browser_count must be between 1 and 4")
 
     def compatibility_dict(self, catalogue_sha256: str) -> dict[str, Any]:
         """Return fields that must match before an unfinished run can resume."""
@@ -190,3 +193,7 @@ class CancellationToken:
 
 class RunCancelled(RuntimeError):
     """Internal control-flow exception used to produce a partial report."""
+
+
+class OrbeaDownloadSessionError(RuntimeError):
+    """An owned downloader browser could not start or remain usable."""

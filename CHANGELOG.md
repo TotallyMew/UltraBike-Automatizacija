@@ -7,6 +7,80 @@ are generated from the installer and are not a substitute for this history.
 
 ### Changed
 
+- Orbea Add product can import Excel rows with SKU, name, TTCC code and supplier
+  URL in columns A/B/C/E, with optional headers. Valid rows join the current list;
+  existing SKUs update in place, duplicates are counted and invalid/conflicting
+  rows are identified. The source workbook and other selections are preserved.
+
+- Orbea products can be added manually with their Pimbo SKU, TTCC model code,
+  name and supplier URL alongside scanned or Excel-loaded rows. Existing rows
+  can be corrected without editing Excel; saved links use the regular download,
+  scan and upload workflow. Source corrections require fresh downloads while
+  preserving previous files and upload history.
+
+- Orbea product and copy lists offer Include codes beside Exclude codes. Prefix
+  matching includes hidden bikes/groups, preserves unrelated selections and
+  source choices, and skips invalid products or ineligible copy groups.
+
+- Orbea photos, geometry/CM size tables, source descriptions and specifications
+  can download with 1–4 owned public-site browsers. Different model pages run
+  concurrently; shared pages/packages stay together. Checkpoint, Excel and
+  image-cache writes are serialized, and stopped runs retain completed stages.
+
+- Orbea's Pimbo workflow has an optional Publish products step. It runs after
+  the other selected steps succeed, changes Draft to Published, saves and
+  verifies the status after reloading. Publishing forces automatic Save,
+  supports standalone batches and reports publication failures for retry.
+
+- The Orbea product list can scan missing required Pimbo attributes (allowing
+  empty Ratų dydis and Spalva) and all Bendra informacija specifications. Its
+  Pimbo data column names missing fields in tooltips; status selection handles
+  missing attributes/specifications separately. Checks persist in the saved
+  collection and the Pimbo Content Excel sheet without saving Pimbo products.
+
+- Copy progress receives confirmed snapshots from its workers. Excel and
+  checkpoint parsing no longer run in GUI completion slots; parallel browsers
+  publish ordered snapshots directly from their shared checkpoint.
+
+- Orbea copy source choices and progress update existing group controls instead
+  of rebuilding the full bike table. Unchanged workbooks/checkpoints reuse the
+  loaded snapshot; changed files reload before a source choice is saved. Failed
+  writes restore the prior source and retain confirmed results.
+
+- Orbea copying omits standalone bikes from its grouped list and counts. The
+  first bike in Excel order is the default source, with explicit Excel marks
+  and saved app choices taking priority. Existing source snapshots are retained.
+
+- Orbea copying retains selected attributes after dropdown clicks and React
+  input replacement. Leaving a Pimbo combobox uses Tab; Escape was clearing
+  the value just selected. Target colour mappings use the same verified
+  dropdown setter, while the Spalva specification remains unchanged.
+
+- Orbea product selection exposes both Select by status and Unselect by status.
+  Copying has the same controls for source readiness and target completion.
+  Actions respect visible-row filters, retain other selections and stay locked
+  while any workflow is running.
+
+- Orbea uploads, source reading and model copying support 1–4 authenticated
+  browsers. Workers own separate sessions, keep each bike's stages together,
+  prevent duplicate concurrent product edits and serialize copy checkpoint
+  updates. Stop finishes active bikes before closing additional browsers;
+  unsafe recovery stops the queue and retains the affected browser for review.
+
+- Orbea's product list can exclude selected bikes by SKU prefix, such as U9,
+  across visible and hidden rows. Multiple prefixes or full SKUs can be pasted,
+  with matching independent of letter case. Download and upload selection counts
+  update immediately; selection remains locked while a job runs.
+  Model copying also excludes whole TTCC groups by base code or member SKU,
+  retaining their selected sources and captured templates.
+
+- Orbea photo-colour matching reconciles Pimbo's WILD/M and RALLON/M labels
+  with Mullet models, RALLON 442/450 labels with the corresponding Enduro/DH
+  model, and OIZ OMX+IL SL R+K with Oiz OMX. Fenced paint segments work without
+  model years, explicit terminal Custom uses Your Design, and the published
+  Cinamon/Cinnamon spelling difference is supported. Unknown or ambiguous
+  paints remain errors. Partial collection logs now include the failure reason.
+
 - Product photos, geometry and size tables now share the gallery removal loop
   and confirmation handling. Geometry/size file inputs reset their native value
   without Firefox's Element Clear command, which cannot interact with Pimbo's

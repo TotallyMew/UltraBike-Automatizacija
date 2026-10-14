@@ -21,16 +21,44 @@ PHOTOS_CAPTURE_VERSION = 2
 
 def _colour_key(value):
     value = re.sub(r"\(\s*(?:Glossy?|Matte?)\s*\)", "", str(value or ""), flags=re.I)
+    # Orbea publishes this paint as both Metallic Cinamon and Cinnamon.
+    value = re.sub(r'\bcinamon\b', 'cinnamon', value, flags=re.I)
     return "".join(char for char in unicodedata.normalize("NFKD", value).casefold() if char.isalnum())
 
 
+def _photo_model_alias(value):
+    """Reconcile known Pimbo model labels only for photo-colour extraction."""
+    value = re.sub(r'^Orbea\s+', '', str(value or '').strip(), flags=re.I)
+    value = re.sub(r'^(Wild|Rallon)/M(?=\s|$)', r'\1', value, flags=re.I)
+    value = re.sub(r'^Rallon\s+(?:442|450)\s+(?=(?:Enduro|DH)\b)', 'Rallon ', value, flags=re.I)
+    value = re.sub(r'^Oiz\s+OMX\s*\+\s*IL\s+SL\s+R\s*\+\s*K(?=\s|$)', 'Oiz OMX', value, flags=re.I)
+    return value
+
+
 def pimbo_photo_colours(row, *, source_model="", photo_title=""):
-    models = (source_model, row.get("catalogue_model", ""), photo_title,
-              re.sub(r"\s+(?:19|20)\d{2}\s*$", "", photo_title))
+    title = re.sub(r'\s+', ' ', str(row.get('title', '') or '')).strip()
+    # Fenced titles identify the paint without relying on an identical website
+    # model name. Unspaced model slashes (WILD/M) remain inside the model.
+    segments = re.split(r'\s+[/|;]\s+', title)
+    if len(segments) > 1:
+        _, colour = parse_orbea_name(title, source_model=segments[0])
+        if colour:
+            return [colour]
+    # Custom is an explicit terminal paint marker, even when the model label
+    # differs. It must use Your Design, never the first factory colour.
+    if re.search(r'\bcustom\s*$', title, flags=re.I):
+        return ['Custom']
+    models = []
+    for value in (source_model, row.get("catalogue_model", ""), photo_title):
+        value = str(value or '')
+        for model in (value, _photo_model_alias(value)):
+            model = re.sub(r'\s+(?:19|20)\d{2}\s*$', '', model, flags=re.I)
+            models.extend((model, re.sub(r'\s+Mullet\s*$', '', model, flags=re.I)))
+    title = _photo_model_alias(title)
     colours = []
-    for model in models:
+    for model in dict.fromkeys(models):
         if model:
-            _, colour = parse_orbea_name(row.get("title", ""), source_model=model)
+            _, colour = parse_orbea_name(title, source_model=model)
             if colour and colour not in colours:
                 colours.append(colour)
     return colours
@@ -237,7 +265,7 @@ def collect_colour_photos(service, product, row, config, checkpoint, token, log,
     unavailable = relevant(result.unavailable)
     if not files and not failures and not unavailable:
         failures = (f"No downloaded photos could be assigned to {variant.name}",)
-    _, pimbo_colour = parse_orbea_name(row.get("title", ""), source_model=product.name)
+    pimbo_colour = next(iter(pimbo_photo_colours(row, source_model=product.name)), '')
     return {"files": files, "colour": variant.name, "colour_code": variant.code,
             "source": "your_design_default" if variant.code == "Custom" else "published_colour",
             "pimbo_colour": pimbo_colour, "failures": failures, "unavailable": unavailable,

@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 from openpyxl.formatting.rule import FormulaRule
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
@@ -373,17 +373,40 @@ def _summary_sheet(workbook: Workbook, checkpoint: RunCheckpoint) -> Any:
     return worksheet
 
 
+def _saved_source_marks(path):
+    """Preserve optional manual Matches source marks when refreshing a report."""
+    if not Path(path).is_file():
+        return None
+    book = load_workbook(path, read_only=True, data_only=True)
+    try:
+        if "Matches" not in book.sheetnames:
+            return None
+        rows = iter(book["Matches"].iter_rows(values_only=True))
+        headers = [str(value or "").strip().casefold() for value in next(rows, ())]
+        if "šaltinis" not in headers or "variant sku" not in headers:
+            return None
+        sku, source = headers.index("variant sku"), headers.index("šaltinis")
+        return {str(row[sku] or "").strip().upper(): row[source] if source < len(row) else ""
+                for row in rows if sku < len(row) and row[sku]}
+    finally:
+        book.close()
+
+
 def write_report(checkpoint: RunCheckpoint) -> Path:
     """Refresh the report, keeping an open original and publishing a new copy."""
 
+    source_marks = _saved_source_marks(checkpoint.workbook_path)
+    match_rows = _matches_rows(checkpoint)
+    if source_marks is not None:
+        match_rows = [tuple(row) + (source_marks.get(str(row[0]).strip().upper(), ""),) for row in match_rows]
     workbook = Workbook()
     _summary_sheet(workbook, checkpoint)
     matches = _make_data_sheet(
         workbook,
         "Matches",
-        MATCH_HEADERS,
-        _matches_rows(checkpoint),
-        (18, 58, 20, 10, 52),
+        MATCH_HEADERS + (("Šaltinis",) if source_marks is not None else ()),
+        match_rows,
+        (18, 58, 20, 10, 52) + ((18,) if source_marks is not None else ()),
     )
     review = _make_data_sheet(
         workbook,
@@ -437,6 +460,18 @@ def write_report(checkpoint: RunCheckpoint) -> Path:
         _add_web_links(photos, ("Pimbo URL", "Orbea URL"))
         workbook.active = workbook.index(photos)
 
+    if any(row.get("pimbo_content_scan") for row in checkpoint.results):
+        contents = _make_data_sheet(workbook, "Pimbo Content",
+            ("Variant SKU", "Pimbo Product", "Pimbo Data Status", "Missing Required Attributes", "Missing Bendra informacija Specs",
+             "Attributes Checked", "General Specs Checked", "Checked At (UTC)", "Error", "Pimbo URL"),
+            ((row["sku"], row.get("title", ""), row.get("pimbo_content_scan", {}).get("status", "content_not_checked").replace("_", " ").capitalize(),
+              ", ".join(row.get("pimbo_content_scan", {}).get("missing_attributes", [])),
+              ", ".join(row.get("pimbo_content_scan", {}).get("missing_specifications", [])),
+              row.get("pimbo_content_scan", {}).get("attributes_checked"), row.get("pimbo_content_scan", {}).get("specifications_checked"),
+              row.get("pimbo_content_scan", {}).get("checked_at", ""), row.get("pimbo_content_scan", {}).get("error", ""),
+              row.get("product_url", "")) for row in checkpoint.results if row.get("sku")),
+            (18, 55, 26, 55, 55, 20, 22, 28, 65, 52))
+        _add_web_links(contents, ("Pimbo URL",))
     canonical = checkpoint.run_dir / WORKBOOK_NAME
     destination = atomic_save_workbook(workbook, checkpoint.workbook_path, fallback_base=canonical)
     if checkpoint.data.get("report_filename", WORKBOOK_NAME) != destination.name:

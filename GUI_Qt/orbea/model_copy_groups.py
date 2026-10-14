@@ -13,6 +13,15 @@ from qfluentwidgets import CaptionLabel, CheckBox, PushButton, RadioButton, isDa
 
 from GUI_Qt.styles.screen_theme import enforce_transparent_labels
 from GUI_Qt.styles.theme_config import get_text_color
+from .controller import parse_code_prefixes
+
+
+COPY_SELECTION_STATUSES = (
+    ("ready", "Ready"), ("pending", "Read source first"),
+    ("error", "Source error"), ("source_changed", "Read source again"),
+    ("failed", "With failed targets"), ("saved", "All targets copied"),
+    ("unfinished", "With unfinished targets"),
+)
 
 
 class ModelCopyGroupTable(QTableWidget):
@@ -30,6 +39,10 @@ class ModelCopyGroupTable(QTableWidget):
         self._button_groups = []
         self._group_rows = {}
         self._group_cells = {}
+        self._group_labels = {}
+        self._group_radio_groups = {}
+        self._presentations = {}
+        self._dirty_size_groups = set()
         self._filter = ""
         self._busy = False
         self.setObjectName("orbeaModelCopyGroups")
@@ -65,7 +78,32 @@ class ModelCopyGroupTable(QTableWidget):
                      if self._checks[group.ttcc].isChecked() and self.eligible(group)
                      and (not visible_only or not self.isRowHidden(self._group_rows[group.ttcc][0])))
 
-    def set_groups(self, groups, results=(), *, preserve_selection=False):
+    @staticmethod
+    def _presentation(group, lookup):
+        return (group.source_sku, group.status, group.error, group.workbook_error,
+                group.template.title if group.template else "",
+                tuple((bike.sku, bike.title,
+                       (lookup[(group.ttcc, bike.sku)].status, lookup[(group.ttcc, bike.sku)].title,
+                        lookup[(group.ttcc, bike.sku)].error) if (group.ttcc, bike.sku) in lookup else None)
+                      for bike in group.rows))
+
+    def set_groups(self, groups, results=(), *, preserve_selection=False, refresh_text=False):
+        groups = [group for group in groups if group.has_multiple_bikes]
+        lookup = {(result.ttcc, result.sku): result for result in results}
+        topology = lambda values: tuple((group.ttcc, tuple(bike.sku for bike in group.rows)) for group in values)
+        if preserve_selection and topology(groups) == topology(self.groups):
+            self.groups = groups
+            changed = set()
+            for group in groups:
+                presentation = self._presentation(group, lookup)
+                if refresh_text or presentation != self._presentations.get(group.ttcc):
+                    self._refresh_group(group, lookup)
+                    self._presentations[group.ttcc] = presentation
+                    changed.add(group.ttcc)
+            if changed:
+                self._apply_filter(changed)
+                self._queue_row_sizes(changed)
+            return
         selected = set(self.selected_codes(visible_only=False)) if preserve_selection else None
         scroll = self.verticalScrollBar().value()
         for buttons in self._button_groups:
@@ -73,10 +111,12 @@ class ModelCopyGroupTable(QTableWidget):
         self.groups = groups
         self._checks, self._source_buttons, self._clear_buttons = {}, {}, {}
         self._button_groups, self._group_rows, self._group_cells = [], {}, {}
+        self._group_labels, self._group_radio_groups, self._presentations = {}, {}, {}
+        self._dirty_size_groups.clear()
         self.clearSpans()
         self.clearContents()
         self.setRowCount(sum(len(group.rows) for group in groups))
-        result_lookup = {(result.ttcc, result.sku): result for result in results}
+        result_lookup = lookup
         row_index = 0
         for group in groups:
             rows = tuple(range(row_index, row_index + len(group.rows)))
@@ -100,11 +140,12 @@ class ModelCopyGroupTable(QTableWidget):
             status = CaptionLabel(self._status_text(group.status))
             status.setWordWrap(True)
             box.addWidget(status)
-            if group.error:
-                error = CaptionLabel(group.error)
-                error.setWordWrap(True)
-                error.setToolTip(group.error)
-                box.addWidget(error)
+            error = CaptionLabel(group.error)
+            error.setWordWrap(True)
+            error.setToolTip(group.error)
+            error.setVisible(bool(group.error))
+            box.addWidget(error)
+            self._group_labels[group.ttcc] = count, status, error
             clear = PushButton(self._t("clear_source", "Clear source"))
             clear.setFixedHeight(28)
             clear.setVisible(bool(group.source_sku))
@@ -119,6 +160,7 @@ class ModelCopyGroupTable(QTableWidget):
             buttons = QButtonGroup(self)
             buttons.setExclusive(True)
             self._button_groups.append(buttons)
+            self._group_radio_groups[group.ttcc] = buttons
             for bike in group.rows:
                 source = bike.sku == group.source_sku
                 button = RadioButton()
@@ -152,28 +194,81 @@ class ModelCopyGroupTable(QTableWidget):
                     self.setItem(row_index, column, item)
                 self.setRowHeight(row_index, 64)
                 row_index += 1
+            self._presentations[group.ttcc] = self._presentation(group, lookup)
         enforce_transparent_labels(self)
         self._apply_filter()
-        self.set_busy(self._busy)
+        self.set_busy(self._busy, force=True)
         self._queue_row_sizes()
         self.verticalScrollBar().setValue(scroll)
 
-    def set_busy(self, busy):
+    def _refresh_group(self, group, lookup):
+        count, status, error = self._group_labels[group.ttcc]
+        check = self._checks[group.ttcc]
+        check.setToolTip(self._t("group_check", "Include {ttcc} in this run", ttcc=group.ttcc))
+        if not self.eligible(group):
+            blocked = check.blockSignals(True)
+            try:
+                check.setChecked(False)
+            finally:
+                check.blockSignals(blocked)
+        count.setText(self._t("group_count", "{bikes} bikes · {targets} targets", bikes=len(group.rows), targets=max(0, len(group.rows) - 1)))
+        status.setText(self._status_text(group.status))
+        error.setText(group.error)
+        error.setToolTip(group.error)
+        error.setVisible(bool(group.error))
+        self._group_cells[group.ttcc].setToolTip(group.error)
+        clear = self._clear_buttons[group.ttcc]
+        clear.setText(self._t("clear_source", "Clear source"))
+        clear.setVisible(bool(group.source_sku))
+        buttons = self._group_radio_groups[group.ttcc]
+        buttons.setExclusive(False)
+        try:
+            for row, bike in zip(self._group_rows[group.ttcc], group.rows):
+                source = bike.sku == group.source_sku
+                button = self._source_buttons[(group.ttcc, bike.sku)]
+                button.setChecked(source)
+                button.setAccessibleName(self._t("source_choice", "Use {sku} as source for {ttcc}", sku=bike.sku, ttcc=group.ttcc))
+                button.setToolTip(self._t("source_help", "Choose the bike you have prepared and saved in Pimbo. Its data will be copied to the other bikes in this group."))
+                result = lookup.get((group.ttcc, bike.sku))
+                name = (group.template.title if source and group.template else
+                        result.title if result and result.status == "saved" and result.title else bike.title)
+                role = (self._t("source_role", "Source") if source else self._status_text(result.status) if result else
+                        self._t("target_role", "Target") if group.source_sku else self._t("bike_role", "Bike"))
+                for column, text in ((self.SKU, bike.sku), (self.NAME, name), (self.STATUS, role)):
+                    item = self.item(row, column)
+                    item.setText(text)
+                    item.setToolTip(result.error if result and result.error and column == self.STATUS else text)
+                item = self.item(row, self.SKU)
+                font = item.font()
+                font.setBold(source)
+                item.setFont(font)
+        finally:
+            buttons.setExclusive(True)
+        self._set_group_busy(group)
+
+    def _set_group_busy(self, group):
+        can_choose = not self._busy and not group.workbook_error and len(group.rows) > 1
+        self._checks[group.ttcc].setEnabled(not self._busy and self.eligible(group))
+        self._clear_buttons[group.ttcc].setEnabled(can_choose)
+        for bike in group.rows:
+            self._source_buttons[(group.ttcc, bike.sku)].setEnabled(can_choose)
+
+    def set_busy(self, busy, *, force=False):
+        if busy == self._busy and not force:
+            return
         self._busy = busy
         for group in self.groups:
-            can_choose = not busy and not group.workbook_error and len(group.rows) > 1
-            self._checks[group.ttcc].setEnabled(not busy and self.eligible(group))
-            self._clear_buttons[group.ttcc].setEnabled(can_choose)
-            for bike in group.rows:
-                self._source_buttons[(group.ttcc, bike.sku)].setEnabled(can_choose)
+            self._set_group_busy(group)
 
     def set_filter(self, text):
         self._filter = text.strip().casefold()
         self._apply_filter()
         self.groups_selected.emit()
 
-    def _apply_filter(self):
+    def _apply_filter(self, codes=None):
         for group in self.groups:
+            if codes is not None and group.ttcc not in codes:
+                continue
             text = " ".join([group.ttcc] + [f"{bike.sku} {bike.title}" for bike in group.rows])
             text += " " + " ".join(self.item(row, self.NAME).text() for row in self._group_rows[group.ttcc])
             hidden = bool(self._filter and self._filter not in text.casefold())
@@ -183,16 +278,59 @@ class ModelCopyGroupTable(QTableWidget):
     def visible_groups(self):
         return tuple(group for group in self.groups if not self.isRowHidden(self._group_rows[group.ttcc][0]))
 
-    def select_visible(self, checked):
+    def select_visible(self, checked, *, status=None, results=()):
         if self._busy:
             return
+        lookup = {(item.ttcc, item.sku): item.status for item in results}
         for group in self.visible_groups():
-            if self.eligible(group):
-                self._checks[group.ttcc].setChecked(checked)
+            if not self.eligible(group):
+                continue
+            statuses = [lookup.get((group.ttcc, row.sku)) for row in group.targets]
+            complete = bool(statuses) and all(value in {"saved", "duplicate", "source_product"} for value in statuses)
+            matches = (any(value == "failed" for value in statuses) if status == "failed" else
+                       complete if status == "saved" else not complete if status == "unfinished" else group.status == status)
+            if status is None or matches:
+                check = self._checks[group.ttcc]
+                blocked = check.blockSignals(True)
+                try:
+                    check.setChecked(checked)
+                finally:
+                    check.blockSignals(blocked)
         self.groups_selected.emit()
 
-    def _queue_row_sizes(self):
+    def exclude_code_prefixes(self, text):
+        """Exclude entire matching groups while preserving their source choices."""
+        return self.select_code_prefixes(text, checked=False)
+
+    def include_code_prefixes(self, text):
+        """Include eligible matching groups while preserving their source choices."""
+        return self.select_code_prefixes(text, checked=True)
+
+    def select_code_prefixes(self, text, *, checked):
+        if self._busy:
+            return None
+        prefixes = parse_code_prefixes(text)
+        if not prefixes:
+            return 0
+        count = 0
+        for group in self.groups:
+            if checked and not self.eligible(group):
+                continue
+            check = self._checks[group.ttcc]
+            codes = (group.ttcc, *(bike.sku for bike in group.rows))
+            if check.isChecked() != checked and any(code.casefold().startswith(prefixes) for code in codes):
+                blocked = check.blockSignals(True)
+                try:
+                    check.setChecked(checked)
+                finally:
+                    check.blockSignals(blocked)
+                count += 1
+        self.groups_selected.emit()
+        return count
+
+    def _queue_row_sizes(self, codes=None):
         if hasattr(self, "_resize_timer"):
+            self._dirty_size_groups.update(codes if codes is not None else (group.ttcc for group in self.groups))
             self._resize_timer.start(0)
 
     def resizeEvent(self, event):
@@ -206,7 +344,10 @@ class ModelCopyGroupTable(QTableWidget):
     def _resize_bike_rows(self):
         width = max(80, self.columnWidth(self.NAME) - 24)
         metrics = self.fontMetrics()
+        dirty, self._dirty_size_groups = self._dirty_size_groups, set()
         for group in self.groups:
+            if group.ttcc not in dirty:
+                continue
             rows = self._group_rows[group.ttcc]
             cell = self._group_cells[group.ttcc]
             cell_height = max(cell.sizeHint().height(), cell.heightForWidth(self.columnWidth(self.BASE)))
@@ -214,7 +355,9 @@ class ModelCopyGroupTable(QTableWidget):
             for row in rows:
                 text = self.item(row, self.NAME).text()
                 height = metrics.boundingRect(QRect(0, 0, width, 1000), Qt.TextFlag.TextWordWrap, text).height()
-                self.setRowHeight(row, max(56, minimum, height + metrics.lineSpacing() + 24))
+                wanted = max(56, minimum, height + metrics.lineSpacing() + 24)
+                if self.rowHeight(row) != wanted:
+                    self.setRowHeight(row, wanted)
 
     def apply_theme(self, style):
         self.setStyleSheet(style)

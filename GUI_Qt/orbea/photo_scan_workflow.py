@@ -80,6 +80,7 @@ class OrbeaPhotoScanWorkflow:
         self.selection = self.screen.workflow_controller.remember_selection(panel)
         panel._busy = True
         panel.log.clear()
+        panel.details.show()
         self.screen.workflow_controller.start_job("photo_scan", worker,
             owner=panel, attribute="worker", operation_attribute="_operation_id",
             details={"output_path": panel.folder.text()},

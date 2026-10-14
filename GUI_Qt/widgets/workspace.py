@@ -151,7 +151,7 @@ class Disclosure(QWidget):
 def grouped_stages(main, checks):
     """Present the same stage checkboxes under task-oriented headings."""
     groups = (
-        ("layout.stages.setup", ("product_family", "brand", "save")),
+        ("layout.stages.setup", ("product_family", "brand", "save", "publish_products")),
         ("layout.stages.content", ("description_source", "description_magic_ai",
              "description", "specifications_prefill", "specifications_magic_ai",
              "category_magic_ai")),

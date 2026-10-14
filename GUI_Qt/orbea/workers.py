@@ -91,17 +91,86 @@ class _OrbeaServiceWorker(QThread):
 
 class OrbeaModelCopyWorker(_OrbeaServiceWorker):
     item_finished = Signal(object)
+    progress_ready = Signal(object, object)
 
-    def __init__(self, factory, driver, workbook, mode, selected_ttcc=()):
+    def __init__(self, factory, driver, workbook, mode, selected_ttcc=(), *,
+                 browser_count=1, browser_pool_factory=None):
         super().__init__(factory, driver)
         self.workbook, self.mode, self.selected_ttcc = workbook, mode, selected_ttcc
+        self.driver = driver
+        self.browser_count = max(1, min(4, int(browser_count)))
+        self.browser_pool_factory = browser_pool_factory
+        self._progress_lock = threading.Lock()
+
+    def _publish_item(self, item, snapshot):
+        self.item_finished.emit(item)
+        try:
+            # Files and full snapshots are processed by a worker, never a GUI
+            # slot. Serialize publication so parallel snapshots arrive in order.
+            with self._progress_lock:
+                state = snapshot()
+                self.progress_ready.emit(item, state)
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            self.log_message.emit(str(error))
 
     def _execute(self, service):
+        if self.browser_count > 1 and len(self.selected_ttcc) > 1:
+            return self._execute_parallel(service)
+        from tools.orbea_automation.model_copy import OrbeaModelCopyService
+        publish = lambda item: self._publish_item(item, lambda: OrbeaModelCopyService.load_checkpoint(self.workbook))
         if self.mode == "capture":
             return service.capture_templates(self.workbook, selected_ttcc=self.selected_ttcc,
-                                             item_finished=self.item_finished.emit, **self._callbacks())
+                                             item_finished=publish, **self._callbacks())
         return service.run(self.workbook, selected_ttcc=self.selected_ttcc,
-                           retry_failed=self.mode == "retry", item_finished=self.item_finished.emit, **self._callbacks())
+                           retry_failed=self.mode == "retry", item_finished=publish, **self._callbacks())
+
+    def _execute_parallel(self, primary):
+        from .browser_pool import BrowserTaskQueue
+        from tools.orbea_automation.parallel_copy import ModelCopyCheckpoint
+        if self.browser_pool_factory is None:
+            raise RuntimeError("Parallel copying requires an authenticated browser pool")
+        primary.prepare_upload_batch((None, None), progress=self.log_message.emit)
+        checkpoint = ModelCopyCheckpoint(self.workbook, capture=self.mode == "capture",
+                                         mapping_changed=primary._colour_mapping_changed)
+        queue = BrowserTaskQueue(self.selected_ttcc, lambda: self.stop_requested)
+        count = min(self.browser_count, len(self.selected_ttcc))
+        with self.browser_pool_factory(count, self.log_message.emit, queue.is_cancelled) as pool:
+            services = {id(pool.drivers[0]): primary}
+            for driver in pool.drivers[1:]:
+                service = self.make_service(driver)
+                if any(service is old for old in services.values()):
+                    raise RuntimeError("Each parallel browser must have its own copying service")
+                try:
+                    service.prepare_upload_batch((None, None), progress=self.log_message.emit)
+                except Exception:
+                    pool.preserve(driver)
+                    raise
+                services[id(driver)] = service
+
+            def execute(number, driver, ttcc):
+                service = services[id(driver)]
+                service.configure_parallel(checkpoint, (ttcc,))
+                callbacks = dict(progress=lambda message: self.progress_changed.emit(f"[Browser {number}] {message}"),
+                                 log=lambda message: self.log_message.emit(f"[Browser {number}] {message}"),
+                                 cancellation=queue, item_finished=lambda item: self._publish_item(item, checkpoint.snapshot),
+                                 selected_ttcc=(ttcc,))
+                try:
+                    state = (service.capture_templates(self.workbook, **callbacks) if self.mode == "capture" else
+                             service.run(self.workbook, retry_failed=self.mode == "retry", **callbacks))
+                    if state.error:
+                        raise RuntimeError(f"Browser {number}: {state.error}")
+                except Exception:
+                    pool.preserve(driver)
+                    queue.fatal.set()
+                    raise
+
+            queue.run(pool.drivers, execute)
+            for error in queue.errors:
+                self.log_message.emit(error)
+        state = checkpoint.snapshot()
+        state.cancelled = self.stop_requested
+        state.error = " | ".join(queue.errors)
+        return state
 
 
 class OrbeaFilterWorker(_OrbeaServiceWorker):
@@ -157,6 +226,7 @@ class OrbeaRunWorker(_OrbeaServiceWorker):
             for index, (config, keys) in enumerate(jobs):
                 if self.stop_requested and results:
                     break
+                config = replace(config, download_browser_count=self.config.download_browser_count)
                 self.log_message.emit(f"Downloading data for {len(keys)} selected products in {config.resume_run_dir.name}")
                 continuing = self.download_request and self.download_request.jobs[index].resume
                 kwargs = ({"download_mode": self.download_request.mode, "download_batch_id": batch["id"]}
@@ -212,6 +282,10 @@ class OrbeaPimboPhotoScanWorker(_OrbeaServiceWorker):
                 break
             results.extend(service.run(root, skus, **self._callbacks(), item_finished=self.item_finished.emit))
         return tuple(results)
+
+
+class OrbeaPimboContentScanWorker(OrbeaPimboPhotoScanWorker):
+    """Use the same saved-product queue and stop-after-current read semantics."""
 
 
 class OrbeaMissingPhotosWorker(_OrbeaServiceWorker):

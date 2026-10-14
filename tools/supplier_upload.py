@@ -138,12 +138,22 @@ class SupplierUploadWorkflow:
         completed_stages: Any = []
         warnings: Any = []
 
+        def notify_stage(stage, state, detail=''):
+            callback = getattr(progress, 'stage_changed', None)
+            if callable(callback):
+                callback(stage, state, str(detail))
+
+        def complete_stage(stage):
+            completed_stages.append(stage)
+            notify_stage(stage, 'done')
+
         def require_ai_success(step):
             if not isinstance(step, PimAiStepResult) or not step.success:
                 raise PimAutomationError(getattr(step, 'detail', '') or 'The selected MagicAI stage did not complete')
             return step
 
         def fill_specifications_with_ai():
+            notify_stage('specifications_magic_ai', 'running')
             exclusions = self.specification_ai_exclusions(resolved_match, product)
             kwargs = {'excluded_fields': exclusions} if exclusions else {}
             return require_ai_success(editor.fill_empty_specifications_with_ai(specification_source, **kwargs))
@@ -151,6 +161,7 @@ class SupplierUploadWorkflow:
         def add_warning(stage: str, detail: Any) -> None:
             message = f'{stage}: {_clean(detail)}'
             warnings.append(message)
+            notify_stage(stage, 'skipped' if str(detail).casefold().startswith('skipped because') else 'failed', str(detail))
             if progress:
                 progress(f'Warning — {message}')
         product: Any = None
@@ -327,6 +338,7 @@ class SupplierUploadWorkflow:
         def apply_specification_prefill(target_changes: list[str]) -> None:
             if specification_plan is None:
                 return
+            notify_stage('specifications_prefill', 'running')
             available = 0
             changed = 0
             results = editor.set_specifications(specification_plan.values, overwrite=True, move_if_empty=self.specification_value_migrations)
@@ -355,11 +367,12 @@ class SupplierUploadWorkflow:
             if available == 0:
                 raise PimAutomationError(f'The current PIMBO family has none of the {self.supplier_label} pre-fill fields')
             if 'specifications_prefill' not in completed_stages:
-                completed_stages.append('specifications_prefill')
+                complete_stage('specifications_prefill')
             if progress:
                 progress(f'{self.supplier_label} specification pre-fill replaced {changed} of {available} available field(s)')
         if selected.product_photos:
             uploaded_photo_count = 0
+            notify_stage('product_photos', 'running')
             try:
                 inspect_photos = getattr(editor, 'prepare_product_photo_upload', None)
                 should_upload = inspect_photos(has_replacements=bool(photo_paths)) if callable(inspect_photos) else bool(photo_paths)
@@ -386,7 +399,7 @@ class SupplierUploadWorkflow:
                         time.sleep(PRODUCT_PHOTO_UPLOAD_BATCH_PAUSE_SECONDS)
                 if uploaded_photo_count:
                     changed_fields.append('images')
-                completed_stages.append('product_photos')
+                complete_stage('product_photos')
             except Exception as error:
                 add_warning('Product photos', error)
                 photo_upload.update(action='failed', error=str(error))
@@ -404,6 +417,7 @@ class SupplierUploadWorkflow:
                                         (photo_upload.get('uploaded_photos', 0) > 0 and
                                          self.can_arrange_product_photos(image_root))):
             try:
+                notify_stage('photo_order', 'running')
                 if photo_upload.get('action') == 'failed':
                     raise PimAutomationError('Finish the failed photo upload before arranging its gallery')
                 if progress:
@@ -411,7 +425,7 @@ class SupplierUploadWorkflow:
                 if arrange_photos(editor, image_root) and 'images' not in changed_fields:
                     changed_fields.append('images')
                 if getattr(selected, 'photo_order', False):
-                    completed_stages.append('photo_order')
+                    complete_stage('photo_order')
             except Exception as error:
                 add_warning('Product photo order', error)
                 editor.photo_upload = dict(getattr(editor, 'photo_upload', {}) or {})
@@ -419,6 +433,7 @@ class SupplierUploadWorkflow:
             finally:
                 photo_upload = dict(getattr(editor, 'photo_upload', {}) or photo_upload)
         if size_chart_image is not None and not table_preflight_failed:
+            notify_stage('size_tables', 'running')
             try:
                 if progress:
                     progress(f'Uploading the {self.supplier_label} SIZE/HEIGHT crop to Size tables')
@@ -427,12 +442,13 @@ class SupplierUploadWorkflow:
                     size_kwargs["replace_existing"] = True
                 if editor.upload_size_table_images((size_chart_image,), **size_kwargs):
                     changed_fields.append('size_table_images')
-                completed_stages.append('size_tables')
+                complete_stage('size_tables')
             except Exception as error:
                 add_warning('Size tables', error)
                 if self.replace_size_table_images:
                     unsafe_phase_one = True
         if dimensions_image is not None and not table_preflight_failed:
+            notify_stage('geometry', 'running')
             try:
                 if progress:
                     progress(f'{"Replacing" if self.replace_geometry_images else "Uploading"} the {self.supplier_label} Geometry images')
@@ -441,21 +457,24 @@ class SupplierUploadWorkflow:
                     geometry_kwargs["replace_existing"] = True
                 if editor.upload_geometry_images(self.geometry_upload_paths(dimensions_image), **geometry_kwargs):
                     changed_fields.append('geometry_images')
-                completed_stages.append('geometry')
+                complete_stage('geometry')
             except Exception as error:
                 add_warning('Geometry', error)
                 if self.replace_geometry_images:
                     unsafe_phase_one = True
         for stage, unavailable in (("geometry", geometry_unavailable), ("size_tables", size_tables_unavailable)):
             if getattr(selected, stage) and unavailable:
-                completed_stages.append(stage)
+                complete_stage(stage)
+                notify_stage(stage, 'skipped', f'{self.supplier_label} does not publish this table')
                 if progress:
                     progress(f'{self.supplier_label} does not publish {stage.replace("_", " ")}; skipping that upload')
         if selected.description_source:
+            notify_stage('description_source', 'running')
             if description_unavailable:
                 if progress:
                     progress(f'{self.supplier_label} does not publish a source description; keeping the PIMBO description')
-                completed_stages.append('description_source')
+                complete_stage('description_source')
+                notify_stage('description_source', 'skipped', f'{self.supplier_label} does not publish a source description')
             elif not product or not product.description_html:
                 description_ready = False
                 add_warning('Description source', f'{self.metadata_name} has no saved {self.supplier_label} description')
@@ -466,15 +485,17 @@ class SupplierUploadWorkflow:
                     if editor.set_description_html(self._description_html(product)):
                         changed_fields.append('description_lt_source')
                     description_ready = True
-                    completed_stages.append('description_source')
+                    complete_stage('description_source')
                 except Exception as error:
                     description_ready = False
                     add_warning('Description source', error)
         if selected.description_magic_ai:
+            notify_stage('description_magic_ai', 'running')
             if description_unavailable:
                 if progress:
                     progress('Description MagicAI skipped because no source description is published')
-                completed_stages.append('description_magic_ai')
+                complete_stage('description_magic_ai')
+                notify_stage('description_magic_ai', 'skipped', 'No source description is published')
             elif description_ready is False:
                 unsafe_phase_one = True
                 add_warning('Description MagicAI', f'Skipped because the {self.supplier_label} description was not pasted successfully')
@@ -486,17 +507,18 @@ class SupplierUploadWorkflow:
                     ai_steps.append(description_step)
                     if progress and description_step.detail:
                         progress(description_step.detail)
-                    completed_stages.append('description_magic_ai')
+                    complete_stage('description_magic_ai')
                 except Exception as error:
                     unsafe_phase_one = True
                     add_warning('Description MagicAI', error)
         if selected.product_family:
+            notify_stage('product_family', 'running')
             try:
                 if progress:
                     progress('Setting and verifying product family Dviračiai')
                 if editor.ensure_product_family('Dviračiai'):
                     changed_fields.append('product_family')
-                completed_stages.append('product_family')
+                complete_stage('product_family')
                 family_ready = True
             except Exception as error:
                 family_ready = False
@@ -504,17 +526,19 @@ class SupplierUploadWorkflow:
                     unsafe_phase_one = True
                 add_warning('Product family', error)
         if selected.brand:
+            notify_stage('brand', 'running')
             try:
                 if progress:
                     progress(f'Setting brand to {self.supplier_label}')
                 if editor.set_brand(f'{self.supplier_label}'):
                     changed_fields.append('brand')
-                completed_stages.append('brand')
+                complete_stage('brand')
             except Exception as error:
                 if selected.save:
                     unsafe_phase_one = True
                 add_warning('Brand', error)
         if selected.category_magic_ai:
+            notify_stage('category_magic_ai', 'running')
             try:
                 if family_ready is False:
                     raise PimAutomationError('Product family Dviračiai could not be prepared')
@@ -528,11 +552,12 @@ class SupplierUploadWorkflow:
                 ai_steps.append(category_step)
                 if progress and category_step.detail:
                     progress(f'Category selected — {category_step.detail}')
-                completed_stages.append('category_magic_ai')
+                complete_stage('category_magic_ai')
             except Exception as error:
                 unsafe_phase_one = True
                 add_warning('Category MagicAI', error)
         if selected.translations:
+            notify_stage('translations', 'running')
             try:
                 if progress:
                     progress('Checking the Lithuanian product name before translation')
@@ -543,7 +568,7 @@ class SupplierUploadWorkflow:
                 if progress:
                     progress('Translating product copy with overwrite existing translations enabled')
                 ai_steps.append(require_ai_success(editor.translate_lt_to_all(overwrite=True)))
-                completed_stages.append('translations')
+                complete_stage('translations')
             except Exception as error:
                 unsafe_phase_one = True
                 add_warning('Translations', error)
@@ -578,7 +603,7 @@ class SupplierUploadWorkflow:
                     ai_steps.append(specification_step)
                     if specification_step.changed:
                         changed_fields.append('specifications')
-                    completed_stages.append('specifications_magic_ai')
+                    complete_stage('specifications_magic_ai')
                 except Exception as error:
                     add_warning('Specifications MagicAI', error)
         if any((stage in completed_stages for stage in ('description_source', 'description_magic_ai', 'category_magic_ai', 'translations'))):
@@ -590,13 +615,14 @@ class SupplierUploadWorkflow:
         if not selected.save:
             return make_result(prepared)
         if prepared.status == PimPreparationStatus.SAVED_AUTOMATICALLY:
-            completed_stages.append('save')  # Attachments persisted and were verified without form Save.
+            complete_stage('save')  # Attachments persisted and were verified without form Save.
             if progress and set(prepared.changed_fields) & {'geometry_images', 'size_table_images'}:
                 progress('Table attachments saved immediately and verified after reload; no form Save was needed')
         if unsafe_phase_one:
             prepared = replace(prepared, status=PimPreparationStatus.FAILED, warnings=tuple(warnings), error='Automatic Save was blocked because a required stage failed; the product was left unsaved. ' + prepared.error)
             return make_result(prepared)
         if prepared.status == PimPreparationStatus.READY_FOR_REVIEW:
+            notify_stage('save', 'running')
             if progress:
                 progress(f'Saving completed first-phase {self.supplier_label} changes')
             try:
@@ -605,7 +631,7 @@ class SupplierUploadWorkflow:
                 add_warning('First save', error)
                 prepared = replace(prepared, status=PimPreparationStatus.FAILED, warnings=tuple(warnings), error=f'First save: {_clean(error)}')
             if prepared.status == PimPreparationStatus.SAVED_AUTOMATICALLY:
-                completed_stages.append('save')
+                complete_stage('save')
         if prepared.status not in {PimPreparationStatus.SAVED_AUTOMATICALLY, PimPreparationStatus.NO_CHANGES}:
             return make_result(prepared)
         if specification_stage_requested:
@@ -636,7 +662,7 @@ class SupplierUploadWorkflow:
                     specification_ai_steps.append(specification_step)
                     if specification_step.changed:
                         specification_changes.append('specifications')
-                    completed_stages.append('specifications_magic_ai')
+                    complete_stage('specifications_magic_ai')
                 except Exception as error:
                     add_warning('Specifications MagicAI', error)
                     specification_prefill_ready = False
@@ -644,6 +670,7 @@ class SupplierUploadWorkflow:
             if not specification_prefill_ready:
                 specifications_prepared = replace(specifications_prepared, status=PimPreparationStatus.FAILED, warnings=tuple(warnings), error='Specification enrichment failed; the product was left with unsaved specification changes')
             if specifications_prepared.status == PimPreparationStatus.READY_FOR_REVIEW:
+                notify_stage('save', 'running')
                 if progress:
                     progress(f'Saving {self.supplier_label} specification changes')
                 try:
@@ -656,7 +683,7 @@ class SupplierUploadWorkflow:
                 combined_status = prepared.status
             prepared = replace(specifications_prepared, product_code=resolved_match.sku, initial_version=base.initial_version, initial_fields=base.initial_fields, status=combined_status, changed_fields=tuple(dict.fromkeys((*prepared.changed_fields, *specifications_prepared.changed_fields))), ai_steps=tuple((*prepared.ai_steps, *specifications_prepared.ai_steps)), warnings=tuple(warnings))
             if prepared.status == PimPreparationStatus.SAVED_AUTOMATICALLY:
-                completed_stages.append('save')
+                complete_stage('save')
         if progress:
             progress(f"Completed stages — {', '.join(ordered_completed_stages()) or 'none'}; warnings: {len(warnings)}")
         return make_result(prepared)

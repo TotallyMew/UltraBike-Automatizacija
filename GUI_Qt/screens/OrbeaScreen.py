@@ -791,6 +791,7 @@ class OrbeaScreen(ResponsiveWidget):
             "collect_product_data": True,
             "download_description": self._description_check.isChecked(),
             "download_specifications": self._specifications_check.isChecked(),
+            "download_browser_count": self._download_browsers.count,
             "browser_name": str(self._setting_get("browser_choice", "Chrome") or "Chrome").strip().lower(),
         }
         config_aliases = {
@@ -1084,6 +1085,8 @@ class OrbeaScreen(ResponsiveWidget):
                 return
             if require_existing:
                 self._restore_run_controls(config)
+            from dataclasses import replace
+            config = replace(config, download_browser_count=self._download_browsers.count)
         except Exception as exc:
             self._error(self._t("orbea.service.error.title", "Orbea service unavailable"), str(exc))
             return
@@ -2166,6 +2169,7 @@ class OrbeaScreen(ResponsiveWidget):
         self._excel_tool.set_title(self._t("orbea.tool.excel", "Sort an existing Excel report"))
         self._tools_hint.setText(self._t("orbea.tools.hint", "Optional shortcuts for individual links and existing reports. The main automation already collects images, descriptions and specs."))
         self._upload_panel.retranslate_ui()
+        self._download_browsers.retranslate_ui()
         self._paths_title.setText(self._t("orbea.paths", "1. Get products from Pimbo"))
         self._catalogue_label.setText(self._t("orbea.catalogue", "Excel catalogue (optional)"))
         self._catalogue_edit.setPlaceholderText(self._t("orbea.catalogue.optional", "Optional — search the website if omitted"))

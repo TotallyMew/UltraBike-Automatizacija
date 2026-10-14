@@ -19,6 +19,7 @@ from .models import (
     OrbeaRunConfig,
     OrbeaRunFailure,
     OrbeaRunResult,
+    OrbeaDownloadSessionError,
     PimboFilterOptions,
     RunCancelled,
     RunProgress,
@@ -97,9 +98,16 @@ class OrbeaAutomationService:
         self._image_driver: Any = None
         self._photo_service: Any = None
         self._website_client: Any = None
+        self._public_profile_slot = 0
+        self._parallel_downloading = False
+        self._public_driver_claim = None
 
     def cancel(self) -> None:
         self._cancellation.cancel()
+        if self._parallel_downloading:
+            # Public-site sessions belong to their downloader threads. Their
+            # shared token stops work; each thread closes its own resources.
+            return
         if self._website_client is not None:
             self._website_client.cancel()
         driver = self._image_driver
@@ -154,6 +162,18 @@ class OrbeaAutomationService:
         return find_latest_compatible_run(config)
 
     def _new_image_driver(self, config: OrbeaRunConfig) -> Any:
+        if self._public_driver_claim is None:
+            return self._create_image_driver(config)
+        try:
+            driver = self._create_image_driver(config)
+        except RunCancelled:
+            raise
+        except Exception as error:
+            raise OrbeaDownloadSessionError(f"An Orbea download browser could not start: {error}") from error
+        self._public_driver_claim(driver)
+        return driver
+
+    def _create_image_driver(self, config: OrbeaRunConfig) -> Any:
         if self.image_driver_factory is not None:
             factory = self.image_driver_factory
             try:
@@ -173,6 +193,8 @@ class OrbeaAutomationService:
         # A dedicated public-site browser keeps normal site cookies between runs
         # and makes any verification available to the user.
         profile_dir = config.output_root / ".orbea-browser" / config.browser_name.casefold()
+        if self._public_profile_slot > 0:
+            profile_dir = profile_dir / f"worker-{self._public_profile_slot}"
         return create_driver(config.browser_name, True, config.navigation_timeout, profile_dir=profile_dir)
 
     @staticmethod
@@ -522,6 +544,7 @@ class OrbeaAutomationService:
         from .website import OrbeaAccessError, WEBSITE_LOOKUP_VERSION, template_code
 
         rows = [row for row in checkpoint.results if row.get("sku") and row.get("status") in {"code_match", "title_only", "ambiguous", "unmatched"}
+                and not (row.get("manual_product") and row.get("status") == "code_match" and row.get("catalogue_url"))
                 and (row_keys is None or row.get("row_key") in row_keys)
                 and (not only_missing or not (row.get("status") == "code_match" and row.get("catalogue_url")))]
         matches = {}
@@ -663,55 +686,64 @@ class OrbeaAutomationService:
         checkpoint.save()
         return len(rows)
 
-    def _collect_website_products(self, website, config, checkpoint, reporter, token, log, *, retry_failed, retry_matched=False):
-        """Gather all code-confirmed URLs, then collect their selected assets."""
+    def _collect_website_product(self, website, config, checkpoint, reporter, token, log, row, *,
+        retry_failed, pending_by_url, product_cache, photo_cache, refresh_reports=True):
         from .collection import collect_packages, missing_downloads, validate_product
         from .website import OrbeaAccessError
+        self._check_cancelled(token)
+        if row.get("status") == "code_match":
+            pending = missing_downloads(row, config, checkpoint.run_dir)
+            if config.downloads_only and not pending:
+                if config.download_product_photos:
+                    from .photo_packages import package_folder
+                    package_folder(checkpoint, row)
+                return
+            source_needs = pending_by_url.get(canonicalize_url(row["catalogue_url"]), pending)
+            website.collect_description = "description" in source_needs
+            website.collect_specifications = "specifications" in source_needs
+            if any((config.download_images, config.download_description, config.download_specifications, config.download_product_photos)):
+                checkpoint.set_phase("product_data")
+                try:
+                    key = canonicalize_url(row["catalogue_url"])
+                    if key not in product_cache:
+                        product_cache[key] = website.fetch(row["catalogue_url"])
+                    validate_product(product_cache[key], row)
+                    if row.get("manual_product"):
+                        row["catalogue_model"] = product_cache[key].name
+                    row.pop("website_validation_error", None)
+                except (RunCancelled, OrbeaAccessError, OrbeaDownloadSessionError):
+                    raise
+                except ValueError as error:
+                    row.update(status="ambiguous", note=str(error), website_validation_error=str(error), collection_status="partial", website_lookup_status="error")
+                    checkpoint.data["website_lookup_completed"] = False
+                    checkpoint.save()
+                    if refresh_reports:
+                        write_report(checkpoint)
+                    return
+                except Exception as error:
+                    from selenium.common.exceptions import InvalidSessionIdException, NoSuchWindowException
+                    if isinstance(error, (InvalidSessionIdException, NoSuchWindowException)):
+                        raise OrbeaDownloadSessionError(f"An Orbea download browser stopped responding: {error}") from error
+                    row["website_validation_error"] = f"{type(error).__name__}: {error}"
+            if config.download_images and (not config.downloads_only or "tables" in pending) and not row.get("website_validation_error"):
+                checkpoint.set_phase("images")
+                # Reuse the owned public-site browser, like KROSS collection.
+                factory = (lambda: website.driver) if getattr(website, "driver_factory", None) else None
+                self._download_images(config, checkpoint, reporter, token, log,
+                    retry_failed=retry_failed, row_keys={row["row_key"]}, driver_factory=factory)
+            checkpoint.set_phase("product_data")
+            collect_packages(self, website, config, checkpoint, reporter, token, log, rows=[row],
+                             product_cache=product_cache, photo_cache=photo_cache)
+        if refresh_reports:
+            write_image_manifest(checkpoint)
+            write_report(checkpoint)
+
+    def _collect_website_products(self, website, config, checkpoint, reporter, token, log, *, retry_failed, retry_matched=False):
+        """Gather all code-confirmed URLs, then collect their selected assets."""
+        from .collection import missing_downloads
         pending_by_url = {}
         product_cache = {}
         photo_cache = {}
-
-        def collect_product(row):
-            self._check_cancelled(token)
-            if row.get("status") == "code_match":
-                pending = missing_downloads(row, config, checkpoint.run_dir)
-                if config.downloads_only and not pending:
-                    if config.download_product_photos:
-                        from .photo_packages import package_folder
-                        package_folder(checkpoint, row)
-                    return
-                source_needs = pending_by_url.get(canonicalize_url(row["catalogue_url"]), pending)
-                website.collect_description = "description" in source_needs
-                website.collect_specifications = "specifications" in source_needs
-                if any((config.download_images, config.download_description, config.download_specifications, config.download_product_photos)):
-                    checkpoint.set_phase("product_data")
-                    try:
-                        key = canonicalize_url(row["catalogue_url"])
-                        if key not in product_cache:
-                            product_cache[key] = website.fetch(row["catalogue_url"])
-                        validate_product(product_cache[key], row)
-                        row.pop("website_validation_error", None)
-                    except (RunCancelled, OrbeaAccessError):
-                        raise
-                    except ValueError as error:
-                        row.update(status="ambiguous", note=str(error), website_validation_error=str(error), collection_status="partial", website_lookup_status="error")
-                        checkpoint.data["website_lookup_completed"] = False
-                        checkpoint.save()
-                        write_report(checkpoint)
-                        return
-                    except Exception as error:
-                        row["website_validation_error"] = f"{type(error).__name__}: {error}"
-                if config.download_images and (not config.downloads_only or "tables" in pending) and not row.get("website_validation_error"):
-                    checkpoint.set_phase("images")
-                    # Reuse the owned public-site browser, like KROSS collection.
-                    factory = (lambda: website.driver) if getattr(website, "driver_factory", None) else None
-                    self._download_images(config, checkpoint, reporter, token, log,
-                        retry_failed=retry_failed, row_keys={row["row_key"]}, driver_factory=factory)
-                checkpoint.set_phase("product_data")
-                collect_packages(self, website, config, checkpoint, reporter, token, log, rows=[row],
-                                 product_cache=product_cache, photo_cache=photo_cache)
-            write_image_manifest(checkpoint)
-            write_report(checkpoint)
 
         # Make the full scan report usable while collection is still running.
         write_image_manifest(checkpoint)
@@ -725,9 +757,16 @@ class OrbeaAutomationService:
         for row in rows:
             pending_by_url.setdefault(canonicalize_url(row.get("catalogue_url")), set()).update(
                 missing_downloads(row, config, checkpoint.run_dir))
-        for index, row in enumerate(rows, 1):
-            collect_product(row)
-            reporter.emit("product_data", index, len(rows), f"{row['sku']}: {row.get('collection_status', 'checked')}")
+        if config.download_browser_count > 1 and len(pending_by_url) > 1:
+            from .parallel_downloads import collect_parallel_packages
+            collect_parallel_packages(self, website, config, checkpoint, reporter, token, log, rows,
+                                      pending_by_url=pending_by_url, retry_failed=retry_failed)
+        else:
+            for index, row in enumerate(rows, 1):
+                self._collect_website_product(website, config, checkpoint, reporter, token, log, row,
+                    retry_failed=retry_failed, pending_by_url=pending_by_url,
+                    product_cache=product_cache, photo_cache=photo_cache)
+                reporter.emit("product_data", index, len(rows), f"{row['sku']}: {row.get('collection_status', 'checked')}")
         selected_urls = {canonicalize_url(row.get("catalogue_url")) for row in rows}
         checkpoint.data["images_completed"] = not config.download_images or not any(
             record.get(field) not in {"downloaded", "not_available"}
@@ -884,6 +923,7 @@ class OrbeaAutomationService:
             if retry_matched or explicit_download_missing or retry_failed:
                 checkpoint.save()
             reporter = _ProgressReporter(progress, checkpoint)
+            checkpoint.data.setdefault("settings", {})["download_browser_count"] = config.download_browser_count
             self._check_cancelled(token)
             if retry_matched:
                 count = self._prepare_matched_retry(config, checkpoint)

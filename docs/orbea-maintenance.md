@@ -6,13 +6,85 @@ locking belongs to the workflow controller, including controls in other columns.
 Existing service entry points, saved checkpoints and output formats remain
 supported; the photo-only selected-download entry point is an adapter.
 
+Pimbo's Base UI attribute combobox replaces its input after an option is chosen.
+Resolve the replacement before leaving the field and use Tab, not Escape:
+Escape on the closed combobox clears the committed selection. Keep the exact
+existing-option and stable read-back checks. Source Spalva is excluded by the
+copy service; explicitly mapped target colours use the same dropdown setter.
+The Spalva specification must remain unchanged.
+
+Source clicks reuse the loaded snapshot only while workbook and checkpoint
+mtime/size stamps match. Write a cloned group atomically before replacing UI
+state; reload on external changes and revalidate scope in the existing worker
+before editing Pimbo. Group updates retain radio buttons, captions and table
+items when row topology is unchanged. Resize only affected groups, refresh
+translated text explicitly, and rebuild only when group/SKU rows change.
+
+Copy workers publish each confirmed item together with its immutable snapshot
+on progress_ready. The GUI must not reread Excel/checkpoint files in completion
+slots. Parallel workers snapshot their shared checkpoint under the existing
+lock and serialize publication; browser field work remains concurrent.
+
 ## User workflow
+
+- **Scan missing data** checks selected visible products against their full SKU.
+  Only required (*) attributes count; empty Ratų dydis and Spalva attributes
+  are allowed. Every displayed field in the LT **Bendra informacija** group
+  counts, including its colour and wheel-size specifications. Other spec groups
+  are ignored. Exact missing names appear in the Pimbo data tooltip, activity
+  log and **Pimbo Content** Excel sheet. Select/unselect by status offers missing
+  data, attributes, general specs, complete, unchecked, scan errors and not found.
+  The scan reads Pimbo without Save or MagicAI. It waits for field hydration and
+  stable values, checks product identity/version, and treats loading/schema
+  problems as scan errors. Unsaved manual changes block scanning; unsafe
+  navigation stops the queue. Stop retains finished checks and other selections.
+
+- Model copying lists only TTCC groups containing multiple distinct bikes.
+  The first bike in Excel row order is the default source; a TAIP mark or a
+  saved app source choice takes priority, including an explicitly cleared
+  choice. Standalone groups stay in the checkpoint but do not appear in the
+  list, selection counts or source-read queue.
 
 - **Load products** opens an Excel, a saved folder, or reloads the displayed source.
   Scan results load automatically. The source path stays visible below the filters.
-- **Selection** offers Select visible, Clear visible and additive Add by status,
-  including No photos. Model filtering retains hidden checks. Downloads, photo
-  scans and uploads process only checked rows currently shown.
+- **Add product** accepts a Pimbo SKU, its model code with TTCC (suggested from the
+  SKU; the four-character base is also accepted), name including colour and a
+  public Orbea product URL. It appends to the loaded collection or creates a
+  local collection without Excel or a Pimbo login. An existing unique SKU updates
+  its row; **Edit product** corrects the highlighted row while keeping its SKU,
+  checkpoint identity and known Pimbo ID. Products use the usual checked-row
+  downloads, scans, uploads and Excel export. Manual links skip supplier search;
+  downloaded page codes and photo colours still undergo normal validation.
+  Changing a name/link makes old stages pending and clears completed upload
+  stages while preserving source files/history. With multiple runs loaded,
+  duplicate SKUs require selecting a specific row; new products get a new run
+  inside the displayed source. Other row selections are retained.
+- **Add product → Import Excel** appends `.xlsx` / `.xlsm` rows in the layout
+  A = Pimbo SKU, B = product name, C = TTCC model code, D ignored, E = Orbea URL.
+  Headers are optional; recognized headers can also change the column order.
+  The Matches sheet is used when present, otherwise the workbook's active sheet.
+  Excel hyperlinks are accepted. Blank rows are ignored; identical SKU rows are
+  deduplicated, conflicting SKU rows and other invalid rows are reported with
+  sheet/row locations. Valid rows import together into one new run or update
+  their existing owners. Ambiguous saved SKUs remain unchanged. Import retains
+  the current list and other checks, selects imported rows and exports once per
+  participating run. The input workbook is preserved, including when importing
+  a collection's own report (the refreshed report then uses a separate copy).
+- **Selection** offers Select visible and Clear visible. Separate **Select by
+  status** and **Unselect by status** menus handle upload and photo scan statuses,
+  including Failed, Saved and No photos. Model filtering retains hidden checks.
+  Downloads, photo scans and uploads process only checked rows currently shown.
+- **Include / exclude by code prefix** changes matching bikes across the entire
+  loaded list, including hidden rows. Enter `U9`, or paste several prefixes/full
+  SKUs separated by commas, semicolons or whitespace. Matching ignores letter
+  case. **Include codes** checks eligible matches; **Exclude codes** unchecks
+  them. Enter still applies Exclude. Other checks remain unchanged. These actions
+  change the current selection and are locked during jobs.
+  Model copying offers the same action for whole TTCC groups, matching either
+  the base code or any member SKU. It preserves sources and captured templates;
+  excluded groups are omitted from source reads, copying, Continue and Retry.
+  Copying also selects/unselects visible groups by source readiness or target
+  results (failed, all copied or unfinished), without changing sources/templates.
 - **Download selected** uses the chosen photos, description, specifications and
   tables in Missing or failed data or Refresh selected data mode. Missing mode
   skips current files, gives failed tables a fresh attempt, and respects terminal
@@ -22,6 +94,30 @@ supported; the photo-only selected-download entry point is an adapter.
 - **Upload selected** offers normal and Retry unfinished steps modes. Retry filters
   the existing checked rows; it never checks additional products. Existing Draft,
   target identity, save verification, colour, Custom photo and ordering checks apply.
+- Uploads open a non-modal **Orbea upload run** board. Closing the board keeps the
+  worker running; **Open run report** reopens it. The live view shows actual stage
+  events, elapsed time, estimated time left and Stop after current product.
+  The finished view separates Succeeded, Failed and Not started, labels warnings
+  as a subset, groups identical causes, and shows each product's step results.
+  Stop requests and browser-recovery failures explain why products were not run.
+  Report retries use that run's targets and options; failed steps retain the
+  existing verified-save resume rules. Excel export includes only the displayed
+  run, including its not-started products, without importing older upload results.
+  Full timestamped logs and JSON snapshots are saved in `upload-reports/` under
+  the collection folder. Log filters, search, product grouping, Copy and Open log
+  file share the same entries; raw Selenium details expand for the selected row.
+- **Pimbo browsers** selects 1–4 sessions for uploads, source reading and model
+  copying. The setting is shared between the upload and copying panels and
+  defaults to one. Additional sessions use the selected Chrome, Firefox or Edge
+  browser and the saved Pimbo login. All sessions must initialize before edits
+  start. The app browser is reserved until all workers finish and is kept open;
+  extra windows close afterward. Any unsafe browser remains open for review.
+  Uploads keep all selected stages for a bike together. Rows sharing a known
+  Pimbo ID stay in one task; verified IDs also prevent separate tasks from
+  editing the same product. Copy workers take distinct TTCC groups, reserve
+  verified target IDs globally and merge each confirmed result into one locked
+  checkpoint. Stop finishes active products in every browser and starts no
+  further products. Continue/Retry retain the existing verification rules.
 - **Scan Pimbo**, **Scan Pimbo photos** and **Resume interrupted run** remain separate.
   Resume identifies the loaded interrupted run or asks for an explicit run folder.
   It never searches for a newer unrelated collection. The active job has one Stop.
@@ -38,6 +134,7 @@ supported; the photo-only selected-download entry point is an adapter.
 | Active source, selection snapshots, job ownership, startup and browser lease | `GUI_Qt/orbea/controller.py` |
 | Explicit control locking while retaining table scrolling | `GUI_Qt/orbea/actions.py` |
 | Product list, model filtering, upload choices and results | `GUI_Qt/orbea/upload.py` |
+| Live/finished run boards and structured report data | `GUI_Qt/orbea/run_report.py`, `tools/orbea_automation/run_report.py` |
 | Excel loading and read-only Pimbo photo checks | `GUI_Qt/orbea/photo_scan_workflow.py` |
 | Direct tool presentation and compatibility adapters | `GUI_Qt/orbea/direct_workflow.py`, `description_workflow.py`, `photo_workflow.py`, `table_image_workflow.py` |
 | Background execution and cancellation handshake | `GUI_Qt/orbea/workers.py` |
@@ -48,6 +145,14 @@ supported; the photo-only selected-download entry point is an adapter.
 | Upload safety and shared stages | `tools/orbea_automation/upload.py`, `tools/supplier_upload.py` |
 
 ## Download scope and recovery
+
+Photo matching uses its own narrowly scoped model aliases for WILD/M, RALLON/M,
+RALLON 442/450 Enduro/DH and OIZ OMX+IL SL R+K. It reads fenced paint segments
+directly and treats an explicit terminal Custom as a request for the untouched
+Your Design gallery. Named paints still require one complete published paint
+match; substring and SKU-suffix guesses are not accepted. Cinamon/Cinnamon is
+the supported known spelling alias. This does not alter model-copy or
+specification parsing. Partial collection logs include each stage's failure.
 
 Geometry captures use the same `screenshot_element` routine as Size Tables for
 each verified settings combination. Geometry's temporary viewport/scroll changes
@@ -147,6 +252,35 @@ multi-select sets, source changes, retries, shutdown/startup ownership and local
 labels without connecting to live Pimbo.
 
 ## Verification
+
+The **Orbea download browsers** control beside the source download choices
+shares the 1–4 browser count with uploads and copying. Initial Pimbo scanning
+and Orbea URL lookup remain serial; selected public-site downloads use separate
+owned sessions for different model pages. A model's colour photos, native
+geometry configurations, CM size table and selected source text stay together.
+Shared URLs, SKUs and existing package folders belong to one task. Each session
+is created, used and closed by its own thread, with distinct browser profiles;
+the authenticated Pimbo browser is never borrowed for downloads.
+
+Workers merge only their owned rows/images into the main checkpoint. Report
+and shared immutable photo-cache writes are serialized. Stop prevents queued
+models from starting and retains completed stages for Resume/Missing; Refresh
+keeps its existing invalidation rules. Browser startup/access failures stop
+the queue and preserve the partial report. The count can change on Resume
+without invalidating saved matches. Offline concurrency coverage is in
+`test_orbea_parallel_downloads.py`.
+
+**Publish products: Draft → Published** is an optional Pimbo workflow stage,
+disabled by default. It forces Save and runs last, after both content and
+specification saves. It can run alone on selected scanned/collected products or with
+uploads; failures in any other selected stage block publication. Full variant
+SKU lookup, package identity, browser reservations and parallel product claims
+remain in effect. Existing unsaved edits block a publication run. The editor
+selects the exact Published option from the Status dropdown, checks the version
+increment and reloads to verify persistence. Already Published products in a
+publication-only run are rechecked without another Save. In Review and Disabled
+products stay blocked. Results and retry filtering include publication as a
+separate stage. Offline coverage is in `test_orbea_publishing.py`.
 
 Run offline fixtures and mocked services; acceptance never edits live Pimbo:
 

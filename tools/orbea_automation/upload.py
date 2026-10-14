@@ -44,16 +44,21 @@ def invalidate_saved_table_upload(folder, *, sku, product_id):
 
 @dataclass(frozen=True)
 class OrbeaWorkflowOptions(KrossWorkflowOptions):
-    STAGES: ClassVar[tuple[str, ...]] = ("product_photos", "photo_order", *KrossWorkflowOptions.STAGES[1:])
+    STAGES: ClassVar[tuple[str, ...]] = ("product_photos", "photo_order", *KrossWorkflowOptions.STAGES[1:], "publish_products")
     photo_order: bool = False
+    publish_products: bool = False
 
     def __post_init__(self):
-        if self.geometry or self.size_tables:
+        if self.geometry or self.size_tables or self.publish_products:
             object.__setattr__(self, "save", True)
 
     @property
     def photos_only(self):
         return bool(self.product_photos or self.photo_order) and set(self.selected_stages) <= {"product_photos", "photo_order", "save"}
+
+    @property
+    def publish_only(self):
+        return self.publish_products and set(self.selected_stages) <= {"save", "publish_products"}
 
     @classmethod
     def only(cls, *stages):
@@ -231,7 +236,7 @@ class OrbeaUploadService(SupplierUploadWorkflow):
                      if stage in record.get('selected_stages', []) and stage not in saved)
 
     @classmethod
-    def upload_finished(cls, match):
+    def upload_finished(cls, match, options=None):
         record = cls.read_upload_result(match)
         if record is None:
             return False
@@ -250,7 +255,8 @@ class OrbeaUploadService(SupplierUploadWorkflow):
         completed = set(record.get("completed_stages", []))
         if status == PimPreparationStatus.NO_CHANGES.value:
             completed.add("save")
-        return status in {PimPreparationStatus.SAVED_AUTOMATICALLY.value, PimPreparationStatus.NO_CHANGES.value} and set(record.get("selected_stages", [])) <= completed
+        requested = options.selected_stages if options is not None else record.get("selected_stages", [])
+        return status in {PimPreparationStatus.SAVED_AUTOMATICALLY.value, PimPreparationStatus.NO_CHANGES.value} and set(requested) <= completed
 
     @classmethod
     def saved_upload_stages(cls, match):
@@ -262,7 +268,11 @@ class OrbeaUploadService(SupplierUploadWorkflow):
             return ()
         # The first save precedes component AI. A failed second phase can have
         # completed pre-fill/AI in memory without saving those changes.
-        completed -= {"save", "specifications_prefill", "specifications_magic_ai"}
+        completed.discard("save")
+        # Publication is reached only after the final specification save.
+        # Its failure must not make retries repeat already saved enrichment.
+        if "publish_products" not in completed and record["preparation"].get("failed_stage") != "publish_products":
+            completed -= {"specifications_prefill", "specifications_magic_ai"}
         if geometry_needs_recollection(Path(match.local_folder)):
             completed.discard("geometry")
         if record["preparation"].get("status") == PimPreparationStatus.NO_CHANGES.value:
@@ -304,6 +314,10 @@ class OrbeaUploadService(SupplierUploadWorkflow):
             raise PimAutomationError("The saved upload progress belongs to a different PIMBO product")
         if saved_match.pimbo_product_id and saved_match.pimbo_product_id != resolved_match.pimbo_product_id:
             raise PimAutomationError("The saved package belongs to a different PIMBO product; collect it again before uploading")
+        super().validate_package_target(saved_match, resolved_match)
+        claim = getattr(self, "_parallel_product_claim", None)
+        if claim is not None and not claim(resolved_match.pimbo_product_id):
+            raise PimAutomationError("This Pimbo product is already assigned to another parallel target; duplicate editing was blocked")
 
     @staticmethod
     def local_photo_candidates(folder):
@@ -359,24 +373,91 @@ class OrbeaUploadService(SupplierUploadWorkflow):
         return geometry
 
     def upload_and_save(self, match, output_root=None, *, options=None, progress=None, resume_completed=False):
+        requested = options or OrbeaWorkflowOptions()
+        if not match.local_folder:
+            raise ValueError("Load the saved Orbea product list before running the workflow")
         folder = Path(match.local_folder).resolve()
-        if not folder.is_dir() or not (folder / METADATA_NAME).is_file():
+        if not requested.publish_only and (not folder.is_dir() or not (folder / METADATA_NAME).is_file()):
             raise ValueError("Load a collected Orbea product folder first")
         self._upload_target = match
-        requested = options or OrbeaWorkflowOptions()
-        completed_before = self.saved_upload_stages(match) if resume_completed else ()
+        if requested.publish_products and self._pimbo_product_id(getattr(self.pimbo_driver, "current_url", "")):
+            current_editor = self.editor_factory(self.pimbo_driver)
+            current_editor.wait_ready()
+            if current_editor.is_dirty():
+                raise PimAutomationError("PIMBO has unsaved changes; save or discard them before running publication")
+        # Always recheck publication against Pimbo, even when an earlier run
+        # confirmed it. A user may have since returned the product to Draft.
+        completed_before = tuple(stage for stage in self.saved_upload_stages(match)
+                                 if stage != "publish_products") if resume_completed else ()
         previous = self.read_upload_result(match) if completed_before else None
         self._resume_product_id = previous["preparation"]["product_id"] if previous else ""
         effective = OrbeaWorkflowOptions.only(*(stage for stage in requested.selected_stages if stage not in completed_before))
         if completed_before and progress:
             progress(f"{match.sku}: keeping already saved stages; running {', '.join(effective.selected_stages)}")
+            stage_callback = getattr(progress, "stage_changed", None)
+            if callable(stage_callback):
+                for stage in completed_before:
+                    stage_callback(stage, "done", "Kept from an earlier verified save")
+        active_stage = "publish_products" if effective.publish_only else ""
         try:
-            result = super().upload_and_save(match, output_root, options=effective, progress=progress)
+            if effective.publish_only:
+                if progress:
+                    progress(f"Finding PIMBO product by full SKU {match.sku} for publication")
+                pimbo = self.pimbo_client_factory(self.pimbo_driver).find_by_variant_sku(match.sku)
+                if pimbo.status != "pimbo_found":
+                    raise PimAutomationError(pimbo.note or f"SKU {match.sku} was not found in PIMBO")
+                target = replace(match, pimbo_product_id=pimbo.pimbo_product_id,
+                    pimbo_product_name=pimbo.pimbo_product_name or match.pimbo_product_name,
+                    pimbo_product_url=pimbo.pimbo_product_url)
+                self._upload_target = target
+                self.validate_package_target(match, target)
+                if (folder / METADATA_NAME).is_file():
+                    saved_match, _ = self._read_package(folder)
+                    if normalize_sku(saved_match.sku) != normalize_sku(match.sku):
+                        raise PimAutomationError("The saved package belongs to a different SKU")
+                    # Identity already claimed above; do not claim it twice.
+                    SupplierUploadWorkflow.validate_package_target(self, saved_match, target)
+                result = OrbeaUploadResult(target, PimPreparationResult(target.sku, target.pimbo_product_id,
+                    status=PimPreparationStatus.NO_CHANGES, final_url=target.pimbo_product_url), options=effective)
+            else:
+                result = super().upload_and_save(match, output_root, options=effective, progress=progress)
+            if effective.publish_products:
+                eligible = result.preparation.status in {
+                    PimPreparationStatus.SAVED_AUTOMATICALLY, PimPreparationStatus.NO_CHANGES,
+                }
+                callback = getattr(progress, "stage_changed", None)
+                if eligible and not result.preparation.warnings:
+                    active_stage = "publish_products"
+                    if callable(callback):
+                        callback("publish_products", "running", "Changing Draft to Published")
+                    if progress:
+                        progress(f"Publishing verified PIMBO product {match.sku}")
+                    try:
+                        prepared = self._open_editor(result.match).publish_and_verify(result.preparation)
+                    except Exception as error:
+                        prepared = replace(result.preparation, status=PimPreparationStatus.FAILED,
+                            failed_stage="publish_products", error=str(error))
+                    verified = prepared.status in {PimPreparationStatus.SAVED_AUTOMATICALLY, PimPreparationStatus.NO_CHANGES}
+                    result = replace(result, preparation=prepared, completed_stages=tuple(dict.fromkeys(
+                        (*result.completed_stages, *(('save', 'publish_products') if verified else ())))))
+                    if callable(callback):
+                        callback("publish_products", "done" if verified else "failed", prepared.error)
+                    if progress:
+                        progress(f"{match.sku}: Published status saved and verified" if verified
+                                 else f"{match.sku}: publication failed — {prepared.error}")
+                else:
+                    if callable(callback):
+                        callback("publish_products", "skipped", "An earlier selected stage failed; publication was blocked")
+                    if progress:
+                        progress(f"{match.sku}: publication skipped because earlier selected stages did not succeed")
         except Exception as error:
             target = self._upload_target
             result = OrbeaUploadResult(target, PimPreparationResult(target.sku, target.pimbo_product_id,
-                status=PimPreparationStatus.FAILED, final_url=target.pimbo_product_url, error=str(error)),
+                status=PimPreparationStatus.FAILED, final_url=target.pimbo_product_url,
+                failed_stage=active_stage, error=str(error)),
                 options=effective)
+            if active_stage and callable(getattr(progress, "stage_changed", None)):
+                progress.stage_changed(active_stage, "failed", str(error))
         if previous and "product_photos" in completed_before and not result.preparation.photo_upload:
             result = replace(result, preparation=replace(result.preparation,
                 photo_upload=dict(previous["preparation"].get("photo_upload") or {})))

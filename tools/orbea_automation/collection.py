@@ -210,6 +210,8 @@ def collect_packages(service, website, config, checkpoint, reporter, token, log,
         })
         checkpoint.save()
         service._log(log, f"{row['sku']}: {row['collection_status']} — {folder}")
+        for error in errors:
+            service._log(log, f"{row['sku']}: {error}")
         reporter.emit("product_data", index, len(rows), f"{row['sku']}: {row['collection_status']}")
     checkpoint.data["product_data_completed"] = all(row.get("collection_status") in {"collected", "collected_with_warnings"}
         for row in checkpoint.results if row.get("status") == "code_match")

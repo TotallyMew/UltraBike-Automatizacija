@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 import inspect
+import re
 from pathlib import Path
 from typing import Any, Mapping
 from PySide6.QtCore import QObject, Slot
+
+
+def parse_code_prefixes(text: str) -> tuple[str, ...]:
+    return tuple(value.casefold() for value in re.split(r"[\s,;]+", text.strip()) if value)
 
 def _read(obj: Any, *names: str, default: Any = None) -> Any:
     """Read the first available mapping key or object attribute."""
@@ -84,6 +89,7 @@ class OrbeaWorkflowController(QObject):
         self._selection_rows = None
         self._row_identities = ()
         self._job = None
+        self.browser_pool_factory = None
 
     def set_source(self, root):
         self.source_root = Path(root).resolve()
@@ -108,13 +114,16 @@ class OrbeaWorkflowController(QObject):
     def select_visible(self, panel, *, checked=True, status=None):
         from PySide6.QtCore import Qt
         from tools.orbea_automation.photo_scan import PHOTO_STATUSES
+        from tools.orbea_automation.content_scan import CONTENT_STATUSES, matches_content_status
         if self.activity().name != "idle":
             return
         panel.table.blockSignals(True)
         try:
             for row, match in panel._visible_rows():
                 state = panel._row_statuses.get(match.local_folder, {})
-                matches_status = (panel._photo_statuses.get(match.local_folder, {}).get("status", "not_checked") == status
+                matches_status = (matches_content_status(panel._content_statuses.get(match.local_folder, {}), status)
+                                  if status in CONTENT_STATUSES or status in {"missing_attributes", "missing_general_specs"} else
+                                  panel._photo_statuses.get(match.local_folder, {}).get("status", "not_checked") == status
                                   if status in PHOTO_STATUSES else state.get("warnings") if status == "warnings"
                                   else state.get("status") == status)
                 if match.sku and match.status != "invalid" and (status is None or matches_status):
@@ -123,6 +132,40 @@ class OrbeaWorkflowController(QObject):
             panel.table.blockSignals(False)
         self.remember_selection(panel)
         panel.update_state()
+
+    def exclude_code_prefixes(self, panel, text):
+        """Uncheck SKU prefixes throughout the loaded list, including hidden rows."""
+        return self.select_code_prefixes(panel, text, checked=False)
+
+    def include_code_prefixes(self, panel, text):
+        """Check eligible matching SKUs without changing unrelated selections."""
+        return self.select_code_prefixes(panel, text, checked=True)
+
+    def select_code_prefixes(self, panel, text, *, checked):
+        from PySide6.QtCore import Qt
+        if self.activity().name != "idle":
+            return None
+        prefixes = parse_code_prefixes(text)
+        if not prefixes:
+            return 0
+        desired = Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked
+        count = 0
+        blocked = panel.table.blockSignals(True)
+        try:
+            for row, match in enumerate(panel.matches):
+                item = panel.table.item(row, 0)
+                if checked and (match.status == "invalid" or not item.flags() & Qt.ItemFlag.ItemIsUserCheckable
+                                or not item.flags() & Qt.ItemFlag.ItemIsEnabled):
+                    continue
+                if (match.sku and match.sku.casefold().startswith(prefixes)
+                        and item.checkState() != desired):
+                    item.setCheckState(desired)
+                    count += 1
+        finally:
+            panel.table.blockSignals(blocked)
+        self.remember_selection(panel)
+        panel.update_state()
+        return count
 
     def activity(self):
         from .actions import OrbeaActivity
@@ -277,6 +320,12 @@ class OrbeaWorkflowController(QObject):
             return False
         self.owns_browser_lease = True
         return True
+
+    def make_browser_pool(self, count, log, stopped):
+        if self.browser_pool_factory is not None:
+            return self.browser_pool_factory(count, log, stopped)
+        from .browser_pool import PimboBrowserPool
+        return PimboBrowserPool(self.main, count, log=log, stopped=stopped)
 
     def release_browser(self) -> None:
         if not self.owns_browser_lease:
